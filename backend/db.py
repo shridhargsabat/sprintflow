@@ -1,6 +1,7 @@
 """SQLite database layer for SprintFlow."""
 from __future__ import annotations
 
+import logging
 import os
 import re
 import sqlite3
@@ -9,6 +10,8 @@ from datetime import date, timedelta
 from typing import Any, Dict, Generator, List, Optional
 
 from fastapi import HTTPException
+
+logger = logging.getLogger("sprintflow.db")
 
 DB_PATH = os.environ.get(
     "SPRINTFLOW_DB_PATH",
@@ -168,7 +171,9 @@ def init_db(db_path: Optional[str] = None) -> None:
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_team_members_user_id "
             "ON team_members(user_id) WHERE user_id IS NOT NULL"
         )
-        # Always ensure the seeded admin login exists (idempotent).
+        # Seed the default admin ONLY on a fresh system (empty users table).
+        # A deliberately deleted admin is never resurrected while other
+        # users exist (M1); fresh-DB behavior is unchanged.
         seed_users(conn)
 
 
@@ -397,22 +402,32 @@ SEED_ADMIN_PASSWORD = "Admin123!"
 
 
 def seed_users(conn: sqlite3.Connection) -> None:
-    """Idempotently ensure the seeded admin user exists. Board reset/import
-    never touch the users table, so logins survive data resets."""
-    existing = conn.execute(
-        "SELECT id FROM users WHERE email = ?", (SEED_ADMIN_EMAIL,)
-    ).fetchone()
-    if existing:
+    """Seed the default admin login, but ONLY on a fresh system.
+
+    The seed admin is created only when the users table is EMPTY. Once any
+    user exists, seeding is skipped — so deleting the seed admin (e.g. after
+    rotating to a real admin account) is permanent and a restart can never
+    resurrect the public-password login. Board reset/import never touch the
+    users table, so logins survive data resets.
+    """
+    user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    if user_count > 0:
         return
     import bcrypt
 
     password_hash = bcrypt.hashpw(
         SEED_ADMIN_PASSWORD.encode("utf-8"), bcrypt.gensalt()
     ).decode("utf-8")
-    conn.execute(
+    cur = conn.execute(
         "INSERT OR IGNORE INTO users (email, name, password_hash, role) VALUES (?, ?, ?, 'admin')",
         (SEED_ADMIN_EMAIL, SEED_ADMIN_NAME, password_hash),
     )
+    if cur.rowcount:
+        logger.warning(
+            "SECURITY: seeded default admin login %s with the public dev "
+            "password — rotate it immediately via the Users admin UI",
+            SEED_ADMIN_EMAIL,
+        )
 
 
 def reset_db(db_path: Optional[str] = None) -> None:
@@ -678,6 +693,13 @@ def validate_assignees(
                 )
             key = ("member", member_id)
         elif kind == "user":
+            # M5: JSON true/false must never coerce to user id 1/0 via int()
+            # (id 1 is the admin). Numeric strings like "3" still convert.
+            if isinstance(raw_id, bool):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid assignee user id: {raw_id!r} (boolean is not a user id)",
+                )
             try:
                 user_id = int(raw_id)  # type: ignore[arg-type]
             except (TypeError, ValueError):

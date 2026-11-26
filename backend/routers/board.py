@@ -3,13 +3,19 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import ValidationError
 
 import auth
 import db
-from models import ImportPayload
+from models import ImportPayload, MemberPayload, TaskPayload
 
 router = APIRouter(prefix="/api")
+
+# M4 import guards: bound the work a single import can do.
+MAX_IMPORT_TEAM = 1000
+MAX_IMPORT_TASKS = 10000
+MAX_IMPORT_BODY_BYTES = 5 * 1024 * 1024
 
 
 @router.get("/health")
@@ -53,6 +59,7 @@ def export_board(
 @router.post("/import")
 def import_board(
     payload: ImportPayload,
+    request: Request,
     _user: Dict[str, Any] = Depends(auth.require_permissions("data.import")),
 ) -> Dict[str, Any]:
     # RBAC: a non-empty team section additionally requires team.manage, so
@@ -64,6 +71,35 @@ def import_board(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Missing permissions: team.manage",
             )
+    # M4: body-size + list-length caps, before any validation work.
+    try:
+        content_length = int(request.headers.get("content-length") or 0)
+    except (TypeError, ValueError):
+        content_length = 0
+    if content_length > MAX_IMPORT_BODY_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Import body too large: {content_length} bytes "
+                f"(max {MAX_IMPORT_BODY_BYTES})"
+            ),
+        )
+    if len(payload.team) > MAX_IMPORT_TEAM:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many team members: {len(payload.team)} (max {MAX_IMPORT_TEAM})",
+        )
+    if len(payload.tasks) > MAX_IMPORT_TASKS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many tasks: {len(payload.tasks)} (max {MAX_IMPORT_TASKS})",
+        )
+    # M4: every row must satisfy the single-item endpoint rules. All errors
+    # are collected and returned as one 400 BEFORE wiping anything, so a
+    # rejected import always leaves existing data intact.
+    row_errors = _validate_import_rows(payload)
+    if row_errors:
+        raise HTTPException(status_code=400, detail={"errors": row_errors})
     # Validate linked login users BEFORE wiping anything: unknown userIds
     # are cleared to NULL and reported in warnings[].
     warnings: List[str] = []
@@ -73,6 +109,17 @@ def import_board(
         if uid is None:
             resolved_user_ids.append(None)
             continue
+        # M5: JSON true/false must never coerce to user id 1/0 (id 1 is the
+        # admin). Hard 400 (row pre-validation flags this too; this guard
+        # stands even if validation is ever bypassed).
+        if isinstance(uid, bool):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Team member '{m.get('id', '?')}' has invalid boolean "
+                    f"userId {uid!r}"
+                ),
+            )
         try:
             uid_int: Optional[int] = int(uid)  # type: ignore[arg-type]
         except (TypeError, ValueError):
@@ -151,6 +198,112 @@ def import_board(
     return {"team": len(payload.team), "tasks": len(payload.tasks), "warnings": warnings}
 
 
+def _format_validation_errors(prefix: str, exc: ValidationError) -> List[str]:
+    return [
+        f"{prefix}.{'.'.join(str(p) for p in err['loc'])}: {err['msg']}"
+        for err in exc.errors()
+    ]
+
+
+def _validate_import_team_row(m: Any, index: int, seen_ids: set) -> List[str]:
+    """One team row against the single-item member rules (MemberPayload)."""
+    prefix = f"team[{index}]"
+    if not isinstance(m, dict):
+        return [f"{prefix}: must be an object, got {type(m).__name__}"]
+    errs: List[str] = []
+    mid = m.get("id")
+    if not isinstance(mid, str) or not mid.strip():
+        errs.append(f"{prefix}.id: missing or blank member id")
+    elif mid in seen_ids:
+        errs.append(f"{prefix}.id: duplicate member id {mid!r}")
+    else:
+        seen_ids.add(mid)
+    try:
+        member = MemberPayload(
+            name=m.get("name"),  # type: ignore[arg-type]  # None -> ValidationError -> per-row 400
+            role=m.get("role", "Engineer"),
+            color=m.get("color"),
+        )
+    except ValidationError as exc:
+        errs.extend(_format_validation_errors(prefix, exc))
+    else:
+        # Mirror POST /api/team: blank-after-strip names are 400, not stored.
+        if not member.name:
+            errs.append(f"{prefix}.name: must not be blank")
+    # M5: boolean userIds are a hard 400 (every other unknown/garbage userId
+    # keeps the long-standing lenient clear-to-NULL + warning behavior).
+    if isinstance(m.get("userId"), bool):
+        errs.append(f"{prefix}.userId: boolean is not a user id")
+    return errs
+
+
+def _validate_import_task_row(t: Any, index: int, seen_ids: set) -> List[str]:
+    """One task row against the single-item task rules (TaskPayload)."""
+    prefix = f"tasks[{index}]"
+    if not isinstance(t, dict):
+        return [f"{prefix}: must be an object, got {type(t).__name__}"]
+    errs: List[str] = []
+    tid = t.get("id")
+    if not isinstance(tid, str) or not tid.strip():
+        errs.append(f"{prefix}.id: missing or blank task id")
+    elif tid in seen_ids:
+        errs.append(f"{prefix}.id: duplicate task id {tid!r}")
+    else:
+        seen_ids.add(tid)
+    # Omitted keys fall back to the import's documented defaults (as before);
+    # every present value must satisfy TaskPayload (title/status/priority/
+    # points ranges, length caps, assignee shapes).
+    try:
+        TaskPayload(
+            title=t.get("title"),  # type: ignore[arg-type]  # None -> ValidationError -> per-row 400
+            description=t.get("description", ""),
+            assignees=t.get("assignees"),
+            dueDate=t.get("dueDate", "2026-12-02"),
+            status=t.get("status", "todo"),
+            priority=t.get("priority", "medium"),
+            sprint=t.get("sprint", "Sprint 14"),
+            points=t.get("points", 3),
+            tag=t.get("tag", "Frontend"),
+        )
+    except ValidationError as exc:
+        errs.extend(_format_validation_errors(prefix, exc))
+    raw = t.get("assignees")
+    if isinstance(raw, list):
+        # Mirror POST /api/tasks: more than MAX_ASSIGNEES is a 400.
+        if len(raw) > db.MAX_ASSIGNEES:
+            errs.append(
+                f"{prefix}.assignees: too many assignees: max {db.MAX_ASSIGNEES}"
+            )
+        for j, entry in enumerate(raw):
+            if (
+                isinstance(entry, dict)
+                and entry.get("type") == "user"
+                and isinstance(entry.get("id"), bool)
+            ):
+                errs.append(f"{prefix}.assignees[{j}].id: boolean is not a user id")
+    legacy = t.get("assigneeUserId")
+    if isinstance(legacy, bool):
+        errs.append(f"{prefix}.assigneeUserId: boolean is not a user id")
+    return errs
+
+
+def _validate_import_rows(payload: ImportPayload) -> List[str]:
+    """Validate every import row; flat per-row error list (empty = valid).
+
+    Unknown member/user REFERENCES stay lenient (skipped with warnings at
+    insert time) — the long-standing import contract the export round-trip
+    relies on. Everything else follows the single-item endpoint rules.
+    """
+    errors: List[str] = []
+    seen_team: set = set()
+    for i, m in enumerate(payload.team):
+        errors.extend(_validate_import_team_row(m, i, seen_team))
+    seen_tasks: set = set()
+    for i, t in enumerate(payload.tasks):
+        errors.extend(_validate_import_task_row(t, i, seen_tasks))
+    return errors
+
+
 def _resolve_import_assignees(
     task: Dict[str, Any], warnings: List[str], conn: Any
 ) -> List[tuple]:
@@ -197,6 +350,16 @@ def _resolve_import_assignees(
                 continue
             key = ("member", member_id)
         elif kind == "user":
+            # M5: JSON true/false must never coerce to user id 1/0 (id 1 is
+            # the admin). Hard 400 (row pre-validation flags this too).
+            if isinstance(ref, bool):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Task '{task_id}' has invalid boolean "
+                        f"user assignee id {ref!r}"
+                    ),
+                )
             try:
                 user_id: Optional[int] = int(ref)  # type: ignore[arg-type]
             except (TypeError, ValueError):
