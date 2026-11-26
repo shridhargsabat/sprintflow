@@ -1,5 +1,5 @@
 import { ArrowUpToLine, Calendar, Pencil, X } from 'lucide-react';
-import { GLASS_PILL, PRIORITY_META, STATUS_COLUMNS } from '../constants';
+import { GLASS_PANEL, GLASS_PILL, PRIORITY_META, STATUS_COLUMNS } from '../constants';
 import { formatShortDate, getDueMeta, getInitials } from '../utils/format';
 import type { Task, TeamMember } from '../types';
 
@@ -20,7 +20,7 @@ export function TaskDetailsModal({ task, member, onClose, onEdit, onDelete, onPr
 
   return (
     <div onClick={onClose} className="lg-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/35 backdrop-blur-md">
-      <div onClick={e => e.stopPropagation()} className="lg-modal-panel w-full max-w-lg rounded-[32px] overflow-hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-[0_24px_70px_-20px_rgba(15,23,42,0.45)]">
+      <div onClick={e => e.stopPropagation()} className={`lg-modal-panel w-full max-w-lg rounded-[32px] overflow-hidden ${GLASS_PANEL}`}>
         <div className="px-6 py-4 border-b border-slate-900/10 dark:border-white/10 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <span className="shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-400/30">{task.id}</span>

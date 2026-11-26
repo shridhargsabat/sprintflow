@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import Dropdown from './Dropdown';
 import Calendar from './Calendar';
-import { GLASS_PILL, STATUS_COLUMNS } from '../constants';
+import { GLASS_PANEL, GLASS_PILL, STATUS_COLUMNS } from '../constants';
 import type { Task, TaskFormValues, TaskPriority, TaskStatus, TeamMember } from '../types';
 
 interface TaskModalProps {
@@ -45,7 +45,7 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
 
   return (
     <div onClick={onClose} className="lg-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/35 backdrop-blur-md">
-      <div onClick={e => e.stopPropagation()} className="lg-modal-panel w-full max-w-lg rounded-[32px] overflow-hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-[0_24px_70px_-20px_rgba(15,23,42,0.45)]">
+      <div onClick={e => e.stopPropagation()} className={`lg-modal-panel w-full max-w-lg rounded-[32px] overflow-hidden ${GLASS_PANEL}`}>
         <div className="px-6 py-4 border-b border-slate-900/10 dark:border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-400/30">{task ? task.id : 'NEW'}</span>
