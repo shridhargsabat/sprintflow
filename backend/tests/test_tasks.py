@@ -1,6 +1,10 @@
 """Black-box HTTP tests for /api/tasks (list, filters, CRUD, status, promote)."""
-import pytest
+import threading
 
+import pytest
+from fastapi.testclient import TestClient
+
+from app import app
 import db as db_lib
 
 TASK_KEYS = {
@@ -59,6 +63,15 @@ def _first_member_id(client):
     assert resp.status_code == 200
     assert resp.json(), "seed team must be non-empty"
     return resp.json()[0]["id"]
+
+
+def _latest_sprint_name(client):
+    """Latest sprint (max start_date) per the sprints table — never hardcoded."""
+    resp = client.get("/api/sprints")
+    assert resp.status_code == 200
+    sprints = resp.json()
+    assert sprints, "seed sprints must be non-empty"
+    return max(sprints, key=lambda s: s["startDate"])["name"]
 
 
 # ---------- list ----------
@@ -250,14 +263,14 @@ def test_patch_status(client):
     assert resp.json()["sprint"] == "Sprint 14"
 
 
-def test_patch_status_backlog_sprint_auto_moves_to_sprint14(client):
+def test_patch_status_backlog_sprint_auto_moves_to_latest_sprint(client):
     created = client.post("/api/tasks", json=_payload(status="backlog", sprint="Backlog")).json()
     assert created["sprint"] == "Backlog"
     resp = client.patch(f"/api/tasks/{created['id']}/status", json={"status": "todo"})
     assert resp.status_code == 200
     moved = resp.json()
     assert moved["status"] == "todo"
-    assert moved["sprint"] == "Sprint 14"
+    assert moved["sprint"] == _latest_sprint_name(client)
 
 
 def test_patch_status_keeps_non_backlog_sprint(client):
@@ -287,12 +300,78 @@ def test_promote_moves_task_to_current_sprint_todo(client):
     promoted = resp.json()
     assert promoted["id"] == created["id"]
     assert promoted["status"] == "todo"
-    assert promoted["sprint"] == "Sprint 14"
+    assert promoted["sprint"] == _latest_sprint_name(client)
 
 
 def test_promote_unknown_task_404(client):
     resp = client.post(f"/api/tasks/{MISSING_ID}/promote")
     assert resp.status_code == 404
+
+
+# ---------- Hermaguard Batch B regressions (H1, M3) ----------
+
+def test_concurrent_create_tasks_all_succeed_without_500s(client):
+    """H1: 8 concurrent creators each get a 201 with a unique id — no 500s."""
+    auth = {"Authorization": client.headers["Authorization"]}
+    count = 8
+    results: list = [None] * count
+
+    def _worker(i):
+        # Fresh client per thread, mirroring independent concurrent callers.
+        with TestClient(app) as thread_client:
+            try:
+                resp = thread_client.post(
+                    "/api/tasks",
+                    json=_payload(title=f"Concurrent task {i}"),
+                    headers=auth,
+                )
+                body = resp.json()
+                results[i] = (resp.status_code, body.get("id"))
+            except Exception as exc:  # surface thread crashes as failures
+                results[i] = ("EXC", repr(exc))
+
+    threads = [threading.Thread(target=_worker, args=(i,)) for i in range(count)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert all(r is not None for r in results), f"threads lost: {results}"
+    assert all(code == 201 for code, _ in results), f"statuses: {results}"
+    ids = [task_id for _, task_id in results]
+    assert len(set(ids)) == count, f"duplicate ids: {results}"
+    stored = {t["id"] for t in _all_tasks(client)}
+    assert set(ids) <= stored
+
+
+@pytest.mark.parametrize("status", ["todo", "in_progress", "in_review", "done"])
+def test_promote_non_backlog_task_rejected_with_400(client, status):
+    """M3: promote 400s unless the task is currently in backlog; row untouched."""
+    created = client.post("/api/tasks", json=_payload(status=status)).json()
+    resp = client.post(f"/api/tasks/{created['id']}/promote")
+    assert resp.status_code == 400
+    got = next(t for t in _all_tasks(client) if t["id"] == created["id"])
+    assert got["status"] == status
+    assert got["sprint"] == created["sprint"]
+
+
+def test_backlog_exit_lands_in_latest_sprint(client):
+    """M3: both backlog-exit paths target the latest sprint from the table."""
+    latest = _latest_sprint_name(client)
+    moved = client.post(
+        "/api/tasks", json=_payload(status="backlog", sprint="Backlog")
+    ).json()
+    resp = client.patch(f"/api/tasks/{moved['id']}/status", json={"status": "todo"})
+    assert resp.status_code == 200
+    assert resp.json()["sprint"] == latest
+
+    promoted = client.post(
+        "/api/tasks", json=_payload(status="backlog", sprint="Backlog")
+    ).json()
+    resp = client.post(f"/api/tasks/{promoted['id']}/promote")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "todo"
+    assert resp.json()["sprint"] == latest
 
 
 # ---------- delete ----------
