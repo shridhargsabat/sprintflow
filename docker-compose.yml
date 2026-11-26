@@ -1,0 +1,63 @@
+services:
+  backend:
+    image: ghcr.io/shridhargsabat/sprintflow-backend:${BACKEND_TAG:-sprintflow-latest}
+    pull_policy: always
+    container_name: sprintflow-backend
+    restart: unless-stopped
+    environment:
+      SPRINTFLOW_JWT_SECRET: ${SPRINTFLOW_JWT_SECRET:?set in .env}
+      SPRINTFLOW_DB_PATH: /data/sprintflow.db
+      TZ: Asia/Kolkata
+    volumes:
+      - sprintflow_data:/data
+    networks: [sprintflow-net]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health').status==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 512M }
+
+  frontend:
+    image: ghcr.io/shridhargsabat/sprintflow-frontend:${FRONTEND_TAG:-sprintflow-latest}
+    pull_policy: always
+    container_name: sprintflow-frontend
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Kolkata
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - sprintflow-net
+      - dokploy-network
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run
+      - /var/cache/nginx
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      - traefik.http.routers.sprintflow-web.rule=Host(`sprintflow.ai-automation-hub.tech`)
+      - traefik.http.routers.sprintflow-web.entrypoints=web
+      - traefik.http.routers.sprintflow-web.middlewares=redirect-to-https@file
+      - traefik.http.routers.sprintflow-websecure.rule=Host(`sprintflow.ai-automation-hub.tech`)
+      - traefik.http.routers.sprintflow-websecure.entrypoints=websecure
+      - traefik.http.routers.sprintflow-websecure.tls=true
+      - traefik.http.routers.sprintflow-websecure.tls.certresolver=letsencrypt
+      - traefik.http.routers.sprintflow-websecure.service=sprintflow
+      - traefik.http.services.sprintflow.loadbalancer.server.port=8080
+
+networks:
+  sprintflow-net: {}
+  dokploy-network:
+    external: true
+
+volumes:
+  sprintflow_data: {}
