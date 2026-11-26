@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import Dropdown from './Dropdown';
+import Calendar from './Calendar';
 import { GLASS_PANEL, GLASS_PILL, STATUS_COLUMNS } from '../constants';
 import type { Task, TaskFormValues, TaskPriority, TaskStatus, TeamMember } from '../types';
 
@@ -76,7 +77,11 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
             </div>
             <div>
               <label className="block text-xs font-semibold mb-1">Due Date (When) *</label>
-              <input type="date" required value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full px-3 py-2 rounded-2xl text-xs bg-white/75 dark:bg-white/10 border border-white/80 dark:border-white/15" />
+              <Calendar
+                value={dueDate}
+                onChange={setDueDate}
+                className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-white/75 dark:bg-white/10 border border-white/80 dark:border-white/15"
+              />
             </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
+import Calendar from './Calendar';
 import { GLASS_PANEL, GLASS_PILL } from '../constants';
 import { formatShortDate } from '../utils/format';
 import type { SprintConfig, SprintPatch } from '../types';
@@ -35,11 +36,10 @@ function SprintRow({ sprint, onSave }: { sprint: SprintConfig; onSave: (id: stri
       </div>
       <div>
         <label className="block text-xs font-semibold mb-1">Start Date</label>
-        <input
-          type="date"
+        <Calendar
           value={startDate}
-          onChange={e => setStartDate(e.target.value)}
-          className="w-full px-3 py-2 rounded-2xl text-xs bg-white/75 dark:bg-white/10 border border-white/80 dark:border-white/15"
+          onChange={setStartDate}
+          className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-white/75 dark:bg-white/10 border border-white/80 dark:border-white/15"
         />
       </div>
       <div>
