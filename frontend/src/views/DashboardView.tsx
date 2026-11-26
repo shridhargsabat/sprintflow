@@ -455,7 +455,7 @@ export default function DashboardView({
                   <p className="text-xs font-semibold truncate">{t.title}</p>
                   <p className="text-[10px] text-slate-600 dark:text-slate-400">{m.name} · Target {formatShortDate(t.dueDate)}</p>
                 </div>
-                <GlassTooltip label="Pull into sprint" className="inline-flex shrink-0">
+                <GlassTooltip label="Pull into sprint" position="bottom" className="inline-flex shrink-0">
                   <button type="button" onClick={() => onPromoteTask(t.id)} className={`px-3 py-1.5 rounded-full text-[11px] font-semibold hover:text-blue-600 ${GLASS_PILL}`}>
                     Pull to Sprint
                   </button>

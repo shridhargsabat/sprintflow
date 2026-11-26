@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import Dropdown from './Dropdown';
 import { GlassTooltip } from './GlassTooltip';
@@ -41,6 +42,21 @@ export default function FilterBar({
       : [{ value: 'Sprint 14', label: 'Sprint 14' }, { value: 'Sprint 15', label: 'Sprint 15' }]),
     { value: 'Backlog', label: 'Unassigned Backlog' }
   ];
+  // Dropdown exposes no open-state callback, so observe its trigger button's
+  // aria-expanded attribute: hides the "Filter by assignee" tooltip bubble
+  // while the Who menu is open (covers click toggle, option select, Escape,
+  // Tab, and outside-click closes without stale state).
+  const whoWrapRef = useRef<HTMLDivElement>(null);
+  const [whoOpen, setWhoOpen] = useState(false);
+  useEffect(() => {
+    const btn = whoWrapRef.current?.querySelector('button[aria-expanded]');
+    if (!btn) return;
+    const sync = (): void => setWhoOpen(btn.getAttribute('aria-expanded') === 'true');
+    sync();
+    const obs = new MutationObserver(sync);
+    obs.observe(btn, { attributes: true, attributeFilter: ['aria-expanded'] });
+    return () => obs.disconnect();
+  }, []);
   return (
     <section className="max-w-[1440px] mx-auto px-4 sm:px-6 pt-4">
       <div className={`lg-enter lg-delay-1 rounded-[24px] px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 ${GLASS_PANEL}`}>
@@ -91,8 +107,8 @@ export default function FilterBar({
             ))}
           </div>
 
-          <div className="shrink-0 min-w-36">
-            <GlassTooltip label="Filter by assignee" position="bottom" className="block w-full">
+          <div className="shrink-0 min-w-36" ref={whoWrapRef}>
+            <GlassTooltip label="Filter by assignee" position="bottom" className="block w-full" hide={whoOpen}>
               <Dropdown
                 value={assigneeFilter}
                 onChange={onAssigneeFilterChange}
