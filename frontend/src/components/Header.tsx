@@ -1,5 +1,6 @@
 import type * as React from 'react';
 import type { RefObject } from 'react';
+import { useState } from 'react';
 import {
   Database,
   Download,
@@ -62,6 +63,8 @@ export default function Header({
   const { user, logout } = useAuth();
   const { can } = usePermissions();
   const showUsers = can('team.manage');
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  useEscapeKey(() => setUserMenuOpen(false), userMenuOpen);
   return (
     <>
       {/* Ambient Mesh Wallpaper */}
@@ -127,18 +130,46 @@ export default function Header({
 
           <div className="flex items-center gap-2 shrink-0">
             {user && (
-              <GlassTooltip label={`${user.email} · ${user.role}`} position="bottom">
-                <button
-                  type="button"
-                  onClick={() => (menuOpen ? onCloseMenu() : onOpenMenu())}
-                  className={`hidden md:inline-flex items-center gap-2 pl-1 pr-3 py-1 rounded-full text-xs font-medium ${GLASS_PILL}`}
-                >
-                  <span className="w-7 h-7 rounded-full bg-gradient-to-br from-sky-400 to-indigo-500 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
-                    {getInitials(user.name)}
-                  </span>
-                  <span className="max-w-24 truncate">{user.name}</span>
-                </button>
-              </GlassTooltip>
+              <div className="relative hidden md:block">
+                <GlassTooltip label={`${user.email} · ${user.role}`} position="bottom" hide={userMenuOpen}>
+                  <button
+                    type="button"
+                    onClick={() => { onCloseMenu(); setUserMenuOpen(o => !o); }}
+                    aria-label="User menu"
+                    className={`inline-flex items-center gap-2 pl-1 pr-3 py-1 rounded-full text-xs font-medium ${GLASS_PILL}`}
+                  >
+                    <span className="w-7 h-7 rounded-full bg-gradient-to-br from-sky-400 to-indigo-500 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                      {getInitials(user.name)}
+                    </span>
+                    <span className="max-w-24 truncate">{user.name}</span>
+                  </button>
+                </GlassTooltip>
+                {userMenuOpen && (
+                  <div className={`lg-dropdown absolute right-0 mt-2.5 w-60 rounded-3xl py-2 z-40 ${GLASS_MENU}`}>
+                    <div className="px-4 py-2.5 flex items-center gap-2.5">
+                      <span className="w-9 h-9 rounded-full bg-gradient-to-br from-sky-400 to-indigo-500 text-white text-xs font-bold flex items-center justify-center shrink-0">
+                        {getInitials(user.name)}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-xs font-semibold truncate">{user.name}</span>
+                        <span className="block text-[11px] text-slate-500 truncate">{user.email}</span>
+                      </span>
+                      <span className="ml-auto shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border bg-blue-500/15 text-blue-700 dark:text-blue-200 border-blue-400/30">
+                        {user.role}
+                      </span>
+                    </div>
+                    <div className="my-1.5 mx-3 border-t border-slate-900/10 dark:border-white/10" />
+                    {showUsers && (
+                      <button type="button" onClick={() => { setUserMenuOpen(false); onOpenUsers(); }} className="w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-slate-900/5 dark:hover:bg-white/10 flex items-center gap-2.5">
+                        <ShieldCheck className="w-3.5 h-3.5" /> Manage Users
+                      </button>
+                    )}
+                    <button type="button" onClick={() => { setUserMenuOpen(false); logout(); }} title={`Sign out ${user.email}`} className="w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-slate-900/5 dark:hover:bg-white/10 flex items-center gap-2.5">
+                      <LogOut className="w-3.5 h-3.5" /> Sign Out
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
             <GlassTooltip label="Manage team" position="bottom" className="hidden sm:inline-flex">
               <button
@@ -155,7 +186,7 @@ export default function Header({
               <GlassTooltip label="Data options: export, import, reset" position="bottom" hide={menuOpen}>
                 <button
                   type="button"
-                  onClick={() => onOpenMenu()}
+                  onClick={() => { setUserMenuOpen(false); onOpenMenu(); }}
                   aria-label="Data options"
                   className={`inline-flex items-center justify-center w-9 h-9 rounded-full ${GLASS_PILL}`}
                 >
@@ -178,12 +209,11 @@ export default function Header({
                     <RotateCcw className="w-3.5 h-3.5" /> Reset SQLite Data
                   </button>
                   {showUsers && (
-                    <button type="button" onClick={() => { onCloseMenu(); onOpenUsers(); }} className="w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-slate-900/5 dark:hover:bg-white/10 flex items-center gap-2.5">
+                    <button type="button" onClick={() => { onCloseMenu(); onOpenUsers(); }} className="md:hidden w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-slate-900/5 dark:hover:bg-white/10 flex items-center gap-2.5">
                       <ShieldCheck className="w-3.5 h-3.5" /> Manage Users
                     </button>
                   )}
-                  <div className="my-1.5 mx-3 border-t border-slate-900/10 dark:border-white/10" />
-                  <button type="button" onClick={() => { onCloseMenu(); logout(); }} title={user ? `Sign out ${user.email}` : 'Sign out'} className="w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-slate-900/5 dark:hover:bg-white/10 flex items-center gap-2.5">
+                  <button type="button" onClick={() => { onCloseMenu(); logout(); }} className="md:hidden w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-slate-900/5 dark:hover:bg-white/10 flex items-center gap-2.5">
                     <LogOut className="w-3.5 h-3.5" /> Sign Out
                   </button>
                 </div>
