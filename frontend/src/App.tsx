@@ -38,10 +38,11 @@ import {
   Line
 } from 'recharts';
 import { api } from './api';
+import type { PriorityFilter, Task, TaskModalState, TaskPriority, TaskStatus, TeamMember, Toast, ToastType, ViewId } from './types';
 
 const TODAY_ISO = '2026-11-26';
 
-const STATUS_COLUMNS = [
+const STATUS_COLUMNS: Array<{ id: TaskStatus; label: string; dot: string; badge: string }> = [
   { id: 'backlog', label: 'Backlog', dot: 'bg-slate-400', badge: 'bg-slate-500/15 text-slate-700 dark:text-slate-200 border border-white/40 dark:border-white/10' },
   { id: 'todo', label: 'To Do', dot: 'bg-sky-500', badge: 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-400/25' },
   { id: 'in_progress', label: 'In Progress', dot: 'bg-blue-500', badge: 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-400/25' },
@@ -49,7 +50,7 @@ const STATUS_COLUMNS = [
   { id: 'done', label: 'Done', dot: 'bg-emerald-500', badge: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-400/25' }
 ];
 
-const PRIORITY_META = {
+const PRIORITY_META: Record<TaskPriority, { label: string; weight: number; color: string; pill: string; dot: string }> = {
   critical: { label: 'Critical', weight: 4, color: '#ff3b30', pill: 'bg-rose-500/15 text-rose-700 border-rose-400/30 dark:bg-rose-500/20 dark:text-rose-200 dark:border-rose-400/30', dot: 'bg-rose-500' },
   high:     { label: 'High',     weight: 3, color: '#ff9500', pill: 'bg-amber-500/15 text-amber-800 border-amber-400/30 dark:bg-amber-500/20 dark:text-amber-200 dark:border-amber-400/30', dot: 'bg-amber-500' },
   medium:   { label: 'Medium',   weight: 2, color: '#007aff', pill: 'bg-blue-500/15 text-blue-700 border-blue-400/30 dark:bg-blue-500/20 dark:text-blue-200 dark:border-blue-400/30', dot: 'bg-blue-500' },
@@ -65,20 +66,20 @@ const GLASS_SUBCARD =
 const GLASS_PILL =
   'lg-press bg-white/55 dark:bg-white/[0.08] backdrop-blur-xl border border-white/75 dark:border-white/[0.14] shadow-[0_2px_10px_-2px_rgba(15,23,42,0.08),inset_0_1px_0_0_rgba(255,255,255,0.8)] dark:shadow-[0_4px_16px_-2px_rgba(0,0,0,0.35),inset_0_1px_0_0_rgba(255,255,255,0.15)]';
 
-function getInitials(name) {
+function getInitials(name: string): string {
   const parts = String(name || '?').trim().split(/\s+/);
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
   return String(name || '?').slice(0, 2).toUpperCase();
 }
 
-function formatShortDate(iso) {
+function formatShortDate(iso: string): string {
   if (!iso) return 'No date';
   const [y, m, d] = iso.split('-').map(Number);
   if (!y || !m || !d) return iso;
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function getDueMeta(iso, status) {
+function getDueMeta(iso: string, status: TaskStatus): { text: string; cls: string } {
   if (status === 'done') return { text: formatShortDate(iso), cls: 'text-emerald-600 dark:text-emerald-400' };
   if (!iso) return { text: 'TBD', cls: 'text-slate-400' };
   const today = new Date(TODAY_ISO + 'T00:00:00');
@@ -91,37 +92,37 @@ function getDueMeta(iso, status) {
 }
 
 export default function App() {
-  const [team, setTeam] = useState([]);
-  const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [apiError, setApiError] = useState('');
-  const [darkMode, setDarkMode] = useState(false);
+  const [team, setTeam] = useState<TeamMember[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [apiError, setApiError] = useState<string>('');
+  const [darkMode, setDarkMode] = useState<boolean>(false);
 
-  const [activeView, setActiveView] = useState('dashboard');
-  const [sprintFilter, setSprintFilter] = useState('Sprint 14');
-  const [priorityFilter, setPriorityFilter] = useState('all');
-  const [assigneeFilter, setAssigneeFilter] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [backlogSort, setBacklogSort] = useState('priority');
+  const [activeView, setActiveView] = useState<ViewId>('dashboard');
+  const [sprintFilter, setSprintFilter] = useState<string>('Sprint 14');
+  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
+  const [assigneeFilter, setAssigneeFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [backlogSort, setBacklogSort] = useState<string>('priority');
 
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [taskModal, setTaskModal] = useState({ open: false, task: null, defaultStatus: 'todo' });
-  const [teamModalOpen, setTeamModalOpen] = useState(false);
-  const [newMemberName, setNewMemberName] = useState('');
-  const [newMemberRole, setNewMemberRole] = useState('');
-  const [draggedTaskId, setDraggedTaskId] = useState(null);
-  const [dragOverCol, setDragOverCol] = useState(null);
-  const [toasts, setToasts] = useState([]);
+  const [menuOpen, setMenuOpen] = useState<boolean>(false);
+  const [taskModal, setTaskModal] = useState<TaskModalState>({ open: false, task: null, defaultStatus: 'todo' });
+  const [teamModalOpen, setTeamModalOpen] = useState<boolean>(false);
+  const [newMemberName, setNewMemberName] = useState<string>('');
+  const [newMemberRole, setNewMemberRole] = useState<string>('');
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const fileInputRef = useRef(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const showToast = (message, type = 'info') => {
+  const showToast = (message: string, type: ToastType = 'info'): void => {
     const id = Date.now() + Math.random();
     setToasts(prev => [...prev, { id, message, type }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 2600);
   };
 
-  const refreshAll = async () => {
+  const refreshAll = async (): Promise<void> => {
     try {
       setApiError('');
       const [teamData, tasksData] = await Promise.all([api.getTeam(), api.getTasks()]);

@@ -36,7 +36,6 @@ export interface TaskModalState {
   open: boolean;
   task: Task | null;
   defaultStatus: TaskStatus;
-  defaultSprint: string;
 }
 
 export interface DashboardSummary {
