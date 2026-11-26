@@ -225,6 +225,7 @@ function BoardApp() {
         {teamModalOpen && (
           <TeamModal
             team={board.team}
+            tasks={board.tasks}
             newMemberName={newMemberName}
             newMemberRole={newMemberRole}
             onNameChange={setNewMemberName}
@@ -232,6 +233,7 @@ function BoardApp() {
             onUpdateMember={board.handleUpdateMember}
             onAddMember={board.handleAddMember}
             onRemoveMember={board.handleRemoveMember}
+            onBulkAdd={board.handleBulkAddMembers}
             onRenameMember={(id, patch) => board.setTeam(prev => prev.map(x => (x.id === id ? { ...x, ...patch } : x)))}
             onClose={() => setTeamModalOpen(false)}
           />

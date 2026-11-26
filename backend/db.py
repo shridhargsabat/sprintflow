@@ -7,6 +7,8 @@ from contextlib import contextmanager
 from datetime import date, timedelta
 from typing import Any, Dict, Generator, List, Optional
 
+from fastapi import HTTPException
+
 DB_PATH = os.environ.get(
     "SPRINTFLOW_DB_PATH",
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "sprintflow.db"),
@@ -70,7 +72,7 @@ def init_db(db_path: Optional[str] = None) -> None:
                 name TEXT NOT NULL,
                 role TEXT NOT NULL DEFAULT 'Engineer',
                 color TEXT NOT NULL DEFAULT 'bg-indigo-600',
-                user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL
+                user_id INTEGER NULL UNIQUE REFERENCES users(id) ON DELETE SET NULL
             );
 
             CREATE TABLE IF NOT EXISTS tasks (
@@ -123,6 +125,34 @@ def init_db(db_path: Optional[str] = None) -> None:
         cols = [r[1] for r in conn.execute("PRAGMA table_info(team_members)").fetchall()]
         if "user_id" not in cols:
             conn.execute("ALTER TABLE team_members ADD COLUMN user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL")
+        # Link-integrity migrations (idempotent, run on every startup):
+        # 1) Backfill: dangling user_id (no matching users row) -> NULL so no
+        #    ghost linkedUser is ever surfaced.
+        conn.execute(
+            """
+            UPDATE team_members SET user_id = NULL
+            WHERE user_id IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM users WHERE users.id = team_members.user_id)
+            """
+        )
+        # 2) Dedupe: keep the lowest-rowid member per user_id, unlink the rest,
+        #    so the partial unique index below can be created safely.
+        conn.execute(
+            """
+            UPDATE team_members SET user_id = NULL
+            WHERE user_id IS NOT NULL AND rowid NOT IN (
+                SELECT MIN(rowid) FROM team_members
+                WHERE user_id IS NOT NULL GROUP BY user_id
+            )
+            """
+        )
+        # 3) Enforce one-to-one links (fresh + migrated DBs alike). Created here
+        #    — after backfill/dedupe — rather than in the CREATE TABLE script
+        #    above, so pre-existing dupes can never break startup.
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_team_members_user_id "
+            "ON team_members(user_id) WHERE user_id IS NOT NULL"
+        )
         # Always ensure the seeded admin login exists (idempotent).
         seed_users(conn)
 
@@ -263,9 +293,11 @@ def list_team(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
             d = dict(r)
             link_name = d.pop("linkName", None)
             link_email = d.pop("linkEmail", None)
+            # Only surface linkedUser when the JOIN actually found a user row
+            # (dangling user_id must render as a ghost-free null, not {None}).
             d["linkedUser"] = (
                 {"name": link_name, "email": link_email}
-                if d.get("userId") is not None
+                if link_name is not None
                 else None
             )
             out.append(d)
@@ -307,3 +339,24 @@ def list_tasks(
     with get_conn(db_path) as conn:
         rows = conn.execute(sql, params).fetchall()
         return [row_to_task(r) for r in rows]
+
+
+def validate_assignee_id(conn: sqlite3.Connection, assignee_id: Optional[str]) -> None:
+    """Reject an unknown task assignee with HTTP 400. None clears/unset: OK.
+
+    NOTE FOR PARENT (routers/tasks.py is read-only for this agent): apply this
+    validator with one line inside the `with db.get_conn() as conn:` block of
+    BOTH handlers, before the INSERT/UPDATE executes:
+
+        create_task:  db.validate_assignee_id(conn, payload.assigneeId)
+        update_task:  db.validate_assignee_id(conn, payload.assigneeId)
+    """
+    if assignee_id is None:
+        return
+    row = conn.execute(
+        "SELECT 1 FROM team_members WHERE id = ?", (assignee_id,)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(
+            status_code=400, detail=f"Unknown assigneeId: {assignee_id}"
+        )

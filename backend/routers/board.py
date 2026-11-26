@@ -1,9 +1,9 @@
 """Health, dashboard summary, and board data-sync endpoints."""
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 import auth
 import db
@@ -54,14 +54,48 @@ def export_board(
 def import_board(
     payload: ImportPayload,
     _user: Dict[str, Any] = Depends(auth.require_permissions("data.import")),
-) -> Dict[str, int]:
+) -> Dict[str, Any]:
+    # RBAC: a non-empty team section additionally requires team.manage, so
+    # roles without member-admin rights (e.g. lead) may only import tasks.
+    # Checked BEFORE wiping anything so rejected imports leave data intact.
+    if payload.team:
+        if "team.manage" not in auth.permissions_for(_user["role"]):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Missing permissions: team.manage",
+            )
+    # Validate linked login users BEFORE wiping anything: unknown userIds
+    # are cleared to NULL and reported in warnings[].
+    warnings: List[str] = []
+    resolved_user_ids: List[Optional[int]] = []
+    for m in payload.team:
+        uid = m.get("userId")
+        if uid is None:
+            resolved_user_ids.append(None)
+            continue
+        try:
+            uid_int: Optional[int] = int(uid)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            uid_int = None
+        user = auth.get_user_by_id(uid_int) if uid_int is not None else None
+        if user is None:
+            linked = m.get("linkedUser")
+            email = linked.get("email") if isinstance(linked, dict) else None
+            email = email or m.get("email")
+            hint = f" (email: {email})" if email else ""
+            warnings.append(
+                f"Team member '{m.get('id', '?')}' references unknown user_id {uid!r}{hint}; link cleared (set to NULL)"
+            )
+            resolved_user_ids.append(None)
+        else:
+            resolved_user_ids.append(user["id"])
     with db.get_conn() as conn:
         conn.execute("DELETE FROM tasks")
         conn.execute("DELETE FROM team_members")
-        for m in payload.team:
+        for m, user_id in zip(payload.team, resolved_user_ids):
             conn.execute(
-                "INSERT INTO team_members (id, name, role, color) VALUES (?, ?, ?, ?)",
-                (m["id"], m["name"], m.get("role", "Engineer"), m.get("color", "bg-indigo-600")),
+                "INSERT INTO team_members (id, name, role, color, user_id) VALUES (?, ?, ?, ?, ?)",
+                (m["id"], m["name"], m.get("role", "Engineer"), m.get("color", "bg-indigo-600"), user_id),
             )
         for t in payload.tasks:
             conn.execute(
@@ -83,7 +117,7 @@ def import_board(
                     t.get("tag", "Frontend"),
                 ),
             )
-    return {"team": len(payload.team), "tasks": len(payload.tasks)}
+    return {"team": len(payload.team), "tasks": len(payload.tasks), "warnings": warnings}
 
 
 @router.post("/reset")

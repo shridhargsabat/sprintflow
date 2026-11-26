@@ -32,6 +32,13 @@ class MemberPayload(BaseModel):
     color: Optional[str] = None
     userId: Optional[int] = None
 
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, value: str) -> str:
+        # Strip only; blank-after-strip is rejected with HTTP 400 by the
+        # team router (a ValueError here would surface as 422 instead).
+        return value.strip()
+
 
 class ImportPayload(BaseModel):
     team: List[Dict[str, Any]]

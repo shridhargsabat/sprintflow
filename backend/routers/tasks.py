@@ -37,6 +37,7 @@ def create_task(
 ) -> Dict[str, Any]:
     with db.get_conn() as conn:
         task_id = db.next_task_id(conn)
+        db.validate_assignee_id(conn, payload.assigneeId)
         conn.execute(
             """
             INSERT INTO tasks
@@ -70,6 +71,7 @@ def update_task(
         existing = conn.execute("SELECT id FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Task not found")
+        db.validate_assignee_id(conn, payload.assigneeId)
         conn.execute(
             """
             UPDATE tasks

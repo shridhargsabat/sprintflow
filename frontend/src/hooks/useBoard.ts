@@ -12,6 +12,24 @@ export interface UseBoardDeps {
   setNewMemberRole: (v: string) => void;
 }
 
+/** One parsed bulk-add line; `line` is the 1-based source line for error reports. */
+export interface BulkMemberEntry {
+  line: number;
+  name: string;
+  role?: string;
+}
+
+export interface BulkMemberLineError {
+  line: number;
+  name: string;
+  error: string;
+}
+
+export interface BulkAddMembersResult {
+  added: TeamMember[];
+  errors: BulkMemberLineError[];
+}
+
 export interface UseBoard {
   team: TeamMember[];
   tasks: Task[];
@@ -30,6 +48,7 @@ export interface UseBoard {
   deleteTask: (taskId: string) => Promise<void>;
   handleUpdateMember: (member: TeamMember) => Promise<void>;
   handleAddMember: (e: React.FormEvent) => Promise<void>;
+  handleBulkAddMembers: (entries: BulkMemberEntry[]) => Promise<BulkAddMembersResult>;
   handleRemoveMember: (id: string) => Promise<void>;
   handleExportJson: () => void;
   handleImportJson: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -166,11 +185,15 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
   };
 
   const handleUpdateMember = async (member: TeamMember): Promise<void> => {
+    const snapshot = team;
+    setTeam(prev => prev.map(m => (m.id === member.id ? { ...m, ...member } : m)));
     try {
       const updated = await api.updateMember(member.id, member);
       setTeam(prev => prev.map(m => (m.id === member.id ? updated : m)));
-    } catch {
+    } catch (e) {
+      setTeam(snapshot);
       showToast('Failed to update member', 'error');
+      throw e instanceof Error ? e : new Error('Failed to update member');
     }
   };
 
@@ -195,9 +218,32 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
       await api.deleteMember(id);
       await refreshAll();
       showToast('Removed member and reassigned tasks', 'info');
-    } catch {
+    } catch (e) {
       showToast('Failed to remove member', 'error');
+      throw e instanceof Error ? e : new Error('Failed to remove member');
     }
+  };
+
+  const handleBulkAddMembers = async (entries: BulkMemberEntry[]): Promise<BulkAddMembersResult> => {
+    const added: TeamMember[] = [];
+    const errors: BulkMemberLineError[] = [];
+    for (const entry of entries) {
+      const name = entry.name.trim();
+      if (!name) {
+        errors.push({ line: entry.line, name: entry.name, error: 'Missing name' });
+        continue;
+      }
+      try {
+        const created = await api.addMember({ name, role: entry.role?.trim() || 'Engineer' });
+        added.push(created);
+      } catch (e) {
+        errors.push({ line: entry.line, name, error: e instanceof Error && e.message ? e.message : 'Failed to add member' });
+      }
+    }
+    if (added.length > 0) setTeam(prev => [...prev, ...added]);
+    if (added.length > 0) showToast(`Added ${added.length} ${added.length === 1 ? 'member' : 'members'}`, 'success');
+    if (errors.length > 0) showToast(`${errors.length} ${errors.length === 1 ? 'line' : 'lines'} failed`, 'error');
+    return { added, errors };
   };
 
   const updateSprint = async (id: string, patch: SprintPatch): Promise<void> => {
@@ -228,6 +274,7 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
     deleteTask,
     handleUpdateMember,
     handleAddMember,
+    handleBulkAddMembers,
     handleRemoveMember,
     handleExportJson,
     handleImportJson,

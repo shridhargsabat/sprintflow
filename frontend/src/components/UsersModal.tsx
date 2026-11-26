@@ -7,6 +7,7 @@ import { api } from '../api';
 import type { ManagedUser, Role, UpdateUserPayload } from '../api';
 import type { TeamMember } from '../types';
 import Dropdown from './Dropdown';
+import ConfirmDialog from './ConfirmDialog';
 import { useAuth } from '../auth/AuthContext';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 
@@ -30,6 +31,10 @@ export function UsersModal({ onClose }: { onClose: () => void }): React.JSX.Elem
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [query, setQuery] = useState('');
+  const [pendingDelete, setPendingDelete] = useState<ManagedUser | null>(null);
+  const [pendingUnlink, setPendingUnlink] = useState<TeamMember | null>(null);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -47,7 +52,12 @@ export function UsersModal({ onClose }: { onClose: () => void }): React.JSX.Elem
     let cancelled = false;
     api.listUsers()
       .then(u => { if (!cancelled) setUsers(u); })
-      .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load users'); })
+      .catch(e => {
+        if (!cancelled) {
+          setLoadFailed(true);
+          setError(e instanceof Error ? e.message : 'Failed to load users');
+        }
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
     api.getTeam()
       .then(t => { if (!cancelled) setTeam(t); })
@@ -92,6 +102,27 @@ export function UsersModal({ onClose }: { onClose: () => void }): React.JSX.Elem
       .then(updated => setTeam(prev => prev.map(t => (t.id === tm.id ? updated : t))))
       .catch(err => setError(err instanceof Error ? err.message : 'Failed to unlink member'));
   };
+
+  const confirmDelete = (): void => {
+    const target = pendingDelete;
+    setPendingDelete(null);
+    if (target) handleDelete(target.id);
+  };
+
+  const confirmUnlink = (): void => {
+    const target = pendingUnlink;
+    setPendingUnlink(null);
+    if (target) handleUnlink(target);
+  };
+
+  const q = query.trim().toLowerCase();
+  const filtered = q === ''
+    ? users
+    : users.filter(u =>
+        u.name.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        u.role.toLowerCase().includes(q)
+      );
 
   const startEdit = (u: ManagedUser): void => {
     setEditingId(u.id);
@@ -145,9 +176,31 @@ export function UsersModal({ onClose }: { onClose: () => void }): React.JSX.Elem
               {error}
             </div>
           )}
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search name, email, or role…"
+              aria-label="Search users"
+              className={`flex-1 min-w-0 ${FIELD}`}
+            />
+            <span className="text-[11px] text-slate-500 shrink-0" aria-live="polite">
+              {filtered.length} of {users.length}
+            </span>
+          </div>
           <div className="space-y-2.5 max-h-56 overflow-y-auto scroll-slim pr-1">
             {loading && <div className="text-xs text-slate-500 py-4 text-center">Loading users…</div>}
-            {users.map(u => {
+            {!loading && users.length === 0 && !loadFailed && (
+              <div className="text-xs text-slate-500 py-4 text-center">No users yet</div>
+            )}
+            {!loading && users.length === 0 && loadFailed && (
+              <div className="text-xs text-slate-500 py-4 text-center">Cannot load users — insufficient permission</div>
+            )}
+            {!loading && users.length > 0 && filtered.length === 0 && (
+              <div className="text-xs text-slate-500 py-4 text-center">No matching users</div>
+            )}
+            {filtered.map(u => {
               const isSelf = me != null && String(me.id) === String(u.id);
               if (editingId === u.id) {
                 return (
@@ -199,7 +252,7 @@ export function UsersModal({ onClose }: { onClose: () => void }): React.JSX.Elem
                     return (
                       <span className="mt-0.5 inline-flex items-center gap-1 px-1.5 py-px rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-700 dark:text-blue-200 border border-blue-400/25">
                         {tm.name}
-                        <button type="button" onClick={() => handleUnlink(tm)} title={`Unlink ${tm.name}`} className="hover:text-rose-600">
+                        <button type="button" onClick={() => setPendingUnlink(tm)} title={`Unlink ${tm.name}`} className="hover:text-rose-600">
                           <Unlink className="w-3 h-3" />
                         </button>
                       </span>
@@ -213,7 +266,7 @@ export function UsersModal({ onClose }: { onClose: () => void }): React.JSX.Elem
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
                 {!isSelf && (
-                  <button type="button" onClick={() => handleDelete(u.id)} title={`Delete ${u.email}`} className="p-1.5 rounded-full text-slate-500 hover:text-rose-600">
+                  <button type="button" onClick={() => setPendingDelete(u)} title={`Delete ${u.email}`} className="p-1.5 rounded-full text-slate-500 hover:text-rose-600">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 )}
@@ -221,7 +274,8 @@ export function UsersModal({ onClose }: { onClose: () => void }): React.JSX.Elem
               );
             })}
           </div>
-          <form onSubmit={handleCreate} className="space-y-2 pt-3 border-t border-slate-900/10 dark:border-white/10">
+          <form onSubmit={handleCreate} className="pt-3 border-t border-slate-900/10 dark:border-white/10">
+            <fieldset disabled={loadFailed} className="space-y-2">
             <div className="flex gap-2">
               <input type="text" required value={name} onChange={e => setName(e.target.value)} placeholder="Full name" className={`flex-1 min-w-0 ${FIELD}`} />
               <div className="w-28 shrink-0">
@@ -243,12 +297,30 @@ export function UsersModal({ onClose }: { onClose: () => void }): React.JSX.Elem
               options={[{ value: '', label: 'Link team member (optional)' }, ...team.filter(t => t.userId == null).map(t => ({ value: t.id, label: `${t.name} (${t.role})` }))]}
               className={`inline-flex w-full items-center justify-between gap-2 rounded-full px-3 py-2 text-xs field-text ${GLASS_PILL}`}
             />
-            <button type="submit" disabled={saving} className="w-full px-4 py-2 rounded-full text-xs font-semibold bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white disabled:opacity-60">
+            <button type="submit" disabled={saving || loadFailed} className="w-full px-4 py-2 rounded-full text-xs font-semibold bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white disabled:opacity-60">
               {saving ? 'Creating…' : 'Create User'}
             </button>
+            </fieldset>
           </form>
         </div>
       </div>
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete user"
+        message={pendingDelete ? `Delete login ${pendingDelete.name} ${pendingDelete.email}?` : ''}
+        confirmLabel="Delete"
+        danger
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
+      <ConfirmDialog
+        open={pendingUnlink !== null}
+        title="Unlink member"
+        message="Unlink member from login?"
+        confirmLabel="Unlink"
+        onConfirm={confirmUnlink}
+        onCancel={() => setPendingUnlink(null)}
+      />
     </div>
   );
 }

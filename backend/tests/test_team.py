@@ -66,11 +66,10 @@ def test_update_unknown_member_404(client):
     assert client.put(f"/api/team/{MISSING_ID}", json={"name": "Ghost"}).status_code == 404
 
 
-def test_delete_member_reassigns_tasks_to_remaining_member(client):
+def test_delete_member_unassigns_tasks_by_default(client):
     members = _team(client)
     assert len(members) >= 2
     victim = members[-1]
-    fallback = next(m for m in members if m["id"] != victim["id"])
     created = client.post("/api/tasks", json={
         "title": "Task owned by leaver",
         "dueDate": "2026-12-07",
@@ -80,13 +79,40 @@ def test_delete_member_reassigns_tasks_to_remaining_member(client):
 
     resp = client.delete(f"/api/team/{victim['id']}")
     assert resp.status_code == 200
-    assert resp.json() == {"deleted": victim["id"]}
+    body = resp.json()
+    assert body["deleted"] == victim["id"]
+    assert body["reassignedTasks"] >= 1
+    assert body["fallback"] is None
 
     remaining_ids = {m["id"] for m in _team(client)}
     assert victim["id"] not in remaining_ids
-    assert fallback["id"] in remaining_ids
+    tasks = {t["id"]: t for t in client.get("/api/tasks").json()}
+    assert tasks[created["id"]]["assigneeId"] is None
+
+
+def test_delete_member_with_reassign_to_moves_tasks(client):
+    members = _team(client)
+    assert len(members) >= 2
+    victim = members[-1]
+    fallback = next(m for m in members if m["id"] != victim["id"])
+    created = client.post("/api/tasks", json={
+        "title": "Task to reassign",
+        "dueDate": "2026-12-08",
+        "assigneeId": victim["id"],
+    }).json()
+
+    resp = client.delete(f"/api/team/{victim['id']}", params={"reassignTo": fallback["id"]})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["deleted"] == victim["id"]
+    assert body["reassignedTasks"] >= 1
+    assert body["fallback"] == fallback["id"]
+
     tasks = {t["id"]: t for t in client.get("/api/tasks").json()}
     assert tasks[created["id"]]["assigneeId"] == fallback["id"]
+
+    bad = client.delete(f"/api/team/{fallback['id']}", params={"reassignTo": "mx-missing"})
+    assert bad.status_code == 400
 
 
 def test_delete_last_member_returns_400_and_keeps_member(client):
