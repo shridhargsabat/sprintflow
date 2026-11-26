@@ -10,7 +10,7 @@
 
 🌐 **Live demo:** [sprintflow.ai-automation-hub.tech](https://sprintflow.ai-automation-hub.tech) (seeded sample data)
 
-> TODO: capture after deploy goes live — hero GIF of Kanban drag-and-drop (`docs/demo/hero-board.gif`, 800px wide, linked to live demo).
+[![Kanban drag-and-drop demo](docs/demo/hero-board.gif)](https://sprintflow.ai-automation-hub.tech)
 
 ## ✨ Features
 
@@ -22,7 +22,9 @@
 - 🔄 **Import / reset** — JSON import and one-click sample-data reset for demos
 - 📖 **Auto API docs** — Swagger UI served by FastAPI at `/docs`
 
-> TODO: screenshots after deploy — `docs/demo/dashboard.png`, `docs/demo/kanban.png`, `docs/demo/backlog.png` (light table, 3-col).
+| Dashboard | Kanban | Backlog |
+|---|---|---|
+| ![Dashboard KPIs](docs/demo/dashboard.png) | ![Kanban board](docs/demo/kanban.png) | ![Backlog and team](docs/demo/backlog.png) |
 
 ## 🚀 5-Minute Quickstart
 
