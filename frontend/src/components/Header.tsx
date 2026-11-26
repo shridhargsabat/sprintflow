@@ -15,6 +15,7 @@ import {
   RotateCcw,
   ShieldCheck,
   Sun,
+  Tags,
   Upload,
   Users,
 } from 'lucide-react';
@@ -36,6 +37,7 @@ export interface HeaderProps {
   onCloseMenu: () => void;
   onOpenTeam: () => void;
   onOpenUsers: () => void;
+  onOpenTags: () => void;
   onNewTask: () => void;
   onExportJson: () => void;
   onResetDemo: () => void;
@@ -53,6 +55,7 @@ export default function Header({
   onCloseMenu,
   onOpenTeam,
   onOpenUsers,
+  onOpenTags,
   onNewTask,
   onExportJson,
   onResetDemo,
@@ -164,6 +167,9 @@ export default function Header({
                         <ShieldCheck className="w-3.5 h-3.5" /> Manage Users
                       </button>
                     )}
+                    <button type="button" onClick={() => { setUserMenuOpen(false); onOpenTags(); }} className="w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-slate-900/5 dark:hover:bg-white/10 flex items-center gap-2.5">
+                      <Tags className="w-3.5 h-3.5" /> Manage Tags
+                    </button>
                     <button type="button" onClick={() => { setUserMenuOpen(false); logout(); }} title={`Sign out ${user.email}`} className="w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-slate-900/5 dark:hover:bg-white/10 flex items-center gap-2.5">
                       <LogOut className="w-3.5 h-3.5" /> Sign Out
                     </button>
@@ -218,6 +224,9 @@ export default function Header({
                       <ShieldCheck className="w-3.5 h-3.5" /> Manage Users
                     </button>
                   )}
+                  <button type="button" onClick={() => { onCloseMenu(); onOpenTags(); }} className="md:hidden w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-slate-900/5 dark:hover:bg-white/10 flex items-center gap-2.5">
+                    <Tags className="w-3.5 h-3.5" /> Manage Tags
+                  </button>
                   <button type="button" onClick={() => { onCloseMenu(); logout(); }} className="md:hidden w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-slate-900/5 dark:hover:bg-white/10 flex items-center gap-2.5">
                     <LogOut className="w-3.5 h-3.5" /> Sign Out
                   </button>

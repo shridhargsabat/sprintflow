@@ -27,6 +27,23 @@ class StatusUpdatePayload(BaseModel):
     status: StatusType
 
 
+class TagCreatePayload(BaseModel):
+    name: str = Field(..., min_length=1, max_length=60)
+    color: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, value: str) -> str:
+        # Strip only; blank-after-strip is rejected with HTTP 400 by the
+        # tags router (a ValueError here would surface as 422 instead).
+        return value.strip()
+
+
+class TagUpdatePayload(BaseModel):
+    name: Optional[str] = Field(default=None, max_length=60)
+    color: Optional[str] = None
+
+
 class MemberPayload(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     role: str = "Engineer"

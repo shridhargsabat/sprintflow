@@ -92,6 +92,20 @@ def import_board(
     with db.get_conn() as conn:
         conn.execute("DELETE FROM tasks")
         conn.execute("DELETE FROM team_members")
+        # Tag master: auto-create any imported task tags missing from the
+        # master (each creation is collected into warnings[]).
+        seen_tags: List[str] = []
+        for t in payload.tasks:
+            raw_tag = t.get("tag") or "Frontend"
+            raw_tag = raw_tag.strip() if isinstance(raw_tag, str) else "Frontend"
+            if not raw_tag:
+                raw_tag = "Frontend"
+            if raw_tag not in seen_tags:
+                seen_tags.append(raw_tag)
+        for tag_name in seen_tags:
+            _, created = db.ensure_tag(conn, tag_name)
+            if created:
+                warnings.append(f"Auto-created tag '{tag_name}' from import")
         for m, user_id in zip(payload.team, resolved_user_ids):
             conn.execute(
                 "INSERT INTO team_members (id, name, role, color, user_id) VALUES (?, ?, ?, ?, ?)",
@@ -99,6 +113,10 @@ def import_board(
             )
         for t in payload.tasks:
             task_uid = _resolve_import_assignee_user_id(t, warnings, conn)
+            tag_value = t.get("tag") or "Frontend"
+            tag_value = tag_value.strip() if isinstance(tag_value, str) else "Frontend"
+            if not tag_value:
+                tag_value = "Frontend"
             conn.execute(
                 """
                 INSERT INTO tasks
@@ -116,7 +134,7 @@ def import_board(
                     t.get("priority", "medium"),
                     t.get("sprint", "Sprint 14"),
                     int(t.get("points", 3)),
-                    t.get("tag", "Frontend"),
+                    tag_value,
                 ),
             )
     return {"team": len(payload.team), "tasks": len(payload.tasks), "warnings": warnings}

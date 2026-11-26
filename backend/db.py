@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 from contextlib import contextmanager
 from datetime import date, timedelta
@@ -105,6 +106,12 @@ def init_db(db_path: Optional[str] = None) -> None:
                 length_days INTEGER NOT NULL DEFAULT 14
             );
 
+            CREATE TABLE IF NOT EXISTS tags (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                color TEXT NOT NULL DEFAULT 'bg-sky-600'
+            );
+
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 email TEXT NOT NULL UNIQUE,
@@ -122,6 +129,8 @@ def init_db(db_path: Optional[str] = None) -> None:
             seed_data(conn)
         # Additive auto-migration for live DBs that predate the sprints table.
         seed_sprints(conn)
+        # Tag master: additive + idempotent, safe for live DBs (new table).
+        seed_tags(conn)
         # Additive auto-migration: link column for login-user <-> member.
         cols = [r[1] for r in conn.execute("PRAGMA table_info(team_members)").fetchall()]
         if "user_id" not in cols:
@@ -193,6 +202,91 @@ def seed_data(conn: sqlite3.Connection) -> None:
         DEFAULT_TASKS,
     )
     seed_sprints(conn)
+    seed_tags(conn)
+
+
+DEFAULT_TAG_COLOR = "bg-sky-600"
+
+# Display colors for the collected seed tags; unknown tags fall back to DEFAULT_TAG_COLOR.
+TAG_SEED_COLORS = {
+    "API": "bg-indigo-600",
+    "Backend": "bg-emerald-600",
+    "Design": "bg-violet-600",
+    "DevOps": "bg-amber-600",
+    "Frontend": "bg-sky-600",
+    "QA": "bg-rose-600",
+}
+
+
+def slugify_tag_id(name: str) -> str:
+    """Slugify a tag name into a URL-safe tag id (lowercase, hyphen-joined)."""
+    return re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
+
+
+def seed_tags(conn: sqlite3.Connection) -> None:
+    """Idempotently seed the tag master from distinct seed-task tags."""
+    seen: List[str] = []
+    for task in DEFAULT_TASKS:
+        tag = (task[9] or "").strip() or "Frontend"
+        if tag not in seen:
+            seen.append(tag)
+    for tag in seen:
+        conn.execute(
+            "INSERT OR IGNORE INTO tags (id, name, color) VALUES (?, ?, ?)",
+            (slugify_tag_id(tag), tag, TAG_SEED_COLORS.get(tag, DEFAULT_TAG_COLOR)),
+        )
+
+
+def list_tags(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """All tags sorted by name, each with its live task usage count."""
+    with get_conn(db_path) as conn:
+        rows = conn.execute(
+            "SELECT id, name, color FROM tags ORDER BY name COLLATE NOCASE ASC"
+        ).fetchall()
+        out = []
+        for r in rows:
+            count = conn.execute(
+                "SELECT COUNT(*) FROM tasks "
+                "WHERE tag = ? COLLATE NOCASE OR tag = ? COLLATE NOCASE",
+                (r["name"], r["id"]),
+            ).fetchone()[0]
+            out.append(
+                {"id": r["id"], "name": r["name"], "color": r["color"], "taskCount": count}
+            )
+        return out
+
+
+def validate_tag(conn: sqlite3.Connection, tag: Optional[str]) -> None:
+    """Reject a task tag unknown to the master with HTTP 400. None clears: OK."""
+    if tag is None:
+        return
+    row = conn.execute(
+        "SELECT 1 FROM tags WHERE name = ? COLLATE NOCASE OR id = ? COLLATE NOCASE",
+        (tag, tag),
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=400, detail=f"Unknown tag: {tag}")
+
+
+def ensure_tag(conn: sqlite3.Connection, name: Optional[str], color: Optional[str] = None) -> tuple:
+    """Get-or-create a tag by name. Returns (id, created)."""
+    clean = (name or "").strip() or "Frontend"
+    row = conn.execute(
+        "SELECT id FROM tags WHERE name = ? COLLATE NOCASE", (clean,)
+    ).fetchone()
+    if row:
+        return row["id"], False
+    base = slugify_tag_id(clean) or "tag"
+    candidate = base
+    suffix = 2
+    while conn.execute("SELECT 1 FROM tags WHERE id = ?", (candidate,)).fetchone():
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+    conn.execute(
+        "INSERT INTO tags (id, name, color) VALUES (?, ?, ?)",
+        (candidate, clean, (color or "").strip() or DEFAULT_TAG_COLOR),
+    )
+    return candidate, True
 
 
 def seed_sprints(conn: sqlite3.Connection) -> None:
@@ -232,6 +326,7 @@ def reset_db(db_path: Optional[str] = None) -> None:
         conn.execute("DELETE FROM tasks")
         conn.execute("DELETE FROM team_members")
         conn.execute("DELETE FROM sprints")
+        conn.execute("DELETE FROM tags")
         seed_data(conn)
 
 

@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import db
 from routers import auth as auth_router
-from routers import board, sprints, tasks, team, users
+from routers import board, sprints, tags, tasks, team, users
 
 
 @asynccontextmanager
@@ -39,3 +39,4 @@ app.include_router(team.router)
 app.include_router(users.router)
 app.include_router(board.router)
 app.include_router(sprints.router)
+app.include_router(tags.router)

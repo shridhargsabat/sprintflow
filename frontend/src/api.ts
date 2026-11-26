@@ -40,6 +40,23 @@ export interface UserDirectoryEntry {
   email: string;
 }
 
+export interface Tag {
+  id: number;
+  name: string;
+  color: string;
+  taskCount: number;
+}
+
+export interface CreateTagPayload {
+  name: string;
+  color?: string;
+}
+
+export interface UpdateTagPayload {
+  name?: string;
+  color?: string;
+}
+
 export interface CreateUserPayload {
   email: string;
   name: string;
@@ -151,5 +168,13 @@ export const api = {
     request<ManagedUser>(`/auth/users/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
 
   listUserDirectory: (): Promise<UserDirectoryEntry[]> =>
-    request<UserDirectoryEntry[]>('/users/directory')
+    request<UserDirectoryEntry[]>('/users/directory'),
+
+  listTags: (): Promise<Tag[]> => request<Tag[]>('/tags'),
+  createTag: (payload: CreateTagPayload): Promise<Tag> =>
+    request<Tag>('/tags', { method: 'POST', body: JSON.stringify(payload) }),
+  updateTag: (id: number, payload: UpdateTagPayload): Promise<Tag> =>
+    request<Tag>(`/tags/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  deleteTag: (id: number): Promise<{ deleted: number }> =>
+    request<{ deleted: number }>(`/tags/${id}`, { method: 'DELETE' })
 };

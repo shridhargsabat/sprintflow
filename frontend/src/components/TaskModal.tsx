@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 import Dropdown from './Dropdown';
 import Calendar from './Calendar';
 import { useEscapeKey } from '../hooks/useEscapeKey';
-import { api, type UserDirectoryEntry } from '../api';
+import { api, type Tag, type UserDirectoryEntry } from '../api';
 import { GLASS_PANEL, GLASS_PILL, STATUS_COLUMNS } from '../constants';
 import type { Task, TaskFormValues, TaskPriority, TaskStatus, TeamMember } from '../types';
 
@@ -31,6 +31,17 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
   const [sprint, setSprint] = useState<string>(task ? task.sprint : (defaultStatus === 'backlog' ? 'Sprint 15' : defaultSprint));
   const [points, setPoints] = useState<number>(task ? Number(task.points || 3) : 3);
   const [tag, setTag] = useState<string>(task ? task.tag : 'Frontend');
+  const [masterTags, setMasterTags] = useState<Tag[] | null>(null);
+  const [tagsFailed, setTagsFailed] = useState<boolean>(false);
+
+  // Fail-soft: if the tag master cannot load, fall back to a free-text input.
+  useEffect(() => {
+    let cancelled = false;
+    api.listTags()
+      .then(ts => { if (!cancelled) setMasterTags(ts); })
+      .catch(() => { if (!cancelled) setTagsFailed(true); });
+    return () => { cancelled = true; };
+  }, []);
 
   // Fail-soft: if the directory cannot load, the Login user picker is hidden
   // and the task simply keeps/submits no login-user assignment.
@@ -164,19 +175,30 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
           </div>
           <div>
             <label className="block text-xs font-semibold mb-1">Workstream / Tag</label>
-            <Dropdown
-              value={tag}
-              onChange={setTag}
-              options={[
-                { value: 'Frontend', label: 'Frontend' },
-                { value: 'Backend', label: 'Backend' },
-                { value: 'API', label: 'API & Security' },
-                { value: 'DevOps', label: 'DevOps & Infra' },
-                { value: 'QA', label: 'QA & Testing' },
-                { value: 'Design', label: 'UI/UX Design' }
-              ]}
-              className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text"
-            />
+            {tagsFailed || (masterTags !== null && masterTags.length === 0) ? (
+              <input
+                type="text"
+                value={tag}
+                onChange={e => setTag(e.target.value)}
+                placeholder="Tag name (must match master list)"
+                className="w-full px-3.5 py-2 rounded-2xl text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text"
+              />
+            ) : (
+              <Dropdown
+                value={tag}
+                onChange={setTag}
+                options={(() => {
+                  const opts = (masterTags ?? []).map(t => ({ value: t.name, label: t.name }));
+                  // While loading, or when the task holds a legacy tag, keep the
+                  // current value selectable so editing never loses it.
+                  if (tag !== '' && !opts.some(o => o.value === tag)) {
+                    opts.unshift({ value: tag, label: masterTags === null ? tag : `${tag} (not in master)` });
+                  }
+                  return opts;
+                })()}
+                className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text"
+              />
+            )}
           </div>
           <div className="pt-3 border-t border-slate-900/10 dark:border-white/10 flex items-center justify-between gap-2">
             {task ? (

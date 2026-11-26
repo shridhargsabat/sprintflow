@@ -41,6 +41,7 @@ def create_task(
         task_id = db.next_task_id(conn)
         db.validate_assignee_id(conn, payload.assigneeId)
         db.validate_assignee_user_id(conn, payload.assigneeUserId)
+        db.validate_tag(conn, payload.tag)
         conn.execute(
             """
             INSERT INTO tasks
@@ -76,6 +77,7 @@ def update_task(
             raise HTTPException(status_code=404, detail="Task not found")
         db.validate_assignee_id(conn, payload.assigneeId)
         db.validate_assignee_user_id(conn, payload.assigneeUserId)
+        db.validate_tag(conn, payload.tag)
         conn.execute(
             """
             UPDATE tasks
