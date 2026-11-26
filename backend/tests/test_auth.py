@@ -165,3 +165,67 @@ def test_health_stays_open(anon_client):
     resp = anon_client.get("/api/health")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok", "database": "sqlite"}
+
+
+# ---------- user administration (admin-only) ----------
+
+
+def test_admin_can_list_create_delete_users(anon_client):
+    headers = _auth_headers(anon_client, ADMIN["email"], ADMIN["password"])
+    listed = anon_client.get("/api/auth/users", headers=headers)
+    assert listed.status_code == 200
+    assert any(u["email"] == ADMIN["email"] for u in listed.json())
+
+    created = anon_client.post(
+        "/api/auth/users",
+        json={
+            "email": "newhire@sprintflow.local",
+            "name": "New Hire",
+            "password": "Newhire123!",
+            "role": "member",
+        },
+        headers=headers,
+    )
+    assert created.status_code == 201
+    assert created.json()["role"] == "member"
+    assert "password_hash" not in created.json()
+
+    user_id = created.json()["id"]
+    deleted = anon_client.delete(f"/api/auth/users/{user_id}", headers=headers)
+    assert deleted.status_code == 200
+    assert deleted.json() == {"deleted": user_id}
+
+
+def test_create_user_rejects_short_password_and_duplicates(anon_client):
+    headers = _auth_headers(anon_client, ADMIN["email"], ADMIN["password"])
+    short = anon_client.post(
+        "/api/auth/users",
+        json={"email": "x@sprintflow.local", "name": "X", "password": "short", "role": "viewer"},
+        headers=headers,
+    )
+    assert short.status_code == 400
+    dup = anon_client.post(
+        "/api/auth/users",
+        json={"email": ADMIN["email"], "name": "Dup", "password": "Dup12345!", "role": "viewer"},
+        headers=headers,
+    )
+    assert dup.status_code == 400
+
+
+def test_non_admin_cannot_manage_users_and_no_self_delete(anon_client, role_users):
+    headers = _auth_headers(anon_client, "member@sprintflow.local", "Member123!")
+    assert anon_client.get("/api/auth/users", headers=headers).status_code == 403
+    assert (
+        anon_client.post(
+            "/api/auth/users",
+            json={"email": "z@sprintflow.local", "name": "Z", "password": "Z1234567!", "role": "viewer"},
+            headers=headers,
+        ).status_code
+        == 403
+    )
+    admin_headers = _auth_headers(anon_client, ADMIN["email"], ADMIN["password"])
+    me = anon_client.get("/api/auth/me", headers=admin_headers).json()
+    assert (
+        anon_client.delete(f"/api/auth/users/{me['id']}", headers=admin_headers).status_code
+        == 400
+    )

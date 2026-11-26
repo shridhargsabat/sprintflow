@@ -27,6 +27,20 @@ export interface MeResponse {
   permissions: string[];
 }
 
+export interface ManagedUser {
+  id: number;
+  email: string;
+  name: string;
+  role: Role;
+}
+
+export interface CreateUserPayload {
+  email: string;
+  name: string;
+  password: string;
+  role: Role;
+}
+
 export function getToken(): string | null {
   try {
     return localStorage.getItem(TOKEN_KEY);
@@ -112,5 +126,11 @@ export const api = {
       body: JSON.stringify({ email, password }),
       skipAuthHandler: true
     }),
-  getMe: (): Promise<MeResponse> => request<MeResponse>('/auth/me', { skipAuthHandler: true })
+  getMe: (): Promise<MeResponse> => request<MeResponse>('/auth/me', { skipAuthHandler: true }),
+
+  listUsers: (): Promise<ManagedUser[]> => request<ManagedUser[]>('/auth/users'),
+  createUser: (payload: CreateUserPayload): Promise<ManagedUser> =>
+    request<ManagedUser>('/auth/users', { method: 'POST', body: JSON.stringify(payload) }),
+  deleteUser: (id: number): Promise<{ deleted: number }> =>
+    request<{ deleted: number }>(`/auth/users/${id}`, { method: 'DELETE' })
 };

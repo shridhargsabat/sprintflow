@@ -109,6 +109,21 @@ def create_user(email: str, name: str, password: str, role: str) -> Dict[str, An
         return dict(row)
 
 
+def list_users() -> List[Dict[str, Any]]:
+    """Public-shaped user rows (no password hashes), oldest first."""
+    with db.get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, email, name, role, created_at FROM users ORDER BY id"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def delete_user(user_id: int) -> bool:
+    with db.get_conn() as conn:
+        cur = conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        return cur.rowcount > 0
+
+
 def permissions_for(role: str) -> List[str]:
     return list(ROLE_PERMISSIONS.get(role, []))
 

@@ -7,16 +7,20 @@ import {
   Layers,
   LayoutGrid,
   ListChecks,
+  LogOut,
   Moon,
   MoreVertical,
   Plus,
   RotateCcw,
+  ShieldCheck,
   Sun,
   Upload,
   Users,
 } from 'lucide-react';
-import { GLASS_PANEL, GLASS_PILL } from '../constants';
+import { GLASS_MENU, GLASS_PANEL, GLASS_PILL } from '../constants';
 import { GlassTooltip } from './GlassTooltip';
+import { useAuth } from '../auth/AuthContext';
+import { usePermissions } from '../auth/usePermissions';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import type { ViewId } from '../types';
 
@@ -29,6 +33,7 @@ export interface HeaderProps {
   onOpenMenu: () => void;
   onCloseMenu: () => void;
   onOpenTeam: () => void;
+  onOpenUsers: () => void;
   onNewTask: () => void;
   onExportJson: () => void;
   onResetDemo: () => void;
@@ -45,6 +50,7 @@ export default function Header({
   onOpenMenu,
   onCloseMenu,
   onOpenTeam,
+  onOpenUsers,
   onNewTask,
   onExportJson,
   onResetDemo,
@@ -52,6 +58,9 @@ export default function Header({
   fileInputRef,
 }: HeaderProps) {
   useEscapeKey(onCloseMenu, menuOpen);
+  const { user, logout } = useAuth();
+  const { can } = usePermissions();
+  const showUsers = can('team.manage');
   return (
     <>
       {/* Ambient Mesh Wallpaper */}
@@ -139,19 +148,28 @@ export default function Header({
                 </button>
               </GlassTooltip>
               {menuOpen && (
-                <div className={`lg-dropdown lg-refract absolute right-0 mt-2.5 w-52 rounded-3xl py-2 z-40 ${GLASS_PANEL}`}>
-                  <button type="button" onClick={() => { onCloseMenu(); onOpenTeam(); }} className="sm:hidden w-full px-4 py-2 text-left text-xs font-medium hover:bg-white/60 dark:hover:bg-white/10 flex items-center gap-2.5">
+                <div className={`lg-dropdown lg-refract absolute right-0 mt-2.5 w-52 rounded-3xl py-2 z-40 ${GLASS_MENU}`}>
+                  <button type="button" onClick={() => { onCloseMenu(); onOpenTeam(); }} className="sm:hidden w-full px-4 py-2 text-left text-xs font-medium [text-shadow:0_1px_2px_rgba(255,255,255,0.9)] dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-white/60 dark:hover:bg-white/10 flex items-center gap-2.5">
                     <Users className="w-3.5 h-3.5" /> Manage Team
                   </button>
-                  <button type="button" onClick={onExportJson} className="w-full px-4 py-2 text-left text-xs font-medium hover:bg-white/60 dark:hover:bg-white/10 flex items-center gap-2.5">
+                  <button type="button" onClick={onExportJson} className="w-full px-4 py-2 text-left text-xs font-medium [text-shadow:0_1px_2px_rgba(255,255,255,0.9)] dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-white/60 dark:hover:bg-white/10 flex items-center gap-2.5">
                     <Download className="w-3.5 h-3.5" /> Export JSON
                   </button>
-                  <button type="button" onClick={() => fileInputRef.current && fileInputRef.current.click()} className="w-full px-4 py-2 text-left text-xs font-medium hover:bg-white/60 dark:hover:bg-white/10 flex items-center gap-2.5">
+                  <button type="button" onClick={() => fileInputRef.current && fileInputRef.current.click()} className="w-full px-4 py-2 text-left text-xs font-medium [text-shadow:0_1px_2px_rgba(255,255,255,0.9)] dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-white/60 dark:hover:bg-white/10 flex items-center gap-2.5">
                     <Upload className="w-3.5 h-3.5" /> Import JSON
                   </button>
                   <div className="my-1.5 mx-3 border-t border-slate-900/10 dark:border-white/10" />
-                  <button type="button" onClick={onResetDemo} className="w-full px-4 py-2 text-left text-xs font-medium hover:bg-rose-500/10 flex items-center gap-2.5 text-rose-600 dark:text-rose-400">
+                  <button type="button" onClick={onResetDemo} className="w-full px-4 py-2 text-left text-xs font-medium [text-shadow:0_1px_2px_rgba(255,255,255,0.9)] dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-rose-500/10 flex items-center gap-2.5 text-rose-600 dark:text-rose-400">
                     <RotateCcw className="w-3.5 h-3.5" /> Reset SQLite Data
+                  </button>
+                  {showUsers && (
+                    <button type="button" onClick={() => { onCloseMenu(); onOpenUsers(); }} className="w-full px-4 py-2 text-left text-xs font-medium [text-shadow:0_1px_2px_rgba(255,255,255,0.9)] dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-white/60 dark:hover:bg-white/10 flex items-center gap-2.5">
+                      <ShieldCheck className="w-3.5 h-3.5" /> Manage Users
+                    </button>
+                  )}
+                  <div className="my-1.5 mx-3 border-t border-slate-900/10 dark:border-white/10" />
+                  <button type="button" onClick={() => { onCloseMenu(); logout(); }} title={user ? `Sign out ${user.email}` : 'Sign out'} className="w-full px-4 py-2 text-left text-xs font-medium [text-shadow:0_1px_2px_rgba(255,255,255,0.9)] dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-white/60 dark:hover:bg-white/10 flex items-center gap-2.5">
+                    <LogOut className="w-3.5 h-3.5" /> Sign Out
                   </button>
                 </div>
               )}

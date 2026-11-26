@@ -5,6 +5,7 @@ import { useBoard } from './hooks/useBoard';
 import { TaskModal } from './components/TaskModal';
 import { TaskDetailsModal } from './components/TaskDetailsModal';
 import { TeamModal } from './components/TeamModal';
+import { UsersModal } from './components/UsersModal';
 import { SprintSettingsModal } from './components/SprintSettingsModal';
 import { Toasts } from './components/Toasts';
 import { LiquidGlassFilter } from './components/LiquidGlassFilter';
@@ -30,6 +31,7 @@ function BoardApp() {
   const [taskModal, setTaskModal] = useState<TaskModalState>({ open: false, task: null, defaultStatus: 'todo' });
   const [detailsModal, setDetailsModal] = useState<{ open: boolean; task: Task | null }>({ open: false, task: null });
   const [teamModalOpen, setTeamModalOpen] = useState<boolean>(false);
+  const [usersModalOpen, setUsersModalOpen] = useState<boolean>(false);
   const [sprintSettingsOpen, setSprintSettingsOpen] = useState<boolean>(false);
   const [newMemberName, setNewMemberName] = useState<string>('');
   const [newMemberRole, setNewMemberRole] = useState<string>('');
@@ -117,6 +119,7 @@ function BoardApp() {
           onOpenMenu={() => setMenuOpen(o => !o)}
           onCloseMenu={() => setMenuOpen(false)}
           onOpenTeam={() => setTeamModalOpen(true)}
+          onOpenUsers={() => setUsersModalOpen(true)}
           onNewTask={() => openTaskModal(null, 'todo')}
           onExportJson={() => { board.handleExportJson(); setMenuOpen(false); }}
           onResetDemo={() => { void board.handleResetDemo(); setMenuOpen(false); }}
@@ -240,6 +243,10 @@ function BoardApp() {
             onClose={() => setSprintSettingsOpen(false)}
             onSave={(id, patch) => { void board.updateSprint(id, patch); }}
           />
+        )}
+
+        {usersModalOpen && (
+          <UsersModal onClose={() => setUsersModalOpen(false)} />
         )}
 
         <Toasts toasts={board.toasts} />
