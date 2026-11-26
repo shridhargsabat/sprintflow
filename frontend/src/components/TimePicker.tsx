@@ -279,7 +279,7 @@ export default function TimePicker({
                   <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     Hour
                   </div>
-                  <ul role="listbox" aria-label="Hour" className="max-h-48 overflow-y-auto p-0.5">
+                  <ul role="listbox" aria-label="Hour" className="max-h-48 overflow-y-auto scroll-slim p-0.5">
                     {hours.map((h, i) => (
                       <li
                         key={h}
@@ -304,7 +304,7 @@ export default function TimePicker({
                   <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     Min
                   </div>
-                  <ul role="listbox" aria-label="Minute" className="max-h-48 overflow-y-auto p-0.5">
+                  <ul role="listbox" aria-label="Minute" className="max-h-48 overflow-y-auto scroll-slim p-0.5">
                     {minutes.map((mm, i) => (
                       <li
                         key={mm}

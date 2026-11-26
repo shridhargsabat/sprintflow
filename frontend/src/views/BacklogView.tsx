@@ -57,7 +57,7 @@ export default function BacklogView({ tasks, team, onOpenTask, onOpenDetails, on
       </div>
 
       <div className={`lg-enter lg-delay-1 rounded-[32px] overflow-hidden ${GLASS_PANEL}`}>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto scroll-slim">
           <table className="w-full text-left border-collapse min-w-[760px]">
             <thead>
               <tr className="border-b border-slate-900/10 dark:border-white/10 bg-white/40 dark:bg-white/[0.04] text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">

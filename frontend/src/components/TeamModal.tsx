@@ -31,7 +31,7 @@ export function TeamModal({ team, newMemberName, newMemberRole, onNameChange, on
           </button>
         </div>
         <div className="p-6 space-y-4">
-          <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+          <div className="space-y-2.5 max-h-64 overflow-y-auto scroll-slim pr-1">
             {team.map(m => (
               <div key={m.id} className={`flex items-center gap-2 p-2 rounded-2xl ${GLASS_SUBCARD}`}>
                 <span className={`w-8 h-8 rounded-full ${m.color} text-white text-xs font-bold flex items-center justify-center shrink-0`}>{getInitials(m.name)}</span>

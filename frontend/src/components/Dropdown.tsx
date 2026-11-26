@@ -210,7 +210,7 @@ export default function Dropdown({
           onKeyDown={onListKeyDown}
           ref={menuRef}
           style={{ top: menuPos.top, left: menuPos.left, width: menuPos.width }}
-          className={`lg-dropdown ${GLASS_PANEL} fixed z-[100] max-h-60 overflow-y-auto rounded-2xl p-1.5 outline-none ${menuClassName ?? ''}`}
+          className={`lg-dropdown ${GLASS_PANEL} fixed z-[100] max-h-60 overflow-y-auto scroll-slim rounded-2xl p-1.5 outline-none ${menuClassName ?? ''}`}
         >
           {options.length === 0 ? (
             <li className="px-3 py-2 text-sm text-slate-400 dark:text-slate-500">No options</li>

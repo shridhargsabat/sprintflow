@@ -341,7 +341,7 @@ export default function DashboardView({
             Open Kanban <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
-        <div className="space-y-2.5 overflow-y-auto max-h-[320px] pr-1">
+        <div className="space-y-2.5 overflow-y-auto scroll-slim max-h-[320px] pr-1">
           {ongoingTasks.length === 0 ? (
             <div className="py-10 text-center text-xs text-slate-400">No ongoing tasks match current filters.</div>
           ) : ongoingTasks.map(t => {
@@ -385,7 +385,7 @@ export default function DashboardView({
             <CalendarClock className="w-4 h-4" />
           </span>
         </div>
-        <div className="space-y-2 overflow-y-auto max-h-[260px] pr-1">
+        <div className="space-y-2 overflow-y-auto scroll-slim max-h-[260px] pr-1">
           {upcomingDeadlines.length === 0 ? (
             <div className="py-8 text-center text-xs text-slate-400">All tasks in this view are completed.</div>
           ) : upcomingDeadlines.map(t => {
@@ -422,7 +422,7 @@ export default function DashboardView({
             Full Backlog <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
-        <div className="space-y-2.5 overflow-y-auto max-h-[260px] pr-1">
+        <div className="space-y-2.5 overflow-y-auto scroll-slim max-h-[260px] pr-1">
           {backlogTasks.length === 0 ? (
             <div className="py-8 text-center text-xs text-slate-400">Backlog is empty.</div>
           ) : backlogTasks.slice(0, 5).map(t => {
