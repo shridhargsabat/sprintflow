@@ -9,7 +9,6 @@ import { UsersModal } from './components/UsersModal';
 import { TagsModal } from './components/TagsModal';
 import { SprintSettingsModal } from './components/SprintSettingsModal';
 import { Toasts } from './components/Toasts';
-import { LiquidGlassFilter } from './components/LiquidGlassFilter';
 import Header from './components/Header';
 import FilterBar from './components/FilterBar';
 import DashboardView from './views/DashboardView';
@@ -116,7 +115,6 @@ function BoardApp() {
         className="min-h-screen relative overflow-x-hidden text-slate-900 dark:text-slate-100 transition-colors duration-300"
         style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter Variable", "Inter", sans-serif' }}
       >
-        <LiquidGlassFilter />
         <Header
           activeView={activeView}
           onSelectView={setActiveView}

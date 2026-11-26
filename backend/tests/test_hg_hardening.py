@@ -4,6 +4,9 @@ change with no frontend test runner — it is covered by `npm run build` (tsc).
 
 M1 tests use isolated tmp DB files (never the shared session DB) so deleting
 the seed admin here cannot break the suite's shared auth fixture.
+
+LOW hygiene sweep (L1-L3, L8-L15): appended below in the same file. L4/L5/L6/
+L7/L16 are frontend-only (tsc-covered); every backend LOW fix has tests here.
 """
 import logging
 import uuid
@@ -286,3 +289,432 @@ def test_m5_import_task_assignee_bool_400_and_intact(client, flag):
     resp = client.post("/api/import", json={"team": [], "tasks": [legacy]})
     assert resp.status_code == 400, resp.text
     _assert_intact(client, before)
+
+
+# ---------- LOW hygiene sweep (L1-L3, L8-L15) ----------
+# L4/L5/L6/L7/L16 are TSX/CSS-only (no frontend test runner) — covered by
+# `npm run build` (tsc). Every backend fix below has a regression test.
+
+def _task_text(t):
+    return f"{t['id']} {t['title']} {t['description']} {t['tag']}"
+
+
+def test_l1_search_escapes_like_wildcards(client):
+    assert client.post(
+        "/api/tasks", json={"title": "100% coverage drive", "dueDate": "2026-12-05"}
+    ).status_code == 201
+    assert client.post(
+        "/api/tasks", json={"title": "under_score task", "dueDate": "2026-12-05"}
+    ).status_code == 201
+    assert client.post(
+        "/api/tasks", json={"title": "back\\slash path", "dueDate": "2026-12-05"}
+    ).status_code == 201
+    everything = client.get("/api/tasks").json()
+    for needle in ("%", "_", "\\"):
+        got = client.get("/api/tasks", params={"search": needle}).json()
+        expected = {t["id"] for t in everything if needle in _task_text(t)}
+        assert {t["id"] for t in got} == expected, needle
+        assert got, f"nothing matched literal {needle!r}"
+        assert len(got) < len(everything)  # pre-fix: unescaped % matched all
+
+
+@pytest.mark.parametrize("blank", ["   ", "\t\n "])
+def test_l2_whitespace_title_400_on_create_and_update(client, blank):
+    base = {"title": blank, "dueDate": "2026-12-05"}
+    resp = client.post("/api/tasks", json=base)
+    assert resp.status_code == 400, resp.text
+    assert "blank" in resp.text
+    created = client.post("/api/tasks", json={"title": "L2", "dueDate": "2026-12-05"}).json()
+    resp = client.put(f"/api/tasks/{created['id']}", json=base)
+    assert resp.status_code == 400, resp.text
+
+
+def test_l2_sprint_stripped_and_blank_sprint_400(client):
+    resp = client.post("/api/tasks", json={
+        "title": "L2 sprint", "dueDate": "2026-12-05", "sprint": "  Sprint 14  ",
+    })
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["sprint"] == "Sprint 14"
+    resp = client.post("/api/tasks", json={
+        "title": "L2 blank sprint", "dueDate": "2026-12-05", "sprint": "   ",
+    })
+    assert resp.status_code == 400, resp.text
+
+
+def test_l2_import_blank_title_sprint_400_and_stripped_on_success(client):
+    before = _snapshot(client)
+    resp = client.post("/api/import", json={
+        "team": [], "tasks": [_import_task(id="WS-1", title="   ")]})
+    assert resp.status_code == 400, resp.text
+    assert "tasks[0].title" in resp.text
+    resp = client.post("/api/import", json={
+        "team": [], "tasks": [_import_task(id="WS-2", sprint="  ")]})
+    assert resp.status_code == 400, resp.text
+    assert "tasks[0].sprint" in resp.text
+    _assert_intact(client, before)
+    resp = client.post("/api/import", json={
+        "team": [],
+        "tasks": [_import_task(id="WS-3", title="  Padded  ", sprint="  Sprint 99  ")],
+    })
+    assert resp.status_code == 200, resp.text
+    got = {t["id"]: t for t in client.get("/api/tasks").json()}
+    assert got["WS-3"]["title"] == "Padded"
+    assert got["WS-3"]["sprint"] == "Sprint 99"
+
+
+def test_l3_reassigned_count_excludes_deduped_tasks(client):
+    leaver = client.post("/api/team", json={"name": "L3 Leaver"}).json()
+    keeper = client.post("/api/team", json={"name": "L3 Keeper"}).json()
+    solo = {"title": "solo", "dueDate": "2026-12-05",
+            "assignees": [{"type": "member", "id": leaver["id"]}]}
+    co_owned = {"title": "co", "dueDate": "2026-12-05", "assignees": [
+        {"type": "member", "id": leaver["id"]},
+        {"type": "member", "id": keeper["id"]},
+    ]}
+    assert client.post("/api/tasks", json=solo).status_code == 201
+    assert client.post("/api/tasks", json=co_owned).status_code == 201
+    resp = client.delete(f"/api/team/{leaver['id']}", params={"reassignTo": keeper["id"]})
+    assert resp.status_code == 200, resp.text
+    # Only the solo task actually moved; the co-owned one was deduped.
+    assert resp.json() == {
+        "deleted": leaver["id"], "reassignedTasks": 1, "fallback": keeper["id"],
+    }
+
+
+def test_l3_unassign_branch_still_reports_owned_count(client):
+    leaver = client.post("/api/team", json={"name": "L3 Gone"}).json()
+    for i in range(2):
+        assert client.post("/api/tasks", json={
+            "title": f"g{i}", "dueDate": "2026-12-05",
+            "assignees": [{"type": "member", "id": leaver["id"]}],
+        }).status_code == 201
+    resp = client.delete(f"/api/team/{leaver['id']}")
+    assert resp.json() == {
+        "deleted": leaver["id"], "reassignedTasks": 2, "fallback": None,
+    }
+
+
+def test_l8_delete_tag_guarded_paths(client):
+    tag = client.post("/api/tags", json={"name": "L8 Doomed"}).json()
+    assert client.delete("/api/tags/no-such-tag").status_code == 404
+    task = client.post("/api/tasks", json={
+        "title": "L8 user", "dueDate": "2026-12-05", "tag": "L8 Doomed",
+    }).json()
+    resp = client.delete(f"/api/tags/{tag['id']}")
+    assert resp.status_code == 409, resp.text
+    assert resp.json() == {"tasks": 1}
+    assert client.put(f"/api/tasks/{task['id']}", json={
+        "title": "L8 user", "dueDate": "2026-12-05", "tag": "Backend",
+    }).status_code == 200
+    resp = client.delete(f"/api/tags/{tag['id']}")
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"deleted": tag["id"]}
+
+
+def test_l8_delete_blocked_when_usage_arrives_mid_delete(client, monkeypatch):
+    """Deterministic TOCTOU simulation: a task is tagged after the usage
+    check but before the DELETE lands — the guarded delete must block it
+    (409) instead of orphaning the tag usage."""
+    from contextlib import contextmanager
+
+    tag = client.post("/api/tags", json={"name": "L8 Racy"}).json()
+    real_get_conn = db_lib.get_conn
+
+    class _DeleteSaboteur:
+        def __init__(self, real):
+            self._real = real
+
+        def execute(self, sql, parameters=()):
+            if isinstance(sql, str) and sql.strip().upper().startswith("DELETE FROM TAGS"):
+                self._real.execute(
+                    "UPDATE tasks SET tag = ? WHERE id = (SELECT id FROM tasks LIMIT 1)",
+                    (tag["name"],),
+                )
+            return self._real.execute(sql, parameters)
+
+        def __getattr__(self, item):
+            return getattr(self._real, item)
+
+    @contextmanager
+    def _sabotaging_conn(db_path=None):
+        with real_get_conn(db_path) as real:
+            yield _DeleteSaboteur(real)
+
+    monkeypatch.setattr(db_lib, "get_conn", _sabotaging_conn)
+    resp = client.delete(f"/api/tags/{tag['id']}")
+    assert resp.status_code == 409, resp.text
+    assert resp.json() == {"tasks": 1}
+    assert tag["id"] in {t["id"] for t in client.get("/api/tags").json()}
+
+
+class _NoRow:
+    """Cursor stub whose fetchone() returns None (row vanished / SELECT miss)."""
+
+    def fetchone(self):
+        return None
+
+
+def test_l9_ensure_tag_race_loser_reselects_winner(tmp_path):
+    """Deterministic race-loser simulation: the first name-SELECT misses (the
+    winner hasn't committed yet), the INSERT then hits UNIQUE, and the
+    reselect-by-name returns the winner instead of raising 500."""
+    p = str(tmp_path / "l9.db")
+    db_lib.init_db(p)
+    with db_lib.get_conn(p) as conn:
+        conn.execute(
+            "INSERT INTO tags (id, name, color) VALUES (?, ?, ?)",
+            ("l9-racer", "L9 Racer", "bg-sky-600"),
+        )
+
+    class _RaceLoserConn:
+        def __init__(self, real):
+            self._real = real
+            self._dropped = False
+
+        def execute(self, sql, parameters=()):
+            if (
+                not self._dropped
+                and isinstance(sql, str)
+                and "SELECT id FROM tags WHERE name" in sql
+            ):
+                self._dropped = True
+                return _NoRow()
+            return self._real.execute(sql, parameters)
+
+        def __getattr__(self, item):
+            return getattr(self._real, item)
+
+    with db_lib.get_conn(p) as real:
+        tag_id, created = db_lib.ensure_tag(
+            _RaceLoserConn(real),  # type: ignore[arg-type]  # deliberate proxy
+            "L9 Racer",
+            "#fff",
+        )
+    assert (tag_id, created) == ("l9-racer", False)
+    with db_lib.get_conn(p) as conn:
+        n = conn.execute(
+            "SELECT COUNT(*) FROM tags WHERE name = ? COLLATE NOCASE", ("L9 Racer",)
+        ).fetchone()[0]
+    assert n == 1
+
+
+def test_l9_ensure_tag_concurrent_same_name_single_row(tmp_path):
+    import threading
+
+    p = str(tmp_path / "l9c.db")
+    db_lib.init_db(p)
+    barrier = threading.Barrier(8)
+    results, errors = [], []
+
+    def _worker():
+        try:
+            with db_lib.get_conn(p) as conn:
+                barrier.wait(timeout=15)
+                results.append(db_lib.ensure_tag(conn, "L9 Stampede", "#fff"))
+        except Exception as exc:  # noqa: BLE001 — collected, asserted below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=_worker) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=60)
+    assert not errors
+    assert len(results) == 8
+    assert {r[0] for r in results} == {"l9-stampede"}
+    assert sum(1 for r in results if r[1]) == 1
+    with db_lib.get_conn(p) as conn:
+        n = conn.execute(
+            "SELECT COUNT(*) FROM tags WHERE name = ? COLLATE NOCASE", ("L9 Stampede",)
+        ).fetchone()[0]
+    assert n == 1
+
+
+def test_l10_case_variant_tag_create_409(client):
+    assert client.post("/api/tags", json={"name": "L10 CaseTag"}).status_code == 201
+    for variant in ("l10 casetag", "L10 CASETAG"):
+        resp = client.post("/api/tags", json={"name": variant})
+        assert resp.status_code == 409, (variant, resp.text)
+
+
+def test_l10_nocase_index_blocks_direct_case_dupes(tmp_path):
+    import sqlite3
+
+    p = str(tmp_path / "l10.db")
+    db_lib.init_db(p)
+    with db_lib.get_conn(p) as conn:
+        conn.execute(
+            "INSERT INTO tags (id, name, color) VALUES (?, ?, ?)",
+            ("l10-a", "L10 DupName", "bg-sky-600"),
+        )
+        idx = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE name = 'uq_tags_name_nocase'"
+        ).fetchone()
+        assert idx is not None and "COLLATE NOCASE" in idx["sql"]
+    with db_lib.get_conn(p) as conn:
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO tags (id, name, color) VALUES (?, ?, ?)",
+                ("l10-b", "l10 dupname", "bg-sky-600"),
+            )
+
+
+def test_l10_startup_folds_legacy_case_dupes(tmp_path):
+    p = str(tmp_path / "l10mig.db")
+    db_lib.init_db(p)
+    with db_lib.get_conn(p) as conn:
+        conn.execute("DROP INDEX uq_tags_name_nocase")
+        conn.execute(
+            "INSERT INTO tags (id, name, color) VALUES (?, ?, ?)",
+            ("l10-winner", "L10 FoldMe", "bg-sky-600"),
+        )
+        conn.execute(
+            "INSERT INTO tags (id, name, color) VALUES (?, ?, ?)",
+            ("l10-loser", "l10 foldme", "bg-rose-600"),
+        )
+        conn.execute(
+            """INSERT INTO tasks
+                   (id, title, description, due_date, status, priority, sprint, points, tag)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            ("L10-T", "fold task", "", "2026-12-05", "todo", "medium",
+             "Sprint 14", 3, "l10 foldme"),
+        )
+    db_lib.init_db(p)  # migration folds the dupe pair
+    with db_lib.get_conn(p) as conn:
+        rows = conn.execute(
+            "SELECT id, name FROM tags WHERE name = ? COLLATE NOCASE", ("L10 FoldMe",)
+        ).fetchall()
+        assert [(r["id"], r["name"]) for r in rows] == [("l10-winner", "L10 FoldMe")]
+        tag = conn.execute("SELECT tag FROM tasks WHERE id = 'L10-T'").fetchone()[0]
+        assert tag == "L10 FoldMe"
+        idx = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE name = 'uq_tags_name_nocase'"
+        ).fetchone()
+        assert idx is not None
+
+
+def test_l11_usage_counted_by_canonical_name_only(client):
+    # Craft a cross name/id collision: task tag "L11 Shared" matches tag A's
+    # name AND tag B's id — it must count for A only.
+    with db_lib.get_conn() as conn:
+        conn.execute(
+            "INSERT INTO tags (id, name, color) VALUES (?, ?, ?)",
+            ("l11-a", "L11 Shared", "bg-sky-600"),
+        )
+        conn.execute(
+            "INSERT INTO tags (id, name, color) VALUES (?, ?, ?)",
+            ("l11 shared", "L11 Unrelated", "bg-sky-600"),
+        )
+    assert client.post("/api/tasks", json={
+        "title": "L11 user", "dueDate": "2026-12-05", "tag": "L11 Shared",
+    }).status_code == 201
+    by_name = {t["name"]: t for t in client.get("/api/tags").json()}
+    assert by_name["L11 Shared"]["taskCount"] == 1
+    assert by_name["L11 Unrelated"]["taskCount"] == 0
+
+
+def test_l11_slug_id_input_stored_as_canonical_name(client):
+    created = client.post("/api/tasks", json={
+        "title": "L11 canon", "dueDate": "2026-12-05", "tag": "frontend",
+    })
+    assert created.status_code == 201, created.text
+    assert created.json()["tag"] == "Frontend"
+    updated = client.put(f"/api/tasks/{created.json()['id']}", json={
+        "title": "L11 canon", "dueDate": "2026-12-05", "tag": "backend",
+    })
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["tag"] == "Backend"
+
+
+def test_l12_task_vanished_mid_update_404_not_500(client, monkeypatch):
+    created = client.post("/api/tasks", json={
+        "title": "L12 ghost", "dueDate": "2026-12-05",
+        "assignees": [{"type": "member", "id": "m1"}],
+    }).json()
+    real_validate = db_lib.validate_assignees
+
+    def _vanishing(conn, assignees):
+        out = real_validate(conn, assignees)
+        # A concurrent deleter lands between our existence check and UPDATE.
+        conn.execute("DELETE FROM tasks WHERE id = ?", (created["id"],))
+        return out
+
+    monkeypatch.setattr(db_lib, "validate_assignees", _vanishing)
+    resp = client.put(f"/api/tasks/{created['id']}", json={
+        "title": "L12 ghost v2", "dueDate": "2026-12-06",
+        "assignees": [{"type": "member", "id": "m1"}],
+    })
+    assert resp.status_code == 404, resp.text  # pre-fix: 500 via FK insert
+
+
+def test_l13_sprint_vanished_mid_update_returns_none(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+
+    p = str(tmp_path / "l13.db")
+    db_lib.init_db(p)
+    real_get_conn = db_lib.get_conn
+
+    class _VanishingSprintConn:
+        def __init__(self, real):
+            self._real = real
+
+        def execute(self, sql, parameters=()):
+            if isinstance(sql, str) and sql.strip().upper().startswith("SELECT * FROM SPRINTS"):
+                return _NoRow()  # reset raced us: row gone at reselect
+            return self._real.execute(sql, parameters)
+
+        def __getattr__(self, item):
+            return getattr(self._real, item)
+
+    @contextmanager
+    def _vanishing_conn(db_path=None):
+        with real_get_conn(db_path) as real:
+            yield _VanishingSprintConn(real)
+
+    monkeypatch.setattr(db_lib, "get_conn", _vanishing_conn)
+    # Pre-fix this raised TypeError (row_to_sprint(None)) -> 500.
+    assert db_lib.update_sprint("Sprint 14", start_date="2026-11-30", db_path=p) is None
+
+
+def test_l14_assignee_lookup_chunks_huge_id_lists(tmp_path):
+    p = str(tmp_path / "l14.db")
+    db_lib.init_db(p)
+    ids = [f"l14-nope-{i}" for i in range(40_000)]  # over SQLite's 32766 var limit
+    with db_lib.get_conn(p) as conn:
+        out = db_lib.assignees_by_task(conn, ids)
+        assert len(out) == 40_000
+        assert all(v == [] for v in out.values())
+        # Real rows still resolve across a chunk boundary.
+        big = ["DEV-101"] * 600 + ["l14-nope-x"] * 600
+        out2 = db_lib.assignees_by_task(conn, big)
+        assert len(out2["DEV-101"]) == 1
+        assert out2["DEV-101"][0]["type"] == "member"
+        assert out2["l14-nope-x"] == []
+
+
+@pytest.mark.parametrize("field", ["email", "name"])
+def test_l15_user_create_blank_400(client, field):
+    body = {
+        "email": _fresh_user_email("l15"), "name": "L15",
+        "password": "L15pass!!", "role": "member",
+    }
+    body[field] = "   "
+    resp = client.post("/api/auth/users", json=body)
+    assert resp.status_code == 400, resp.text
+    assert "blank" in resp.text.lower()
+    assert body["email"] not in {u["email"] for u in client.get("/api/auth/users").json()}
+
+
+def test_l15_user_update_blank_400_and_valid_ok(client):
+    email = _fresh_user_email("l15u")
+    created = client.post("/api/auth/users", json={
+        "email": email, "name": "L15 U", "password": "L15pass!!", "role": "member",
+    })
+    assert created.status_code == 201, created.text
+    uid = created.json()["id"]
+    for patch in ({"name": "  "}, {"email": "\t "}):
+        resp = client.put(f"/api/auth/users/{uid}", json=patch)
+        assert resp.status_code == 400, (patch, resp.text)
+    resp = client.put(f"/api/auth/users/{uid}", json={"name": "  L15 Renamed  "})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["name"] == "L15 Renamed"

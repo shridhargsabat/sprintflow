@@ -1,5 +1,4 @@
 """Black-box HTTP tests for /api/health, /api/dashboard/summary, /api/import, /api/reset."""
-import pytest
 
 
 def _expected_summary(sprint, sprint_tasks, backlog_count):

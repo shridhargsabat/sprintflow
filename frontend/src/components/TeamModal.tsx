@@ -62,7 +62,9 @@ function draftFrom(member: TeamMember): EditDraft {
   return {
     name: member.name,
     role: member.role || '',
-    color: MEMBER_COLORS.includes(member.color) ? member.color : MEMBER_COLORS[0],
+    // L6: preserve the stored avatar color even when it is outside the
+    // palette (seed -600 tokens) — the swatch row renders it as "current".
+    color: member.color && member.color.trim() !== '' ? member.color : MEMBER_COLORS[0],
     userId: member.userId != null ? String(member.userId) : ''
   };
 }
@@ -188,9 +190,15 @@ export function TeamModal({ team, tasks, newMemberName, newMemberRole, onNameCha
   };
 
   const deleteMessage = (m: TeamMember): string => {
-    if (!taskCounts) return 'Their tasks will lose this assignee.';
+    // L4: deletion reassigns to the first remaining member (see
+    // useBoard.handleRemoveMember) — say where the tasks go.
+    const target = displayedTeam.find(x => x.id !== m.id);
+    const where = target ? `reassigned to ${target.name}` : 'left without this assignee';
+    if (!taskCounts) return `Their tasks will be ${where}.`;
     const n = taskCounts.get(m.id) ?? 0;
-    return `${n} ${n === 1 ? 'task' : 'tasks'} will lose this assignee.`;
+    return n === 0
+      ? `No tasks assigned — nothing to reassign.`
+      : `${n} ${n === 1 ? 'task' : 'tasks'} will be ${where}.`;
   };
 
   const runBulkAdd = async (): Promise<void> => {
@@ -336,7 +344,8 @@ export function TeamModal({ team, tasks, newMemberName, newMemberRole, onNameCha
                             </div>
                           )}
                           <div className="flex items-center gap-1.5" role="radiogroup" aria-label="Avatar color">
-                            {MEMBER_COLORS.map(c => (
+                            {/* L6: foreign stored color gets an extra "current" swatch. */}
+                            {(MEMBER_COLORS.includes(draft.color) ? MEMBER_COLORS : [draft.color, ...MEMBER_COLORS]).map(c => (
                               <button
                                 key={c}
                                 type="button"

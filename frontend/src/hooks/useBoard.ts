@@ -226,10 +226,17 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
 
   const handleRemoveMember = async (id: string): Promise<void> => {
     if (team.length <= 1) return;
+    // L4: pass ?reassignTo (first remaining member) so the server actually
+    // reassigns, and report the server's real counts in the toast.
+    const target = team.find(m => m.id !== id);
     try {
-      await api.deleteMember(id);
+      const res = await api.deleteMember(id, target?.id);
       await refreshAll();
-      showToast('Removed member and reassigned tasks', 'info');
+      const n = res.reassignedTasks ?? 0;
+      showToast(
+        target ? `Removed member — ${n} ${n === 1 ? 'task' : 'tasks'} reassigned to ${target.name}` : 'Removed member',
+        'info'
+      );
     } catch (e) {
       showToast('Failed to remove member', 'error');
       throw e instanceof Error ? e : new Error('Failed to remove member');

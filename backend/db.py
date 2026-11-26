@@ -134,6 +134,9 @@ def init_db(db_path: Optional[str] = None) -> None:
         seed_sprints(conn)
         # Tag master: additive + idempotent, safe for live DBs (new table).
         seed_tags(conn)
+        # L10: case-insensitive tag-name uniqueness (dedupe legacy case-only
+        # dupes first so the NOCASE index can never break startup).
+        _enforce_tag_name_uniqueness(conn)
         # Additive auto-migration: link column for login-user <-> member.
         cols = [r[1] for r in conn.execute("PRAGMA table_info(team_members)").fetchall()]
         if "user_id" not in cols:
@@ -344,48 +347,111 @@ def list_tags(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
         ).fetchall()
         out = []
         for r in rows:
-            count = conn.execute(
-                "SELECT COUNT(*) FROM tasks "
-                "WHERE tag = ? COLLATE NOCASE OR tag = ? COLLATE NOCASE",
-                (r["name"], r["id"]),
-            ).fetchone()[0]
             out.append(
-                {"id": r["id"], "name": r["name"], "color": r["color"], "taskCount": count}
+                {
+                    "id": r["id"],
+                    "name": r["name"],
+                    "color": r["color"],
+                    "taskCount": tag_usage_count(conn, r["name"]),
+                }
             )
         return out
 
 
-def validate_tag(conn: sqlite3.Connection, tag: Optional[str]) -> None:
-    """Reject a task tag unknown to the master with HTTP 400. None clears: OK."""
+def tag_usage_count(conn: sqlite3.Connection, name: str) -> int:
+    """Live task usage for a tag, matched by canonical NAME only (L11).
+
+    Tasks store the canonical tag name (see validate_tag), so counting by
+    name alone attributes every task row to exactly one tag. The old
+    name-OR-id match double-counted a task whose tag equalled one tag's
+    name and another tag's id.
+    """
+    return conn.execute(
+        "SELECT COUNT(*) FROM tasks WHERE tag = ? COLLATE NOCASE",
+        (name,),
+    ).fetchone()[0]
+
+
+def _enforce_tag_name_uniqueness(conn: sqlite3.Connection) -> None:
+    """Enforce case-insensitive tag-name uniqueness (L10).
+
+    Idempotent startup migration: folds legacy case-only dupes ("Foo" vs
+    "foo", which the old case-sensitive UNIQUE allowed) into the
+    lowest-rowid winner — retagging their tasks — then enforces a NOCASE
+    unique index so concurrent Foo/foo creates can no longer both land.
+    """
+    rows = conn.execute("SELECT rowid, id, name FROM tags ORDER BY rowid ASC").fetchall()
+    winners: Dict[str, sqlite3.Row] = {}
+    for r in rows:
+        key = (r["name"] or "").lower()
+        if key not in winners:
+            winners[key] = r
+            continue
+        winner = winners[key]
+        conn.execute(
+            "UPDATE tasks SET tag = ? "
+            "WHERE tag = ? COLLATE NOCASE OR tag = ? COLLATE NOCASE",
+            (winner["name"], r["name"], r["id"]),
+        )
+        conn.execute("DELETE FROM tags WHERE rowid = ?", (r["rowid"],))
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_tags_name_nocase "
+        "ON tags(name COLLATE NOCASE)"
+    )
+
+
+def validate_tag(conn: sqlite3.Connection, tag: Optional[str]) -> Optional[str]:
+    """Validate a task tag against the master; 400 when unknown.
+
+    None clears (stored as-given by the caller). Returns the canonical tag
+    NAME so callers store one identity per tag (L11); accepts a slug id as
+    input for backwards compatibility.
+    """
     if tag is None:
-        return
+        return None
     row = conn.execute(
-        "SELECT 1 FROM tags WHERE name = ? COLLATE NOCASE OR id = ? COLLATE NOCASE",
+        "SELECT name FROM tags WHERE name = ? COLLATE NOCASE OR id = ? COLLATE NOCASE",
         (tag, tag),
     ).fetchone()
     if row is None:
         raise HTTPException(status_code=400, detail=f"Unknown tag: {tag}")
+    return str(row["name"])
 
 
 def ensure_tag(conn: sqlite3.Connection, name: Optional[str], color: Optional[str] = None) -> tuple:
     """Get-or-create a tag by name. Returns (id, created)."""
     clean = (name or "").strip() or "Frontend"
-    row = conn.execute(
+    # L9: bounded get-or-create retries. A concurrent creator can slip
+    # between the SELECT and the INSERT; on IntegrityError we reselect
+    # by name (a hit means we lost cleanly — return the winner) or, for
+    # an id-only collision (distinct names, same slug), rescan for a
+    # fresh suffixed candidate and retry once.
+    for _ in range(2):
+        row = conn.execute(
+            "SELECT id FROM tags WHERE name = ? COLLATE NOCASE", (clean,)
+        ).fetchone()
+        if row:
+            return row["id"], False
+        base = slugify_tag_id(clean) or "tag"
+        candidate = base
+        suffix = 2
+        while conn.execute("SELECT 1 FROM tags WHERE id = ?", (candidate,)).fetchone():
+            candidate = f"{base}-{suffix}"
+            suffix += 1
+        try:
+            conn.execute(
+                "INSERT INTO tags (id, name, color) VALUES (?, ?, ?)",
+                (candidate, clean, (color or "").strip() or DEFAULT_TAG_COLOR),
+            )
+        except sqlite3.IntegrityError:
+            continue
+        return candidate, True
+    winner = conn.execute(
         "SELECT id FROM tags WHERE name = ? COLLATE NOCASE", (clean,)
     ).fetchone()
-    if row:
-        return row["id"], False
-    base = slugify_tag_id(clean) or "tag"
-    candidate = base
-    suffix = 2
-    while conn.execute("SELECT 1 FROM tags WHERE id = ?", (candidate,)).fetchone():
-        candidate = f"{base}-{suffix}"
-        suffix += 1
-    conn.execute(
-        "INSERT INTO tags (id, name, color) VALUES (?, ?, ?)",
-        (candidate, clean, (color or "").strip() or DEFAULT_TAG_COLOR),
-    )
-    return candidate, True
+    if winner:
+        return winner["id"], False
+    raise sqlite3.IntegrityError(f"ensure_tag could not create tag: {clean!r}")
 
 
 def seed_sprints(conn: sqlite3.Connection) -> None:
@@ -442,6 +508,10 @@ def reset_db(db_path: Optional[str] = None) -> None:
 
 MAX_ASSIGNEES = 10
 
+# L14: max task ids per assignee-lookup query (well under SQLite's 32766
+# default bind-variable limit).
+_ASSIGNEE_LOOKUP_CHUNK = 500
+
 TASK_ASSIGNEES_SQL = """
     SELECT ta.task_id, ta.member_id, ta.user_id,
            m.name AS member_name, m.role AS member_role, m.color AS member_color,
@@ -478,19 +548,26 @@ def _assignee_entry(row: sqlite3.Row) -> Optional[Dict[str, Any]]:
 def assignees_by_task(
     conn: sqlite3.Connection, task_ids: List[str]
 ) -> Dict[str, List[Dict[str, Any]]]:
-    """Batch-fetch enriched assignees for many tasks (single JOIN query)."""
+    """Batch-fetch enriched assignees for many tasks (JOIN queries, chunked)."""
     out: Dict[str, List[Dict[str, Any]]] = {tid: [] for tid in task_ids}
     if not task_ids:
         return out
-    placeholders = ",".join("?" for _ in task_ids)
-    rows = conn.execute(
-        TASK_ASSIGNEES_SQL + f" WHERE ta.task_id IN ({placeholders}) ORDER BY ta.rowid ASC",
-        task_ids,
-    ).fetchall()
-    for r in rows:
-        entry = _assignee_entry(r)
-        if entry is not None:
-            out.setdefault(r["task_id"], []).append(entry)
+    # Dedupe (order-preserving): a single IN query never multiplies rows for
+    # repeated ids, and chunking must preserve that.
+    unique: List[str] = list(dict.fromkeys(task_ids))
+    # L14: chunk so a huge id list can never breach SQLite's variable limit
+    # (default 32766 bind params) with a 500; 500/batch keeps margin.
+    for start in range(0, len(unique), _ASSIGNEE_LOOKUP_CHUNK):
+        batch = unique[start:start + _ASSIGNEE_LOOKUP_CHUNK]
+        placeholders = ",".join("?" for _ in batch)
+        rows = conn.execute(
+            TASK_ASSIGNEES_SQL + f" WHERE ta.task_id IN ({placeholders}) ORDER BY ta.rowid ASC",
+            batch,
+        ).fetchall()
+        for r in rows:
+            entry = _assignee_entry(r)
+            if entry is not None:
+                out.setdefault(r["task_id"], []).append(entry)
     return out
 
 
@@ -573,6 +650,10 @@ def update_sprint(
         if length_days is not None:
             conn.execute("UPDATE sprints SET length_days = ? WHERE id = ?", (length_days, sprint_id))
         row = conn.execute("SELECT * FROM sprints WHERE id = ?", (sprint_id,)).fetchone()
+        # L13: the row can vanish mid-update (reset race) — None-safe so the
+        # router maps it to 404 instead of TypeErroring into a 500.
+        if row is None:
+            return None
         return row_to_sprint(row)
 
 
@@ -636,8 +717,20 @@ def list_tasks(
         )
         params.append(assignee_user_id)
     if search and search.strip():
-        like = f"%{search.strip()}%"
-        clauses.append("(t.id LIKE ? OR t.title LIKE ? OR t.description LIKE ? OR t.tag LIKE ?)")
+        # L1: escape LIKE wildcards so a literal %/_ in the query matches
+        # only itself (params were always bound — never injectable — but an
+        # unescaped % over-matched, e.g. search "%" returned every task).
+        escaped = (
+            search.strip()
+            .replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        )
+        like = f"%{escaped}%"
+        clauses.append(
+            "(t.id LIKE ? ESCAPE '\\' OR t.title LIKE ? ESCAPE '\\' "
+            "OR t.description LIKE ? ESCAPE '\\' OR t.tag LIKE ? ESCAPE '\\')"
+        )
         params.extend([like, like, like, like])
 
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""

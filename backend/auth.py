@@ -103,6 +103,11 @@ def get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
 def create_user(email: str, name: str, password: str, role: str) -> Dict[str, Any]:
     if role not in ROLE_PERMISSIONS:
         raise ValueError(f"Invalid role: {role}")
+    # L15: blank email/name must 400 (routers map ValueError), never persist.
+    if not email.strip():
+        raise ValueError("Email must not be blank")
+    if not name.strip():
+        raise ValueError("Name must not be blank")
     with db.get_conn() as conn:
         try:
             cur = conn.execute(
@@ -143,6 +148,11 @@ def update_user(
     """Partial update; returns the updated row or None when missing."""
     if role is not None and role not in ROLE_PERMISSIONS:
         raise ValueError(f"Invalid role: {role}")
+    # L15: blank email/name must 400 (routers map ValueError), never persist.
+    if name is not None and not name.strip():
+        raise ValueError("Name must not be blank")
+    if email is not None and not email.strip():
+        raise ValueError("Email must not be blank")
     sets: List[str] = []
     params: List[Any] = []
     if name is not None:

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type React from 'react';
 import { Pencil, Tags, Trash2, X } from 'lucide-react';
 import { GLASS_PANEL, GLASS_SUBCARD } from '../constants';
-import { api } from '../api';
+import { api, ApiError } from '../api';
 import type { Tag, UpdateTagPayload } from '../api';
 import ConfirmDialog from './ConfirmDialog';
 import { useEscapeKey } from '../hooks/useEscapeKey';
@@ -38,9 +38,12 @@ function ColorSwatches({
   disabled?: boolean;
   label: string;
 }): React.JSX.Element {
+  // L6: when the stored color is outside the palette (seed/foreign value),
+  // show it as an extra "current" swatch instead of silently resetting.
+  const swatches = value !== '' && !TAG_COLORS.includes(value) ? [value, ...TAG_COLORS] : TAG_COLORS;
   return (
     <div className="flex items-center gap-1.5" role="radiogroup" aria-label={label}>
-      {TAG_COLORS.map(c => (
+      {swatches.map(c => (
         <button
           key={c}
           type="button"
@@ -73,7 +76,7 @@ export function TagsModal({ onClose }: { onClose: () => void }): React.JSX.Eleme
   const [color, setColor] = useState<string>(TAG_COLORS[0]);
   const [saving, setSaving] = useState(false);
 
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [eName, setEName] = useState('');
   const [eColor, setEColor] = useState<string>(TAG_COLORS[0]);
   const [eSaving, setESaving] = useState(false);
@@ -111,7 +114,9 @@ export function TagsModal({ onClose }: { onClose: () => void }): React.JSX.Eleme
   const startEdit = (t: Tag): void => {
     setEditingId(t.id);
     setEName(t.name);
-    setEColor(TAG_COLORS.includes(t.color) ? t.color : TAG_COLORS[0]);
+    // L6: preserve the stored color even when it is outside the palette —
+    // ColorSwatches renders it as an extra "current" swatch.
+    setEColor(t.color && t.color.trim() !== '' ? t.color : TAG_COLORS[0]);
     setError(null);
   };
 
@@ -135,7 +140,17 @@ export function TagsModal({ onClose }: { onClose: () => void }): React.JSX.Eleme
     setError(null);
     api.deleteTag(t.id)
       .then(() => setTags(prev => prev.filter(x => x.id !== t.id)))
-      .catch(err => setError(err instanceof Error ? err.message : 'Failed to delete tag'));
+      .catch(err => {
+        // L5: the 409 carries {tasks:N} — name the tag and its live usage
+        // instead of the generic parsed message.
+        if (err instanceof ApiError && err.status === 409) {
+          const d = err.data as { tasks?: unknown } | null;
+          const n = typeof d?.tasks === 'number' ? d.tasks : (t.taskCount ?? 0);
+          setError(`Cannot delete "${t.name}" — ${n} ${n === 1 ? 'task still uses' : 'tasks still use'} this tag. Retag those tasks first.`);
+          return;
+        }
+        setError(err instanceof Error ? err.message : 'Failed to delete tag');
+      });
   };
 
   const confirmDelete = (): void => {
