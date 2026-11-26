@@ -4,6 +4,7 @@ import Dropdown, { type DropdownOption } from './Dropdown';
 import Calendar from './Calendar';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { api, type Tag, type UserDirectoryEntry } from '../api';
+import { usePermissions } from '../auth/usePermissions';
 import { GLASS_PANEL, GLASS_PILL, STATUS_COLUMNS } from '../constants';
 import type { AssigneeRef, AssigneeType, Task, TaskFormValues, TaskPriority, TaskStatus, TeamMember } from '../types';
 
@@ -19,6 +20,10 @@ interface TaskModalProps {
 
 export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, onSave, onDelete }: TaskModalProps) {
   useEscapeKey(onClose);
+  const { can } = usePermissions();
+  const canManage = can('team.manage');
+  const [pickerError, setPickerError] = useState<string | null>(null);
+  const [extraMembers, setExtraMembers] = useState<TeamMember[]>([]);
   const [title, setTitle] = useState<string>(task ? task.title : '');
   const [description, setDescription] = useState<string>(task ? task.description || '' : '');
   const [assigneeKeys, setAssigneeKeys] = useState<string[]>(() =>
@@ -53,8 +58,36 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
     return () => { cancelled = true; };
   }, []);
 
+  const handleCreateMember = async (name: string): Promise<DropdownOption | null> => {
+    setPickerError(null);
+    try {
+      const created = await api.addMember({ name, role: 'Engineer' });
+      setExtraMembers(prev => [...prev, created]);
+      return {
+        value: `member:${created.id}`,
+        label: `${created.name} (${created.role || 'Team'})`,
+        group: 'Team members'
+      };
+    } catch (e) {
+      setPickerError(e instanceof Error ? `Couldn't add member: ${e.message}` : `Couldn't add member`);
+      return null;
+    }
+  };
+
+  const handleCreateTag = async (name: string): Promise<DropdownOption | null> => {
+    setPickerError(null);
+    try {
+      const created = await api.createTag({ name });
+      setMasterTags(prev => (prev === null ? [created] : [...prev, created]));
+      return { value: created.name, label: created.name };
+    } catch (e) {
+      setPickerError(e instanceof Error ? `Couldn't add tag: ${e.message}` : `Couldn't add tag`);
+      return null;
+    }
+  };
+
   const assigneeOptions: DropdownOption[] = [
-    ...team.map(m => ({
+    ...[...team, ...extraMembers].map(m => ({
       value: `member:${m.id}`,
       label: `${m.name} (${m.role || 'Team'})${m.linkedUser ? ` · ${m.linkedUser.email}` : ''}`,
       group: 'Team members'
@@ -121,6 +154,8 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
               options={assigneeOptions}
               placeholder="Select assignees…"
               searchPlaceholder="Search people…"
+              onCreateNew={canManage ? handleCreateMember : undefined}
+              createLabel={(q) => `Add team member "${q}"`}
               className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text"
             />
           </div>
@@ -193,6 +228,10 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
               <Dropdown
                 value={tag}
                 onChange={setTag}
+                searchable
+                searchPlaceholder="Search tags…"
+                onCreateNew={canManage ? handleCreateTag : undefined}
+                createLabel={(q) => `Add tag "${q}"`}
                 options={(() => {
                   const opts = (masterTags ?? []).map(t => ({ value: t.name, label: t.name }));
                   // While loading, or when the task holds a legacy tag, keep the
@@ -206,6 +245,11 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
               />
             )}
           </div>
+          {pickerError && (
+            <div className="px-3.5 py-2 rounded-2xl text-xs font-medium bg-rose-500/15 text-rose-700 dark:text-rose-200 border border-rose-400/30">
+              {pickerError}
+            </div>
+          )}
           <div className="pt-3 border-t border-slate-900/10 dark:border-white/10 flex items-center justify-between gap-2">
             {task ? (
               <button type="button" onClick={() => onDelete(task.id)} className="px-4 py-2 rounded-full text-xs font-semibold text-rose-600 hover:bg-rose-500/10">Delete Task</button>

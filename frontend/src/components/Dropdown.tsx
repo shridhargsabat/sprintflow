@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ChevronDown, Search } from 'lucide-react';
+import { Check, ChevronDown, Plus, Search } from 'lucide-react';
 import { GLASS_PANEL, GLASS_PILL } from '../constants';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 
@@ -22,6 +22,14 @@ interface DropdownBaseProps {
   /** Show a filter input on top of the menu (filters by label, case-insensitive). */
   searchable?: boolean;
   searchPlaceholder?: string;
+  /**
+   * Inline-create: when set (and searchable), a `Create "query"` row appears
+   * when the query has no exact label match. Must create + return the new
+   * option (also appending it to the parent's options); Dropdown selects it.
+   * Omit to disable (e.g. for non-admins).
+   */
+  onCreateNew?: (query: string) => Promise<DropdownOption | null>;
+  createLabel?: (query: string) => string;
 }
 
 export interface DropdownSingleProps extends DropdownBaseProps {
@@ -51,6 +59,8 @@ export default function Dropdown(props: DropdownProps): React.JSX.Element {
     align = 'left',
     searchable = false,
     searchPlaceholder = 'Search…',
+    onCreateNew,
+    createLabel = (q: string): string => `Create "${q}"`,
   } = props;
   const multi = props.multi === true;
   const value: string | string[] = props.value;
@@ -61,6 +71,7 @@ export default function Dropdown(props: DropdownProps): React.JSX.Element {
     multi ? 0 : Math.max(0, options.findIndex((o) => o.value === (value as string)))
   );
   const [query, setQuery] = useState('');
+  const [creating, setCreating] = useState(false);
   const generatedId = useId();
   const baseId = id ?? generatedId.replace(/:/g, '');
   const labelId = `${baseId}-label`;
@@ -77,6 +88,35 @@ export default function Dropdown(props: DropdownProps): React.JSX.Element {
     const q = query.trim().toLowerCase();
     return options.filter((o) => o.label.toLowerCase().includes(q));
   }, [options, searchable, query]);
+
+  const canCreate = useMemo(() => {
+    if (!searchable || !onCreateNew) return false;
+    const q = query.trim();
+    if (q === '') return false;
+    return !options.some((o) => o.label.toLowerCase() === q.toLowerCase());
+  }, [searchable, onCreateNew, options, query]);
+
+  const handleCreateNew = async (): Promise<void> => {
+    if (!onCreateNew || creating) return;
+    const q = query.trim();
+    if (q === '') return;
+    setCreating(true);
+    try {
+      const created = await onCreateNew(q);
+      if (created) {
+        if (multi) {
+          const cur = value as string[];
+          if (!cur.includes(created.value)) onChange([...cur, created.value]);
+        } else {
+          onChange(created.value);
+          close(true);
+        }
+        setQuery('');
+      }
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const updateMenuPos = (): void => {
     const r = buttonRef.current?.getBoundingClientRect();
@@ -222,7 +262,7 @@ export default function Dropdown(props: DropdownProps): React.JSX.Element {
   };
 
   const onSearchKeyDown = (e: React.KeyboardEvent): void => {
-    if (visibleOptions.length === 0 && e.key !== 'Escape') return;
+    if (visibleOptions.length === 0 && !(e.key === 'Enter' && canCreate) && e.key !== 'Escape') return;
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
@@ -234,7 +274,8 @@ export default function Dropdown(props: DropdownProps): React.JSX.Element {
         break;
       case 'Enter':
         e.preventDefault();
-        selectAt(activeIndex);
+        if (visibleOptions.length === 0 && canCreate) void handleCreateNew();
+        else selectAt(activeIndex);
         break;
       case 'Escape':
         e.preventDefault();
@@ -392,6 +433,17 @@ export default function Dropdown(props: DropdownProps): React.JSX.Element {
             >
               {renderMenuItems()}
             </ul>
+            {canCreate && (
+              <button
+                type="button"
+                disabled={creating}
+                onClick={() => void handleCreateNew()}
+                className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-semibold text-blue-600 outline-none transition-colors hover:bg-blue-500/10 focus-visible:ring-2 focus-visible:ring-blue-500/60 disabled:opacity-60 dark:text-blue-300"
+              >
+                <Plus className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{creating ? 'Creating…' : createLabel(query.trim())}</span>
+              </button>
+            )}
           </div>
         ) : (
           <ul
