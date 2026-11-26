@@ -59,11 +59,11 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
         <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
           <div>
             <label className="block text-xs font-semibold mb-1">Task Title (What) *</label>
-            <input type="text" required value={title} onChange={e => setTitle(e.target.value)} className="w-full px-3.5 py-2.5 rounded-2xl text-sm bg-white/40 dark:bg-white/[0.07] backdrop-blur-xl border border-white/70 dark:border-white/[0.14] shadow-[inset_0_2px_10px_-4px_rgba(15,23,42,0.12)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50" />
+            <input type="text" required value={title} onChange={e => setTitle(e.target.value)} className="w-full px-3.5 py-2.5 rounded-2xl text-sm bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50" />
           </div>
           <div>
             <label className="block text-xs font-semibold mb-1">Description</label>
-            <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} className="w-full px-3.5 py-2.5 rounded-2xl text-xs bg-white/40 dark:bg-white/[0.07] backdrop-blur-xl border border-white/70 dark:border-white/[0.14] shadow-[inset_0_2px_10px_-4px_rgba(15,23,42,0.12)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50" />
+            <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} className="w-full px-3.5 py-2.5 rounded-2xl text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -72,7 +72,7 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
                 value={assigneeId || ''}
                 onChange={setAssigneeId}
                 options={team.map(m => ({ value: m.id, label: `${m.name} (${m.role || 'Team'})` }))}
-                className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-white/40 dark:bg-white/[0.07] backdrop-blur-xl border border-white/70 dark:border-white/[0.14] shadow-[inset_0_2px_10px_-4px_rgba(15,23,42,0.12)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50"
+                className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50"
               />
             </div>
             <div>
@@ -80,7 +80,7 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
               <Calendar
                 value={dueDate}
                 onChange={setDueDate}
-                className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-white/40 dark:bg-white/[0.07] backdrop-blur-xl border border-white/70 dark:border-white/[0.14] shadow-[inset_0_2px_10px_-4px_rgba(15,23,42,0.12)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50"
+                className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50"
               />
             </div>
           </div>
@@ -91,7 +91,7 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
                 value={status}
                 onChange={(v) => setStatus(v as TaskStatus)}
                 options={STATUS_COLUMNS.map(s => ({ value: s.id, label: s.label }))}
-                className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-2.5 py-2 text-xs bg-white/40 dark:bg-white/[0.07] backdrop-blur-xl border border-white/70 dark:border-white/[0.14] shadow-[inset_0_2px_10px_-4px_rgba(15,23,42,0.12)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50"
+                className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-2.5 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50"
               />
             </div>
             <div>
@@ -105,7 +105,7 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
                   { value: 'medium', label: 'Medium' },
                   { value: 'low', label: 'Low' }
                 ]}
-                className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-2.5 py-2 text-xs bg-white/40 dark:bg-white/[0.07] backdrop-blur-xl border border-white/70 dark:border-white/[0.14] shadow-[inset_0_2px_10px_-4px_rgba(15,23,42,0.12)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50"
+                className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-2.5 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50"
               />
             </div>
             <div>
@@ -118,7 +118,7 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
                   { value: 'Sprint 15', label: 'Sprint 15' },
                   { value: 'Backlog', label: 'Backlog' }
                 ]}
-                className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-2.5 py-2 text-xs bg-white/40 dark:bg-white/[0.07] backdrop-blur-xl border border-white/70 dark:border-white/[0.14] shadow-[inset_0_2px_10px_-4px_rgba(15,23,42,0.12)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50"
+                className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-2.5 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50"
               />
             </div>
             <div>
@@ -127,7 +127,7 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
                 value={String(points)}
                 onChange={(v) => setPoints(Number(v))}
                 options={[1, 2, 3, 5, 8, 13].map(pt => ({ value: String(pt), label: `${pt} ${pt === 1 ? 'pt' : 'pts'}` }))}
-                className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-2.5 py-2 text-xs bg-white/40 dark:bg-white/[0.07] backdrop-blur-xl border border-white/70 dark:border-white/[0.14] shadow-[inset_0_2px_10px_-4px_rgba(15,23,42,0.12)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50"
+                className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-2.5 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50"
               />
             </div>
           </div>
@@ -144,7 +144,7 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
                 { value: 'QA', label: 'QA & Testing' },
                 { value: 'Design', label: 'UI/UX Design' }
               ]}
-              className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-white/40 dark:bg-white/[0.07] backdrop-blur-xl border border-white/70 dark:border-white/[0.14] shadow-[inset_0_2px_10px_-4px_rgba(15,23,42,0.12)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50"
+              className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50"
             />
           </div>
           <div className="pt-3 border-t border-slate-900/10 dark:border-white/10 flex items-center justify-between gap-2">
