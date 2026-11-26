@@ -102,7 +102,7 @@ export default function App() {
     <div className={darkMode ? 'dark' : ''}>
       <div
         className="min-h-screen relative overflow-x-hidden text-slate-900 dark:text-slate-100 transition-colors duration-300"
-        style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", sans-serif' }}
+        style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter Variable", "Inter", sans-serif' }}
       >
         <Header
           activeView={activeView}

@@ -16,7 +16,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif']
+        sans: ['-apple-system', 'BlinkMacSystemFont', 'Inter Variable', 'Inter', 'Segoe UI', 'Roboto', 'sans-serif']
       }
     }
   },
