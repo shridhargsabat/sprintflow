@@ -21,6 +21,7 @@ import {
 } from 'recharts';
 import type { PriorityFilter, SprintConfig, Task, TaskPriority, TaskStatus, TeamMember } from '../types';
 import GlassTooltip from '../components/GlassTooltip';
+import { GlassChartTooltip } from '../components/GlassChartTooltip';
 import { PRIORITY_META, GLASS_PANEL, GLASS_SUBCARD, GLASS_PILL, TODAY_ISO } from '../constants';
 import { getInitials, formatShortDate, getDueMeta } from '../utils/format';
 
@@ -237,7 +238,7 @@ export default function DashboardView({
                   <Cell key={idx} fill={entry.color} />
                 ))}
               </Pie>
-              <RechartsTooltip />
+              <RechartsTooltip content={<GlassChartTooltip />} />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -280,7 +281,10 @@ export default function DashboardView({
               <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.08)'} vertical={false} />
               <XAxis dataKey="day" tick={{ fontSize: 10, fill: darkMode ? '#94a3b8' : '#475569' }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10, fill: darkMode ? '#94a3b8' : '#475569' }} axisLine={false} tickLine={false} />
-              <RechartsTooltip />
+              <RechartsTooltip
+                content={<GlassChartTooltip />}
+                cursor={{ stroke: darkMode ? 'rgba(255,255,255,0.25)' : 'rgba(15,23,42,0.20)', strokeWidth: 1 }}
+              />
               <Line type="monotone" dataKey="ideal" stroke="#94a3b8" strokeDasharray="5 5" dot={false} strokeWidth={1.5} name="Ideal" />
               <Area type="monotone" dataKey="remaining" stroke="#0a84ff" fill="url(#burnGradLive)" strokeWidth={2.5} dot={{ r: 3.5, fill: '#0a84ff' }} connectNulls={false} name="Remaining Pts" />
             </AreaChart>
