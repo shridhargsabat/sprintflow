@@ -34,7 +34,7 @@ DEFAULT_TASKS = [
     ("DEV-111", "Automated Staging Smoke Tests", "Run post-deploy API and login smoke checks on every pull request merge.", "m4", "2026-11-25", "done", "high", "Sprint 14", 3, "QA"),
     ("DEV-112", "Multi-Tenant Webhook Retry Queue", "Implement exponential backoff dead-letter queue for failed outbound customer webhooks.", "m3", "2026-12-11", "backlog", "high", "Sprint 15", 8, "Backend"),
     ("DEV-113", "Load Testing 10k Concurrent Sessions", "Benchmark API gateway latency and DB connection pool saturation at peak traffic.", "m4", "2026-12-10", "backlog", "critical", "Sprint 15", 5, "QA"),
-    ("DEV-114", "Custom Bento Widget Layout Preferences", "Allow leads to toggle visibility and order of executive KPI cards.", "m2", "2026-12-15", "backlog", "medium", "Sprint 15", 5, "Frontend"),
+    ("DEV-114", "Custom Dashboard Widget Layout Preferences", "Allow leads to toggle visibility and order of executive KPI cards.", "m2", "2026-12-15", "backlog", "medium", "Sprint 15", 5, "Frontend"),
     ("DEV-115", "Automated Compliance Evidence Collector", "Archive weekly access reviews and deployment logs into encrypted object storage.", "m1", "2026-12-18", "backlog", "low", "Backlog", 3, "DevOps"),
 ]
 

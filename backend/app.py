@@ -26,7 +26,7 @@ AVATAR_COLORS = [
 app = FastAPI(
     title="SprintFlow API",
     version="1.0.0",
-    description="Sprint management backend with Bento KPIs, Kanban board, Backlog, and SQLite storage.",
+    description="Sprint management backend with Dashboard KPIs, Kanban board, Backlog, and SQLite storage.",
 )
 
 app.add_middleware(

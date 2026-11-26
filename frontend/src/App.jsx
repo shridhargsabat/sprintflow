@@ -97,7 +97,7 @@ export default function App() {
   const [apiError, setApiError] = useState('');
   const [darkMode, setDarkMode] = useState(false);
 
-  const [activeView, setActiveView] = useState('bento');
+  const [activeView, setActiveView] = useState('dashboard');
   const [sprintFilter, setSprintFilter] = useState('Sprint 14');
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [assigneeFilter, setAssigneeFilter] = useState('all');
@@ -402,7 +402,7 @@ export default function App() {
           <div className="lg-orb-d absolute top-1/2 -left-20 w-[340px] h-[340px] rounded-full bg-rose-200/35 dark:bg-fuchsia-600/15 blur-[110px]" />
         </div>
 
-        {/* Floating Liquid Glass Header */}
+        {/* Floating Header */}
         <div className="sticky top-0 z-30 pt-3 px-4 sm:px-6">
           <header className={`lg-enter max-w-[1440px] mx-auto rounded-full px-4 sm:px-5 h-16 flex items-center justify-between gap-3 ${GLASS_PANEL}`}>
             <div className="flex items-center gap-3 min-w-0">
@@ -417,14 +417,14 @@ export default function App() {
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate hidden md:block">
-                  Liquid Glass Bento Dashboard, Kanban &amp; Backlog
+                  Sprint Dashboard, Kanban &amp; Backlog
                 </p>
               </div>
             </div>
 
             <nav aria-label="Main views" className="flex items-center bg-slate-900/[0.05] dark:bg-white/[0.06] p-1 rounded-full border border-white/60 dark:border-white/10">
               {[
-                { id: 'bento', label: 'Bento', icon: LayoutGrid },
+                { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
                 { id: 'kanban', label: 'Kanban', icon: Kanban },
                 { id: 'backlog', label: 'Backlog & Schedule', short: 'Backlog', icon: ListChecks }
               ].map(tab => {
@@ -580,7 +580,7 @@ export default function App() {
             <div className="py-24 text-center text-sm text-slate-500">Loading sprint data from SQLite...</div>
           ) : (
             <>
-              {activeView === 'bento' && (
+              {activeView === 'dashboard' && (
                 <div className="grid grid-cols-1 md:grid-cols-6 lg:grid-cols-12 gap-5">
                   <div className="lg-enter lg-delay-1 lg-card-hover lg-sheen md:col-span-6 lg:col-span-5 rounded-[32px] p-6 relative overflow-hidden flex flex-col justify-between bg-gradient-to-br from-[#0a84ff]/85 via-[#4f46e5]/80 to-[#7c3aed]/80 dark:from-[#0a84ff]/45 dark:via-[#4f46e5]/45 dark:to-[#6d28d9]/45 backdrop-blur-2xl backdrop-saturate-150 border border-white/45 dark:border-white/20 text-white shadow-[0_20px_50px_-15px_rgba(37,99,235,0.45),inset_0_1px_1px_rgba(255,255,255,0.65)]">
                     <div className="relative z-10">

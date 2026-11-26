@@ -1,6 +1,6 @@
 # SprintFlow — React + Python (FastAPI) + SQLite
 
-A lightweight sprint management web app featuring a **Bento Dashboard**, **Drag-and-Drop Kanban Board**, and **Backlog & Team Schedule Table** backed by a Python FastAPI REST API and SQLite database.
+A lightweight sprint management web app featuring a **Dashboard**, **Drag-and-Drop Kanban Board**, and **Backlog & Team Schedule Table** backed by a Python FastAPI REST API and SQLite database.
 
 ## Project Structure
 
@@ -17,7 +17,7 @@ sprintflow-fullstack/
     ├── vite.config.js      # Proxies /api -> http://127.0.0.1:8000
     └── src/
         ├── api.js          # Fetch client for FastAPI endpoints
-        ├── App.jsx         # Bento Dashboard, Kanban Board, Backlog Table
+        ├── App.jsx         # Dashboard, Kanban Board, Backlog Table
         ├── index.css
         └── main.jsx
 ```
@@ -49,5 +49,5 @@ Open `http://localhost:5173`. All `/api/*` requests are proxied to the FastAPI b
 - `PATCH /api/tasks/{id}/status` — Update Kanban column
 - `POST /api/tasks/{id}/promote` — Pull backlog task into active sprint
 - `GET /api/team` · `POST /api/team` · `PUT /api/team/{id}` · `DELETE /api/team/{id}`
-- `GET /api/dashboard/summary?sprint=Sprint%2014` — Bento sprint KPI summary
+- `GET /api/dashboard/summary?sprint=Sprint%2014` — Dashboard sprint KPI summary
 - `POST /api/import` · `POST /api/reset` — JSON import & sample data reset
