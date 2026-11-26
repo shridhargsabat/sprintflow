@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Dict, List, Literal, Optional
 
+from fastapi import HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 StatusType = Literal["backlog", "todo", "in_progress", "in_review", "done"]
@@ -17,14 +18,14 @@ class AssigneeInput(BaseModel):
 
 class TaskPayload(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
-    description: str = ""
+    description: str = Field(default="", max_length=10000)
     assignees: Optional[List[AssigneeInput]] = None
     dueDate: str = Field(..., min_length=4, max_length=32)
     status: StatusType = "todo"
     priority: PriorityType = "medium"
-    sprint: str = "Sprint 14"
+    sprint: str = Field(default="Sprint 14", max_length=100)
     points: int = Field(default=3, ge=1, le=50)
-    tag: str = "Frontend"
+    tag: str = Field(default="Frontend", max_length=60)
 
 
 class StatusUpdatePayload(BaseModel):
@@ -33,7 +34,7 @@ class StatusUpdatePayload(BaseModel):
 
 class TagCreatePayload(BaseModel):
     name: str = Field(..., min_length=1, max_length=60)
-    color: Optional[str] = None
+    color: Optional[str] = Field(default=None, max_length=40)
 
     @field_validator("name")
     @classmethod
@@ -45,14 +46,29 @@ class TagCreatePayload(BaseModel):
 
 class TagUpdatePayload(BaseModel):
     name: Optional[str] = Field(default=None, max_length=60)
-    color: Optional[str] = None
+    color: Optional[str] = Field(default=None, max_length=40)
 
 
 class MemberPayload(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
-    role: str = "Engineer"
-    color: Optional[str] = None
+    role: str = Field(default="Engineer", max_length=100)
+    color: Optional[str] = Field(default=None, max_length=40)
     userId: Optional[int] = None
+
+    @field_validator("userId", mode="before")
+    @classmethod
+    def _reject_bool_user_id(cls, value: Any) -> Any:
+        # M5: JSON true/false must never coerce to user id 1/0 (id 1 is the
+        # admin). Reject with the same HTTP 400 the routers use for bad ids
+        # (raising HTTPException here propagates through FastAPI untouched —
+        # only ValueError/AssertionError become 422). Numeric strings like
+        # "3" still flow through to normal int coercion.
+        if isinstance(value, bool):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid userId: {value!r} (boolean is not a user id)",
+            )
+        return value
 
     @field_validator("name")
     @classmethod
@@ -63,8 +79,11 @@ class MemberPayload(BaseModel):
 
 
 class ImportPayload(BaseModel):
-    team: List[Dict[str, Any]]
-    tasks: List[Dict[str, Any]]
+    # List[Any]: rows are validated individually by the import endpoint so
+    # every malformed row (including non-object rows) yields a 400 with
+    # per-row errors instead of a bare 422/500.
+    team: List[Any]
+    tasks: List[Any]
 
 
 class SprintUpdate(BaseModel):
