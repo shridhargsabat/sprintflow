@@ -2,6 +2,7 @@ import { ArrowUpToLine, Calendar, Pencil, X } from 'lucide-react';
 import { GLASS_PANEL, GLASS_PILL, PRIORITY_META, STATUS_COLUMNS } from '../constants';
 import { formatShortDate, getDueMeta, getInitials } from '../utils/format';
 import type { Task, TeamMember } from '../types';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface TaskDetailsModalProps {
   task: Task;
@@ -13,6 +14,7 @@ interface TaskDetailsModalProps {
 }
 
 export function TaskDetailsModal({ task, member, onClose, onEdit, onDelete, onPromote }: TaskDetailsModalProps) {
+  useEscapeKey(onClose);
   const statusMeta = STATUS_COLUMNS.find(s => s.id === task.status);
   const priorityMeta = PRIORITY_META[task.priority];
   const dueMeta = getDueMeta(task.dueDate, task.status);

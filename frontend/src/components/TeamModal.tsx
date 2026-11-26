@@ -3,6 +3,7 @@ import { Trash2, X } from 'lucide-react';
 import { GLASS_PANEL, GLASS_PILL, GLASS_SUBCARD } from '../constants';
 import { getInitials } from '../utils/format';
 import type { TeamMember } from '../types';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 export interface TeamModalProps {
   team: TeamMember[];
@@ -18,6 +19,7 @@ export interface TeamModalProps {
 }
 
 export function TeamModal({ team, newMemberName, newMemberRole, onNameChange, onRoleChange, onUpdateMember, onAddMember, onRemoveMember, onRenameMember, onClose }: TeamModalProps) {
+  useEscapeKey(onClose);
   return (
     <div onClick={onClose} className="lg-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/35 backdrop-blur-md">
       <div onClick={e => e.stopPropagation()} className={`lg-modal-panel w-full max-w-md rounded-[32px] overflow-hidden ${GLASS_PANEL}`}>

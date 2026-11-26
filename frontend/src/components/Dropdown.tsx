@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
 import { GLASS_PANEL, GLASS_PILL } from '../constants';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 export interface DropdownOption {
   value: string;
@@ -61,6 +62,8 @@ export default function Dropdown({
     setOpen(false);
     if (returnFocus) buttonRef.current?.focus();
   };
+
+  useEscapeKey(() => close(true), open);
 
   const openMenu = (index?: number): void => {
     const selectedIdx = options.findIndex((o) => o.value === value);

@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Clock } from 'lucide-react';
 import { GLASS_PANEL, GLASS_PILL } from '../constants';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 export interface TimePickerProps {
   id?: string;
@@ -78,6 +79,8 @@ export default function TimePicker({
     setPendingHour(null);
     if (returnFocus) buttonRef.current?.focus();
   };
+
+  useEscapeKey(() => close(true), open);
 
   const openMenu = (): void => {
     const p = parseValue(value);

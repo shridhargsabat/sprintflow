@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Calendar as CalendarIcon, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { GLASS_PANEL, GLASS_PILL } from '../constants';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import { formatShortDate } from '../utils/format';
 
 export interface CalendarProps {
@@ -98,6 +99,8 @@ export default function Calendar({
     setOpen(false);
     if (returnFocus) buttonRef.current?.focus();
   };
+
+  useEscapeKey(() => close(true), open);
 
   const isDisabled = (iso: string): boolean => {
     if (min && iso < min) return true;

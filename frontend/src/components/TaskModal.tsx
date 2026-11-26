@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import Dropdown from './Dropdown';
 import Calendar from './Calendar';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import { GLASS_PANEL, GLASS_PILL, STATUS_COLUMNS } from '../constants';
 import type { Task, TaskFormValues, TaskPriority, TaskStatus, TeamMember } from '../types';
 
@@ -16,6 +17,7 @@ interface TaskModalProps {
 }
 
 export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, onSave, onDelete }: TaskModalProps) {
+  useEscapeKey(onClose);
   const [title, setTitle] = useState<string>(task ? task.title : '');
   const [description, setDescription] = useState<string>(task ? task.description || '' : '');
   const [assigneeId, setAssigneeId] = useState<string | null>(task ? task.assigneeId : (team[0] ? team[0].id : ''));

@@ -4,6 +4,7 @@ import Calendar from './Calendar';
 import { GLASS_PANEL, GLASS_PILL } from '../constants';
 import { formatShortDate } from '../utils/format';
 import type { SprintConfig, SprintPatch } from '../types';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface SprintSettingsModalProps {
   sprints: SprintConfig[];
@@ -76,6 +77,7 @@ function SprintRow({ sprint, onSave }: { sprint: SprintConfig; onSave: (id: stri
 }
 
 export function SprintSettingsModal({ sprints, onClose, onSave }: SprintSettingsModalProps) {
+  useEscapeKey(onClose);
   return (
     <div onClick={onClose} className="lg-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/35 backdrop-blur-md">
       <div onClick={e => e.stopPropagation()} className={`lg-modal-panel w-full max-w-lg rounded-[32px] overflow-hidden ${GLASS_PANEL}`}>
