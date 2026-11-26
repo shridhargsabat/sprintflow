@@ -231,3 +231,34 @@ def test_non_admin_cannot_manage_users_and_no_self_delete(anon_client, role_user
         anon_client.delete(f"/api/auth/users/{me['id']}", headers=admin_headers).status_code
         == 400
     )
+
+
+def test_admin_can_update_user_but_not_own_role(anon_client):
+    headers = _auth_headers(anon_client, ADMIN["email"], ADMIN["password"])
+    created = anon_client.post(
+        "/api/auth/users",
+        json={"email": "editme@sprintflow.local", "name": "Edit Me", "password": "Editme123!", "role": "viewer"},
+        headers=headers,
+    )
+    assert created.status_code == 201
+    uid = created.json()["id"]
+
+    updated = anon_client.put(
+        f"/api/auth/users/{uid}",
+        json={"name": "Edited", "role": "member", "password": "Edited123!"},
+        headers=headers,
+    )
+    assert updated.status_code == 200
+    assert updated.json()["name"] == "Edited"
+    assert updated.json()["role"] == "member"
+    # New password works.
+    assert _login(anon_client, "editme@sprintflow.local", "Edited123!").status_code == 200
+
+    me = anon_client.get("/api/auth/me", headers=headers).json()
+    assert (
+        anon_client.put(
+            f"/api/auth/users/{me['id']}", json={"role": "viewer"}, headers=headers
+        ).status_code
+        == 400
+    )
+    assert anon_client.delete(f"/api/auth/users/{uid}", headers=headers).status_code == 200

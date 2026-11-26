@@ -41,6 +41,13 @@ export interface CreateUserPayload {
   role: Role;
 }
 
+export interface UpdateUserPayload {
+  email?: string;
+  name?: string;
+  password?: string;
+  role?: Role;
+}
+
 export function getToken(): string | null {
   try {
     return localStorage.getItem(TOKEN_KEY);
@@ -132,5 +139,7 @@ export const api = {
   createUser: (payload: CreateUserPayload): Promise<ManagedUser> =>
     request<ManagedUser>('/auth/users', { method: 'POST', body: JSON.stringify(payload) }),
   deleteUser: (id: number): Promise<{ deleted: number }> =>
-    request<{ deleted: number }>(`/auth/users/${id}`, { method: 'DELETE' })
+    request<{ deleted: number }>(`/auth/users/${id}`, { method: 'DELETE' }),
+  updateUser: (id: number, payload: UpdateUserPayload): Promise<ManagedUser> =>
+    request<ManagedUser>(`/auth/users/${id}`, { method: 'PUT', body: JSON.stringify(payload) })
 };

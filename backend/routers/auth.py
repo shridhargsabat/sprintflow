@@ -42,6 +42,13 @@ class CreateUserPayload(BaseModel):
     role: str
 
 
+class UpdateUserPayload(BaseModel):
+    email: str | None = None
+    name: str | None = None
+    password: str | None = None
+    role: str | None = None
+
+
 def _admin() -> Any:
     # User administration rides on team.manage, which only the admin role holds.
     return Depends(auth.require_permissions("team.manage"))
@@ -86,3 +93,38 @@ def delete_user_route(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
     return {"deleted": user_id}
+
+
+@router.put("/users/{user_id}")
+def update_user_route(
+    user_id: int,
+    payload: UpdateUserPayload,
+    me: Dict[str, Any] = Depends(auth.require_permissions("team.manage")),
+) -> Dict[str, Any]:
+    if payload.password is not None and len(payload.password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters",
+        )
+    if me["id"] == user_id and payload.role is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot change your own role",
+        )
+    try:
+        updated = auth.update_user(
+            user_id,
+            name=payload.name,
+            email=payload.email,
+            password=payload.password,
+            role=payload.role,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+        )
+    if updated is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+    return auth.public_user(updated)

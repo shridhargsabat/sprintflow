@@ -124,6 +124,49 @@ def delete_user(user_id: int) -> bool:
         return cur.rowcount > 0
 
 
+def update_user(
+    user_id: int,
+    name: Optional[str] = None,
+    email: Optional[str] = None,
+    password: Optional[str] = None,
+    role: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Partial update; returns the updated row or None when missing."""
+    if role is not None and role not in ROLE_PERMISSIONS:
+        raise ValueError(f"Invalid role: {role}")
+    sets: List[str] = []
+    params: List[Any] = []
+    if name is not None:
+        sets.append("name = ?")
+        params.append(name.strip())
+    if email is not None:
+        sets.append("email = ?")
+        params.append(email.strip().lower())
+    if password is not None:
+        sets.append("password_hash = ?")
+        params.append(hash_password(password))
+    if role is not None:
+        sets.append("role = ?")
+        params.append(role)
+    if not sets:
+        return get_user_by_id(user_id)
+    params.append(user_id)
+    with db.get_conn() as conn:
+        try:
+            cur = conn.execute(
+                f"UPDATE users SET {', '.join(sets)} WHERE id = ?", params
+            )
+        except sqlite3.IntegrityError:
+            raise ValueError("Email already registered")
+        if cur.rowcount == 0:
+            return None
+        row = conn.execute(
+            "SELECT id, email, name, password_hash, role, created_at FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
 def permissions_for(role: str) -> List[str]:
     return list(ROLE_PERMISSIONS.get(role, []))
 
