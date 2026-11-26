@@ -1,0 +1,139 @@
+name: CI/CD
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '*.md'
+      - '**/*.md'
+      - 'docs/**'
+      - '.env.example'
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - '*.md'
+      - '**/*.md'
+      - 'docs/**'
+      - '.env.example'
+  workflow_dispatch:
+
+# GITHUB_TOKEN needs packages:write so the deploy job can push images to GHCR.
+permissions:
+  contents: read
+  packages: write
+
+# Supply-chain note: every `uses:` below is pinned to a full commit SHA (with
+# the human-readable tag in a trailing comment) so a moved tag can never
+# change what CI executes. Re-resolve with:
+#   git ls-remote https://github.com/<owner>/<repo>.git 'refs/tags/<tag>'
+# (for annotated tags use the peeled `^{}` commit SHA, not the tag object).
+
+jobs:
+  # ── Frontend: install + typecheck/build + audit ───────────────────────────
+  frontend-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          # Node 22: matches frontend/Dockerfile (node:22-alpine) and local dev.
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Frontend - Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Frontend - Typecheck + build
+        # package.json build = `tsc --noEmit && vite build`, so typecheck runs here.
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Frontend - npm audit (high and above)
+        run: |
+          cd frontend
+          npm audit --audit-level=high
+
+  # ── Backend: Python deps + pytest (no DB service needed — SQLite) ─────────
+  backend-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          # Python 3.12: matches backend/Dockerfile (python:3.12-slim).
+          python-version: '3.12'
+          working-directory: backend
+
+      - name: Backend - Install dependencies
+        run: |
+          cd backend
+          uv sync --frozen --group dev
+
+      - name: Backend - pytest
+        run: |
+          cd backend
+          uv run pytest -q
+
+  # ── Deploy: SSH to the VPS, build+push GHCR images, compose up, smoke ────
+  # Only fires on a real push to main (PRs run the two check jobs above, not
+  # deploy). No self-hosted runner: the build runs on the VPS over SSH, exactly
+  # like the ITMS pipeline, with images pushed to GHCR.
+  #
+  # Required repo secrets (Settings → Secrets and variables → Actions):
+  #   VPS_HOST      VPS public IP / hostname
+  #   VPS_USER      SSH user (root)
+  #   VPS_SSH_KEY   private deploy key whose public half is in /root/.ssh/authorized_keys
+  #
+  # NOTE: the first deploy creates PRIVATE ghcr.io packages. After it goes
+  # green, flip both packages to public (package Settings → Change visibility)
+  # so the VPS can pull on container restarts without credentials.
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [frontend-check, backend-check]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    steps:
+      - name: Start SSH agent with deploy key
+        uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387 # v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Deploy to live via SSH
+        env:
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🚀 Deploying SprintFlow to $VPS_USER@$VPS_HOST ..."
+          ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 \
+            "$VPS_USER@$VPS_HOST" "GHCR_TOKEN='$GHCR_TOKEN' bash -s" <<'EOF'
+          set -eu
+          # The deploy checkout lives at /root/sprintflow with `origin` pointed at
+          # GitHub; the script resets it to main, builds + pushes both images
+          # to GHCR, recreates the stack, and smoke-tests it.
+          cd /root/sprintflow
+          CODE_DIR=/root/sprintflow REGISTRY=ghcr.io PUSH_USER=shridhargsabat \
+            REGISTRY_TOKEN="$GHCR_TOKEN" sh scripts/build-deploy.sh
+          EOF
+          echo "✅ SprintFlow deploy complete!"
+
+      - name: Freshness probe (non-blocking)
+        # The deploy script already warns if a service is stale; this is a
+        # belt-and-braces re-check that surfaces the running image tags.
+        env:
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 \
+            "$VPS_USER@$VPS_HOST" \
+            "docker inspect sprintflow-backend --format 'backend running image: {{.Config.Image}}' 2>/dev/null || echo 'sprintflow-backend not found'; docker inspect sprintflow-frontend --format 'frontend running image: {{.Config.Image}}' 2>/dev/null || echo 'sprintflow-frontend not found'"
