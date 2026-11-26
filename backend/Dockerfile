@@ -15,7 +15,7 @@ COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 # App code.
-COPY backend/app.py backend/auth.py backend/db.py backend/models.py ./
+COPY backend/app.py backend/auth.py backend/db.py backend/models.py backend/ratelimit.py ./
 COPY backend/routers ./routers
 
 # Non-root runtime user; /data holds the SQLite file (named volume).
