@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+import auth
 import db
 from models import StatusUpdatePayload, TaskPayload
 
@@ -18,6 +19,7 @@ def get_tasks(
     priority: Optional[str] = Query(default=None),
     assigneeId: Optional[str] = Query(default=None),
     search: Optional[str] = Query(default=None),
+    _user: Dict[str, Any] = Depends(auth.require_permissions("tasks.view")),
 ) -> List[Dict[str, Any]]:
     return db.list_tasks(
         sprint=sprint,
@@ -29,7 +31,10 @@ def get_tasks(
 
 
 @router.post("/tasks", status_code=201)
-def create_task(payload: TaskPayload) -> Dict[str, Any]:
+def create_task(
+    payload: TaskPayload,
+    _user: Dict[str, Any] = Depends(auth.require_permissions("tasks.create")),
+) -> Dict[str, Any]:
     with db.get_conn() as conn:
         task_id = db.next_task_id(conn)
         conn.execute(
@@ -56,7 +61,11 @@ def create_task(payload: TaskPayload) -> Dict[str, Any]:
 
 
 @router.put("/tasks/{task_id}")
-def update_task(task_id: str, payload: TaskPayload) -> Dict[str, Any]:
+def update_task(
+    task_id: str,
+    payload: TaskPayload,
+    _user: Dict[str, Any] = Depends(auth.require_permissions("tasks.edit")),
+) -> Dict[str, Any]:
     with db.get_conn() as conn:
         existing = conn.execute("SELECT id FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if not existing:
@@ -87,7 +96,11 @@ def update_task(task_id: str, payload: TaskPayload) -> Dict[str, Any]:
 
 
 @router.patch("/tasks/{task_id}/status")
-def update_task_status(task_id: str, payload: StatusUpdatePayload) -> Dict[str, Any]:
+def update_task_status(
+    task_id: str,
+    payload: StatusUpdatePayload,
+    _user: Dict[str, Any] = Depends(auth.require_permissions("tasks.edit")),
+) -> Dict[str, Any]:
     with db.get_conn() as conn:
         existing = conn.execute("SELECT sprint FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if not existing:
@@ -102,7 +115,10 @@ def update_task_status(task_id: str, payload: StatusUpdatePayload) -> Dict[str, 
 
 
 @router.post("/tasks/{task_id}/promote")
-def promote_task(task_id: str) -> Dict[str, Any]:
+def promote_task(
+    task_id: str,
+    _user: Dict[str, Any] = Depends(auth.require_permissions("tasks.edit")),
+) -> Dict[str, Any]:
     with db.get_conn() as conn:
         existing = conn.execute("SELECT id FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if not existing:
@@ -116,7 +132,10 @@ def promote_task(task_id: str) -> Dict[str, Any]:
 
 
 @router.delete("/tasks/{task_id}")
-def delete_task(task_id: str) -> Dict[str, str]:
+def delete_task(
+    task_id: str,
+    _user: Dict[str, Any] = Depends(auth.require_permissions("tasks.delete")),
+) -> Dict[str, str]:
     with db.get_conn() as conn:
         cur = conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
         if cur.rowcount == 0:

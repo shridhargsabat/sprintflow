@@ -14,8 +14,10 @@ import DashboardView from './views/DashboardView';
 const KanbanView = lazy(() => import('./views/KanbanView'));
 const BacklogView = lazy(() => import('./views/BacklogView'));
 import type { PriorityFilter, Task, TaskModalState, TaskStatus, TeamMember, ViewId } from './types';
+import { AuthProvider, useAuth } from './auth/AuthContext';
+import LoginView from './views/LoginView';
 
-export default function App() {
+function BoardApp() {
   const [darkMode, setDarkMode] = useState<boolean>(false);
 
   const [activeView, setActiveView] = useState<ViewId>('dashboard');
@@ -243,5 +245,32 @@ export default function App() {
         <Toasts toasts={board.toasts} />
       </div>
     </div>
+  );
+}
+
+function AppGate() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen relative overflow-hidden flex items-center justify-center bg-[#f3f5fa] dark:bg-[#050814]">
+        <div className="fixed inset-0 pointer-events-none overflow-hidden">
+          <div className="lg-orb-a absolute -top-32 -left-24 w-[520px] h-[520px] rounded-full bg-sky-300/60 dark:bg-blue-600/25 blur-[110px]" />
+          <div className="lg-orb-b absolute top-16 right-[-80px] w-[480px] h-[480px] rounded-full bg-violet-300/60 dark:bg-indigo-600/25 blur-[120px]" />
+        </div>
+        <div className="text-sm font-medium text-slate-500 dark:text-slate-400">Restoring session…</div>
+      </div>
+    );
+  }
+
+  if (!user) return <LoginView />;
+  return <BoardApp />;
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppGate />
+    </AuthProvider>
   );
 }

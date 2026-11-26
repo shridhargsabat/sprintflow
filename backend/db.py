@@ -100,6 +100,16 @@ def init_db(db_path: Optional[str] = None) -> None:
                 start_date TEXT NOT NULL,
                 length_days INTEGER NOT NULL DEFAULT 14
             );
+
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'member'
+                    CHECK(role IN ('admin', 'lead', 'member', 'viewer')),
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
             """
         )
 
@@ -108,6 +118,8 @@ def init_db(db_path: Optional[str] = None) -> None:
             seed_data(conn)
         # Additive auto-migration for live DBs that predate the sprints table.
         seed_sprints(conn)
+        # Always ensure the seeded admin login exists (idempotent).
+        seed_users(conn)
 
 
 def seed_data(conn: sqlite3.Connection) -> None:
@@ -130,6 +142,31 @@ def seed_sprints(conn: sqlite3.Connection) -> None:
     conn.executemany(
         "INSERT OR IGNORE INTO sprints (id, name, start_date, length_days) VALUES (?, ?, ?, ?)",
         DEFAULT_SPRINTS,
+    )
+
+
+# Seeded admin login (dev): admin@sprintflow.local / Admin123!
+SEED_ADMIN_EMAIL = "admin@sprintflow.local"
+SEED_ADMIN_NAME = "Admin"
+SEED_ADMIN_PASSWORD = "Admin123!"
+
+
+def seed_users(conn: sqlite3.Connection) -> None:
+    """Idempotently ensure the seeded admin user exists. Board reset/import
+    never touch the users table, so logins survive data resets."""
+    existing = conn.execute(
+        "SELECT id FROM users WHERE email = ?", (SEED_ADMIN_EMAIL,)
+    ).fetchone()
+    if existing:
+        return
+    import bcrypt
+
+    password_hash = bcrypt.hashpw(
+        SEED_ADMIN_PASSWORD.encode("utf-8"), bcrypt.gensalt()
+    ).decode("utf-8")
+    conn.execute(
+        "INSERT OR IGNORE INTO users (email, name, password_hash, role) VALUES (?, ?, ?, 'admin')",
+        (SEED_ADMIN_EMAIL, SEED_ADMIN_NAME, password_hash),
     )
 
 

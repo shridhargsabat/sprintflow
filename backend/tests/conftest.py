@@ -4,12 +4,15 @@
   the app (the DB layer reads the env var at import time), so the real
   backend/sprintflow.db is never touched.
 - Exposes a shared TestClient via the `client` fixture (context-entered so
-  the app startup hook creates/seeds the tmp DB).
+  the app startup hook creates/seeds the tmp DB). The client is pre-authed
+  as the seeded admin (admin@sprintflow.local) so legacy endpoint tests
+  exercise the API with full permissions.
 - Resets board state via POST /api/reset before every test, keeping tests
-  independent and order-free.
+  independent and order-free. Reset preserves the users table.
 
 Black-box contract: imports ONLY `app` from app.py plus stdlib / pytest /
-fastapi.testclient. No backend internals are touched.
+fastapi.testclient. No backend internals are touched (auth is performed
+over HTTP via /api/auth/login).
 """
 import os
 import sys
@@ -26,11 +29,30 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from app import app  # noqa: E402
 
+ADMIN_EMAIL = "admin@sprintflow.local"
+ADMIN_PASSWORD = "Admin123!"
+
 
 @pytest.fixture(scope="session")
 def client():
     """Shared HTTP client for the suite (startup hook seeds the tmp DB)."""
     with TestClient(app) as c:
+        resp = c.post(
+            "/api/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
+        )
+        assert resp.status_code == 200, f"admin seed login failed: {resp.text}"
+        c.headers.update(
+            {"Authorization": f"Bearer {resp.json()['access_token']}"}
+        )
+        yield c
+
+
+@pytest.fixture()
+def anon_client():
+    """Fresh unauthenticated client against the same app/DB (no lifespan
+    re-run needed — the session client already seeded the tmp DB file)."""
+    with TestClient(app) as c:
+        c.headers.pop("Authorization", None)
         yield c
 
 

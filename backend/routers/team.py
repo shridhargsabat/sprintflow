@@ -4,8 +4,9 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+import auth
 import db
 from models import MemberPayload
 
@@ -23,12 +24,17 @@ AVATAR_COLORS = [
 
 
 @router.get("/team")
-def get_team() -> List[Dict[str, Any]]:
+def get_team(
+    _user: Dict[str, Any] = Depends(auth.require_permissions("team.view")),
+) -> List[Dict[str, Any]]:
     return db.list_team()
 
 
 @router.post("/team", status_code=201)
-def add_member(payload: MemberPayload) -> Dict[str, Any]:
+def add_member(
+    payload: MemberPayload,
+    _user: Dict[str, Any] = Depends(auth.require_permissions("team.manage")),
+) -> Dict[str, Any]:
     with db.get_conn() as conn:
         count = conn.execute("SELECT COUNT(*) FROM team_members").fetchone()[0]
         member_id = f"m{int(time.time() * 1000)}"
@@ -42,7 +48,11 @@ def add_member(payload: MemberPayload) -> Dict[str, Any]:
 
 
 @router.put("/team/{member_id}")
-def update_member(member_id: str, payload: MemberPayload) -> Dict[str, Any]:
+def update_member(
+    member_id: str,
+    payload: MemberPayload,
+    _user: Dict[str, Any] = Depends(auth.require_permissions("team.manage")),
+) -> Dict[str, Any]:
     with db.get_conn() as conn:
         existing = conn.execute("SELECT color FROM team_members WHERE id = ?", (member_id,)).fetchone()
         if not existing:
@@ -56,7 +66,10 @@ def update_member(member_id: str, payload: MemberPayload) -> Dict[str, Any]:
 
 
 @router.delete("/team/{member_id}")
-def delete_member(member_id: str) -> Dict[str, str]:
+def delete_member(
+    member_id: str,
+    _user: Dict[str, Any] = Depends(auth.require_permissions("team.manage")),
+) -> Dict[str, str]:
     with db.get_conn() as conn:
         members = conn.execute("SELECT id FROM team_members ORDER BY rowid ASC").fetchall()
         if len(members) <= 1:

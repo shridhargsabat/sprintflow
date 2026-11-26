@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+import auth
 import db
 from models import ImportPayload
 
@@ -17,7 +18,10 @@ def health() -> Dict[str, str]:
 
 
 @router.get("/dashboard/summary")
-def dashboard_summary(sprint: str = Query(default="Sprint 14")) -> Dict[str, Any]:
+def dashboard_summary(
+    sprint: str = Query(default="Sprint 14"),
+    _user: Dict[str, Any] = Depends(auth.require_permissions("tasks.view")),
+) -> Dict[str, Any]:
     tasks = db.list_tasks(sprint=sprint)
     all_backlog = db.list_tasks(status="backlog")
     total_pts = sum(int(t["points"]) for t in tasks)
@@ -39,8 +43,18 @@ def dashboard_summary(sprint: str = Query(default="Sprint 14")) -> Dict[str, Any
     }
 
 
+@router.get("/export")
+def export_board(
+    _user: Dict[str, Any] = Depends(auth.require_permissions("data.export")),
+) -> Dict[str, Any]:
+    return {"team": db.list_team(), "tasks": db.list_tasks()}
+
+
 @router.post("/import")
-def import_board(payload: ImportPayload) -> Dict[str, int]:
+def import_board(
+    payload: ImportPayload,
+    _user: Dict[str, Any] = Depends(auth.require_permissions("data.import")),
+) -> Dict[str, int]:
     with db.get_conn() as conn:
         conn.execute("DELETE FROM tasks")
         conn.execute("DELETE FROM team_members")
@@ -73,6 +87,8 @@ def import_board(payload: ImportPayload) -> Dict[str, int]:
 
 
 @router.post("/reset")
-def reset_board() -> Dict[str, str]:
+def reset_board(
+    _user: Dict[str, Any] = Depends(auth.require_permissions("data.reset")),
+) -> Dict[str, str]:
     db.reset_db()
     return {"status": "reset"}
