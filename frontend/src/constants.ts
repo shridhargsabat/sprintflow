@@ -21,7 +21,7 @@ export const GLASS_PANEL =
   'bg-white/50 dark:bg-white/[0.09] backdrop-blur-2xl backdrop-saturate-[1.6] border border-white/[0.78] dark:border-white/[0.20] shadow-[inset_0_1.5px_1px_rgba(255,255,255,0.95),0_12px_36px_rgba(15,23,42,0.08)] dark:shadow-[inset_0_1px_1px_rgba(255,255,255,0.35),0_16px_40px_rgba(0,0,0,0.45)]';
 
 export const GLASS_MENU =
-  'bg-white/[0.82] dark:bg-white/[0.09] backdrop-blur-2xl backdrop-saturate-[1.6] border border-white/[0.78] dark:border-white/[0.20] shadow-[inset_0_1.5px_1px_rgba(255,255,255,0.95),0_12px_36px_rgba(15,23,42,0.08)] dark:shadow-[inset_0_1px_1px_rgba(255,255,255,0.35),0_16px_40px_rgba(0,0,0,0.45)]';
+  'bg-white dark:bg-white/[0.09] dark:backdrop-blur-2xl dark:backdrop-saturate-[1.6] border border-slate-900/10 dark:border-white/[0.20] shadow-[0_24px_48px_-12px_rgba(15,23,42,0.18),inset_0_1px_0_rgba(255,255,255,1)] dark:shadow-[inset_0_1px_1px_rgba(255,255,255,0.35),0_16px_40px_rgba(0,0,0,0.45)]';
 
 export const GLASS_SUBCARD =
   'lg-card-hover lg-press bg-white/[0.62] dark:bg-white/[0.07] border border-white/[0.85] dark:border-white/[0.15] shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_4px_14px_rgba(15,23,42,0.04)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.20)] transition-all duration-200';
