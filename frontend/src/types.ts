@@ -26,6 +26,8 @@ export interface Task {
 
 export type TaskPayload = Omit<Task, 'id'>;
 
+export type TaskFormValues = TaskPayload & { id: string | null };
+
 export interface Toast {
   id: number;
   message: string;

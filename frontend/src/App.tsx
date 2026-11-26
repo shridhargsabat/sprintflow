@@ -21,8 +21,7 @@ import {
   Trash2,
   Database,
   CheckCircle2,
-  AlertCircle,
-  Sparkles
+  AlertCircle
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -38,7 +37,7 @@ import {
   Line
 } from 'recharts';
 import { api } from './api';
-import type { PriorityFilter, Task, TaskModalState, TaskPriority, TaskStatus, TeamMember, Toast, ToastType, ViewId } from './types';
+import type { BoardImport, PriorityFilter, Task, TaskFormValues, TaskModalState, TaskPriority, TaskStatus, TeamMember, Toast, ToastType, ViewId } from './types';
 
 const TODAY_ISO = '2026-11-26';
 
@@ -84,7 +83,7 @@ function getDueMeta(iso: string, status: TaskStatus): { text: string; cls: strin
   if (!iso) return { text: 'TBD', cls: 'text-slate-400' };
   const today = new Date(TODAY_ISO + 'T00:00:00');
   const due = new Date(iso + 'T00:00:00');
-  const diffDays = Math.round((due - today) / 86400000);
+  const diffDays = Math.round((due.getTime() - today.getTime()) / 86400000);
   if (diffDays < 0) return { text: `${formatShortDate(iso)} · Overdue`, cls: 'text-rose-600 dark:text-rose-400 font-semibold' };
   if (diffDays === 0) return { text: 'Today', cls: 'text-rose-600 dark:text-rose-400 font-semibold' };
   if (diffDays <= 2) return { text: `${formatShortDate(iso)} (${diffDays}d)`, cls: 'text-amber-600 dark:text-amber-300 font-semibold' };
@@ -139,7 +138,7 @@ export default function App() {
     refreshAll();
   }, []);
 
-  const getMember = (id) =>
+  const getMember = (id: string | null): TeamMember =>
     team.find(m => m.id === id) || { id: 'unassigned', name: 'Unassigned', role: 'Open', color: 'bg-slate-400' };
 
   const filteredTasks = useMemo(() => {
@@ -188,7 +187,7 @@ export default function App() {
   }, [filteredTasks, allBacklogTasks]);
 
   const priorityData = useMemo(() => {
-    return Object.keys(PRIORITY_META).map(key => ({
+    return (Object.keys(PRIORITY_META) as TaskPriority[]).map(key => ({
       key,
       name: PRIORITY_META[key].label,
       value: filteredTasks.filter(t => t.priority === key).length,
@@ -235,7 +234,7 @@ export default function App() {
     setSearchQuery('');
   };
 
-  const moveTaskStatus = async (taskId, newStatus) => {
+  const moveTaskStatus = async (taskId: string, newStatus: TaskStatus): Promise<void> => {
     try {
       const updated = await api.moveTaskStatus(taskId, newStatus);
       setTasks(prev => prev.map(t => (t.id === taskId ? updated : t)));
@@ -246,7 +245,7 @@ export default function App() {
     }
   };
 
-  const promoteTask = async (taskId) => {
+  const promoteTask = async (taskId: string): Promise<void> => {
     try {
       const updated = await api.promoteTask(taskId);
       setTasks(prev => prev.map(t => (t.id === taskId ? updated : t)));
@@ -256,7 +255,7 @@ export default function App() {
     }
   };
 
-  const saveTask = async (formValues) => {
+  const saveTask = async (formValues: TaskFormValues): Promise<void> => {
     try {
       if (formValues.id) {
         const updated = await api.updateTask(formValues.id, formValues);
@@ -273,7 +272,7 @@ export default function App() {
     }
   };
 
-  const deleteTask = async (taskId) => {
+  const deleteTask = async (taskId: string): Promise<void> => {
     try {
       await api.deleteTask(taskId);
       setTasks(prev => prev.filter(t => t.id !== taskId));
@@ -296,13 +295,13 @@ export default function App() {
     showToast('Exported board to sprintflow-board.json', 'success');
   };
 
-  const handleImportJson = (e) => {
+  const handleImportJson = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async () => {
       try {
-        const parsed = JSON.parse(reader.result);
+        const parsed = JSON.parse(reader.result as string) as BoardImport;
         if (!Array.isArray(parsed.tasks) || !Array.isArray(parsed.team)) throw new Error('Invalid format');
         await api.importBoard(parsed);
         await refreshAll();
@@ -328,7 +327,7 @@ export default function App() {
     }
   };
 
-  const handleUpdateMember = async (member) => {
+  const handleUpdateMember = async (member: TeamMember): Promise<void> => {
     try {
       const updated = await api.updateMember(member.id, member);
       setTeam(prev => prev.map(m => (m.id === member.id ? updated : m)));
@@ -337,7 +336,7 @@ export default function App() {
     }
   };
 
-  const handleAddMember = async (e) => {
+  const handleAddMember = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     const name = newMemberName.trim();
     if (!name) return;
@@ -352,7 +351,7 @@ export default function App() {
     }
   };
 
-  const handleRemoveMember = async (id) => {
+  const handleRemoveMember = async (id: string): Promise<void> => {
     if (team.length <= 1) return;
     try {
       await api.deleteMember(id);
@@ -435,7 +434,7 @@ export default function App() {
                   <button
                     key={tab.id}
                     type="button"
-                    onClick={() => setActiveView(tab.id)}
+                    onClick={() => setActiveView(tab.id as ViewId)}
                     className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs sm:text-sm transition-all duration-200 ${
                       active
                         ? 'font-semibold bg-white/90 dark:bg-white/20 text-blue-600 dark:text-white shadow-sm'
@@ -546,7 +545,7 @@ export default function App() {
 
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-1 bg-slate-900/[0.05] dark:bg-white/[0.06] p-1 rounded-full border border-white/55 dark:border-white/10">
-                {['all', 'critical', 'high', 'medium', 'low'].map(p => (
+                {(['all', 'critical', 'high', 'medium', 'low'] as PriorityFilter[]).map(p => (
                   <button
                     key={p}
                     type="button"
@@ -945,7 +944,7 @@ export default function App() {
                                     <span className={`text-[10px] shrink-0 ${due.cls}`}>{due.text}</span>
                                   </div>
                                   <div className="mt-2.5">
-                                    <select value={t.status} onChange={e => moveTaskStatus(t.id, e.target.value)} className="w-full text-[10px] font-medium px-2.5 py-1 rounded-full bg-white/60 dark:bg-white/10 border border-white/80 dark:border-white/15">
+                                    <select value={t.status} onChange={e => moveTaskStatus(t.id, e.target.value as TaskStatus)} className="w-full text-[10px] font-medium px-2.5 py-1 rounded-full bg-white/60 dark:bg-white/10 border border-white/80 dark:border-white/15">
                                       {STATUS_COLUMNS.map(s => <option key={s.id} value={s.id} className="text-slate-900">Move to: {s.label}</option>)}
                                     </select>
                                   </div>
@@ -1022,7 +1021,7 @@ export default function App() {
                                   <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${p.pill}`}>{p.label}</span>
                                 </td>
                                 <td className="py-3.5 px-3 whitespace-nowrap">
-                                  <select value={t.status} onChange={e => moveTaskStatus(t.id, e.target.value)} className={`px-2.5 py-1 rounded-full text-[11px] font-semibold ${col.badge} cursor-pointer`}>
+                                  <select value={t.status} onChange={e => moveTaskStatus(t.id, e.target.value as TaskStatus)} className={`px-2.5 py-1 rounded-full text-[11px] font-semibold ${col.badge} cursor-pointer`}>
                                     {STATUS_COLUMNS.map(s => <option key={s.id} value={s.id} className="text-slate-900">{s.label}</option>)}
                                   </select>
                                 </td>
@@ -1117,18 +1116,28 @@ export default function App() {
   );
 }
 
-function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, onSave, onDelete }) {
-  const [title, setTitle] = useState(task ? task.title : '');
-  const [description, setDescription] = useState(task ? task.description || '' : '');
-  const [assigneeId, setAssigneeId] = useState(task ? task.assigneeId : (team[0] ? team[0].id : ''));
-  const [dueDate, setDueDate] = useState(task ? task.dueDate : '2026-12-02');
-  const [status, setStatus] = useState(task ? task.status : defaultStatus);
-  const [priority, setPriority] = useState(task ? task.priority : 'medium');
-  const [sprint, setSprint] = useState(task ? task.sprint : (defaultStatus === 'backlog' ? 'Sprint 15' : defaultSprint));
-  const [points, setPoints] = useState(task ? Number(task.points || 3) : 3);
-  const [tag, setTag] = useState(task ? task.tag : 'Frontend');
+interface TaskModalProps {
+  task: Task | null;
+  defaultStatus: TaskStatus;
+  defaultSprint: string;
+  team: TeamMember[];
+  onClose: () => void;
+  onSave: (values: TaskFormValues) => void;
+  onDelete: (taskId: string) => void;
+}
 
-  const handleSubmit = (e) => {
+function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, onSave, onDelete }: TaskModalProps) {
+  const [title, setTitle] = useState<string>(task ? task.title : '');
+  const [description, setDescription] = useState<string>(task ? task.description || '' : '');
+  const [assigneeId, setAssigneeId] = useState<string | null>(task ? task.assigneeId : (team[0] ? team[0].id : ''));
+  const [dueDate, setDueDate] = useState<string>(task ? task.dueDate : '2026-12-02');
+  const [status, setStatus] = useState<TaskStatus>(task ? task.status : defaultStatus);
+  const [priority, setPriority] = useState<TaskPriority>(task ? task.priority : 'medium');
+  const [sprint, setSprint] = useState<string>(task ? task.sprint : (defaultStatus === 'backlog' ? 'Sprint 15' : defaultSprint));
+  const [points, setPoints] = useState<number>(task ? Number(task.points || 3) : 3);
+  const [tag, setTag] = useState<string>(task ? task.tag : 'Frontend');
+
+  const handleSubmit = (e: React.FormEvent): void => {
     e.preventDefault();
     if (!title.trim()) return;
     onSave({
@@ -1182,13 +1191,13 @@ function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, onSave, 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
               <label className="block text-xs font-semibold mb-1">Status</label>
-              <select value={status} onChange={e => setStatus(e.target.value)} className="w-full px-2.5 py-2 rounded-2xl text-xs bg-white/75 dark:bg-white/10 border border-white/80 dark:border-white/15">
+              <select value={status} onChange={e => setStatus(e.target.value as TaskStatus)} className="w-full px-2.5 py-2 rounded-2xl text-xs bg-white/75 dark:bg-white/10 border border-white/80 dark:border-white/15">
                 {STATUS_COLUMNS.map(s => <option key={s.id} value={s.id} className="text-slate-900">{s.label}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs font-semibold mb-1">Priority</label>
-              <select value={priority} onChange={e => setPriority(e.target.value)} className="w-full px-2.5 py-2 rounded-2xl text-xs bg-white/75 dark:bg-white/10 border border-white/80 dark:border-white/15">
+              <select value={priority} onChange={e => setPriority(e.target.value as TaskPriority)} className="w-full px-2.5 py-2 rounded-2xl text-xs bg-white/75 dark:bg-white/10 border border-white/80 dark:border-white/15">
                 <option value="critical" className="text-slate-900">Critical</option>
                 <option value="high" className="text-slate-900">High</option>
                 <option value="medium" className="text-slate-900">Medium</option>
