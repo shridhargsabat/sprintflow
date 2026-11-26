@@ -73,7 +73,7 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
               <Dropdown
                 value={assigneeId || ''}
                 onChange={setAssigneeId}
-                options={team.map(m => ({ value: m.id, label: `${m.name} (${m.role || 'Team'})` }))}
+                options={team.map(m => ({ value: m.id, label: `${m.name} (${m.role || 'Team'})${m.linkedUser ? ` · ${m.linkedUser.email}` : ''}` }))}
                 className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text"
               />
             </div>

@@ -30,6 +30,7 @@ class MemberPayload(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     role: str = "Engineer"
     color: Optional[str] = None
+    userId: Optional[int] = None
 
 
 class ImportPayload(BaseModel):

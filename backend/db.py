@@ -69,7 +69,8 @@ def init_db(db_path: Optional[str] = None) -> None:
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 role TEXT NOT NULL DEFAULT 'Engineer',
-                color TEXT NOT NULL DEFAULT 'bg-indigo-600'
+                color TEXT NOT NULL DEFAULT 'bg-indigo-600',
+                user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL
             );
 
             CREATE TABLE IF NOT EXISTS tasks (
@@ -118,6 +119,10 @@ def init_db(db_path: Optional[str] = None) -> None:
             seed_data(conn)
         # Additive auto-migration for live DBs that predate the sprints table.
         seed_sprints(conn)
+        # Additive auto-migration: link column for login-user <-> member.
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(team_members)").fetchall()]
+        if "user_id" not in cols:
+            conn.execute("ALTER TABLE team_members ADD COLUMN user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL")
         # Always ensure the seeded admin login exists (idempotent).
         seed_users(conn)
 
@@ -247,8 +252,24 @@ def update_sprint(
 
 def list_team(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
     with get_conn(db_path) as conn:
-        rows = conn.execute("SELECT id, name, role, color FROM team_members ORDER BY rowid ASC").fetchall()
-        return [dict(r) for r in rows]
+        rows = conn.execute(
+            """SELECT m.id, m.name, m.role, m.color, m.user_id AS userId,
+                      u.name AS linkName, u.email AS linkEmail
+               FROM team_members m LEFT JOIN users u ON u.id = m.user_id
+               ORDER BY m.rowid ASC"""
+        ).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            link_name = d.pop("linkName", None)
+            link_email = d.pop("linkEmail", None)
+            d["linkedUser"] = (
+                {"name": link_name, "email": link_email}
+                if d.get("userId") is not None
+                else None
+            )
+            out.append(d)
+        return out
 
 
 def list_tasks(

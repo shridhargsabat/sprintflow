@@ -1,8 +1,12 @@
 import type React from 'react';
+import { useEffect, useState } from 'react';
 import { Trash2, X } from 'lucide-react';
 import { GLASS_PANEL, GLASS_PILL, GLASS_SUBCARD } from '../constants';
 import { getInitials } from '../utils/format';
 import type { TeamMember } from '../types';
+import { api } from '../api';
+import type { ManagedUser } from '../api';
+import Dropdown from './Dropdown';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 
 export interface TeamModalProps {
@@ -20,13 +24,22 @@ export interface TeamModalProps {
 
 export function TeamModal({ team, newMemberName, newMemberRole, onNameChange, onRoleChange, onUpdateMember, onAddMember, onRemoveMember, onRenameMember, onClose }: TeamModalProps) {
   useEscapeKey(onClose);
+  // Login-user linking (admin only; hidden when the list is unavailable).
+  const [linkUsers, setLinkUsers] = useState<ManagedUser[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.listUsers()
+      .then(u => { if (!cancelled) setLinkUsers(u); })
+      .catch(() => { if (!cancelled) setLinkUsers(null); });
+    return () => { cancelled = true; };
+  }, []);
   return (
     <div onClick={onClose} className="lg-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/35 backdrop-blur-md">
-      <div onClick={e => e.stopPropagation()} className={`lg-modal-panel w-full max-w-md rounded-[32px] overflow-hidden ${GLASS_PANEL}`}>
+      <div onClick={e => e.stopPropagation()} className={`lg-modal-panel w-full max-w-lg rounded-[32px] overflow-hidden ${GLASS_PANEL}`}>
         <div className="px-6 py-4 border-b border-slate-900/10 dark:border-white/10 flex items-center justify-between">
           <div>
             <h3 className="text-base font-semibold">Manage Team Members</h3>
-            <p className="text-[11px] text-slate-600 dark:text-slate-400">Edits save directly to SQLite on blur</p>
+            <p className="text-[11px] text-slate-600 dark:text-slate-400">Link login users; name/role save on blur</p>
           </div>
           <button type="button" onClick={onClose} className="w-8 h-8 rounded-full hover:bg-white/60 dark:hover:bg-white/10 flex items-center justify-center">
             <X className="w-4 h-4" />
@@ -39,6 +52,20 @@ export function TeamModal({ team, newMemberName, newMemberRole, onNameChange, on
                 <span className={`w-8 h-8 rounded-full ${m.color} text-white text-xs font-bold flex items-center justify-center shrink-0`}>{getInitials(m.name)}</span>
                 <input type="text" value={m.name} onChange={e => onRenameMember(m.id, { name: e.target.value })} onBlur={() => onUpdateMember(m)} className="flex-1 min-w-0 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text" />
                 <input type="text" value={m.role || ''} placeholder="Role" onChange={e => onRenameMember(m.id, { role: e.target.value })} onBlur={() => onUpdateMember(m)} className="w-24 px-2 py-1.5 rounded-xl text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text" />
+                {linkUsers !== null && (
+                  <div className="w-32 shrink-0">
+                    <Dropdown
+                      value={m.userId != null ? String(m.userId) : ''}
+                      onChange={(v) => {
+                        const uid = v === '' ? null : Number(v);
+                        onRenameMember(m.id, { userId: uid });
+                        onUpdateMember({ ...m, userId: uid });
+                      }}
+                      options={[{ value: '', label: 'No login' }, ...linkUsers.map(u => ({ value: String(u.id), label: u.name }))]}
+                      className="inline-flex w-full items-center justify-between gap-1 rounded-xl px-2 py-1.5 text-[11px] font-medium bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text"
+                    />
+                  </div>
+                )}
                 {team.length > 1 && (
                   <button type="button" onClick={() => onRemoveMember(m.id)} className="p-1.5 rounded-full text-slate-500 hover:text-rose-600">
                     <Trash2 className="w-3.5 h-3.5" />

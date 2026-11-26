@@ -68,7 +68,9 @@ export function TaskDetailsModal({ task, member, onClose, onEdit, onDelete, onPr
             <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Assignee</p>
               <p className="text-sm font-semibold truncate">{member.name}</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{member.role}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                {member.role}{member.linkedUser ? ` · ${member.linkedUser.email}` : ''}
+              </p>
             </div>
           </div>
 

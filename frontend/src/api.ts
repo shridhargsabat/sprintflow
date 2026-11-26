@@ -95,6 +95,7 @@ export interface MemberPayload {
   name: string;
   role?: string;
   color?: string;
+  userId?: number | null;
 }
 
 export const api = {

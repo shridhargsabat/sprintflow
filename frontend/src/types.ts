@@ -9,6 +9,8 @@ export interface TeamMember {
   name: string;
   role: string;
   color: string;
+  userId?: number | null;
+  linkedUser?: { name: string; email: string } | null;
 }
 
 export interface Task {
