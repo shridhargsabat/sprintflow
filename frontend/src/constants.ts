@@ -18,10 +18,10 @@ export const PRIORITY_META: Record<TaskPriority, { label: string; weight: number
 };
 
 export const GLASS_PANEL =
-  'bg-white/10 dark:bg-white/[0.06] backdrop-blur-2xl backdrop-saturate-150 border border-white/75 dark:border-white/[0.14] shadow-[0_12px_40px_-12px_rgba(15,23,42,0.12),inset_0_1px_0_0_rgba(255,255,255,0.85)] dark:shadow-[0_16px_48px_-12px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.16)]';
+  'bg-white/55 dark:bg-white/[0.06] backdrop-blur-2xl backdrop-saturate-150 border border-white/75 dark:border-white/[0.14] shadow-[0_12px_40px_-12px_rgba(15,23,42,0.12),inset_0_1px_0_0_rgba(255,255,255,0.85)] dark:shadow-[0_16px_48px_-12px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.16)]';
 
 export const GLASS_SUBCARD =
-  'lg-card-hover lg-press bg-white/10 dark:bg-white/[0.05] backdrop-blur-xl border border-white/65 dark:border-white/[0.10] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.75)] dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.10)] hover:bg-white/70 dark:hover:bg-white/[0.09] hover:border-white/90 dark:hover:border-white/25 transition-all duration-200';
+  'lg-card-hover lg-press bg-white/45 dark:bg-white/[0.05] backdrop-blur-xl border border-white/65 dark:border-white/[0.10] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.75)] dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.10)] hover:bg-white/70 dark:hover:bg-white/[0.09] hover:border-white/90 dark:hover:border-white/25 transition-all duration-200';
 
 export const GLASS_PILL =
-  'lg-press bg-white/10 dark:bg-white/[0.08] backdrop-blur-xl border border-white/75 dark:border-white/[0.14] shadow-[0_2px_10px_-2px_rgba(15,23,42,0.08),inset_0_1px_0_0_rgba(255,255,255,0.8)] dark:shadow-[0_4px_16px_-2px_rgba(0,0,0,0.35),inset_0_1px_0_0_rgba(255,255,255,0.15)]';
+  'lg-press bg-white/55 dark:bg-white/[0.08] backdrop-blur-xl border border-white/75 dark:border-white/[0.14] shadow-[0_2px_10px_-2px_rgba(15,23,42,0.08),inset_0_1px_0_0_rgba(255,255,255,0.8)] dark:shadow-[0_4px_16px_-2px_rgba(0,0,0,0.35),inset_0_1px_0_0_rgba(255,255,255,0.15)]';
