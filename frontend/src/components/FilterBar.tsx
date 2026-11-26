@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import Dropdown from './Dropdown';
 import { GlassTooltip } from './GlassTooltip';
+import { api, type UserDirectoryEntry } from '../api';
 import { GLASS_PANEL, GLASS_PILL } from '../constants';
 import { formatShortDate } from '../utils/format';
 import type { PriorityFilter, SprintConfig, TeamMember } from '../types';
@@ -48,6 +49,14 @@ export default function FilterBar({
   // Tab, and outside-click closes without stale state).
   const whoWrapRef = useRef<HTMLDivElement>(null);
   const [whoOpen, setWhoOpen] = useState(false);
+  const [directory, setDirectory] = useState<UserDirectoryEntry[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    api.listUserDirectory()
+      .then(users => { if (!cancelled) setDirectory(users); })
+      .catch(() => { /* fail-soft: Who filter keeps member-only options */ });
+    return () => { cancelled = true; };
+  }, []);
   useEffect(() => {
     const btn = whoWrapRef.current?.querySelector('button[aria-expanded]');
     if (!btn) return;
@@ -112,7 +121,7 @@ export default function FilterBar({
               <Dropdown
                 value={assigneeFilter}
                 onChange={onAssigneeFilterChange}
-                options={[{ value: 'all', label: 'Who: Everyone' }, ...team.map(m => ({ value: m.id, label: m.linkedUser ? `${m.name} · ${m.linkedUser.email}` : m.name }))]}
+                options={[{ value: 'all', label: 'Who: Everyone' }, ...team.map(m => ({ value: m.id, label: m.linkedUser ? `${m.name} · ${m.linkedUser.email}` : m.name })), ...directory.map(u => ({ value: `user:${u.id}`, label: `${u.name} · ${u.email}` }))]}
                 className={`inline-flex w-full items-center justify-between gap-2 rounded-full px-3.5 py-1.5 text-xs font-medium cursor-pointer ${GLASS_PILL}`}
               />
             </GlassTooltip>

@@ -65,11 +65,17 @@ function BoardApp() {
         }
       }
       if (priorityFilter !== 'all' && t.priority !== priorityFilter) return false;
-      if (assigneeFilter !== 'all' && t.assigneeId !== assigneeFilter) return false;
+      if (assigneeFilter !== 'all') {
+        if (assigneeFilter.startsWith('user:')) {
+          if (String(t.assigneeUserId ?? '') !== assigneeFilter.slice(5)) return false;
+        } else if (t.assigneeId !== assigneeFilter) {
+          return false;
+        }
+      }
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
         const m = getMember(t.assigneeId);
-        const hay = [t.id, t.title, t.description, t.tag, m.name, t.sprint].join(' ').toLowerCase();
+        const hay = [t.id, t.title, t.description, t.tag, m.name, t.assignedUser?.name ?? '', t.assignedUser?.email ?? '', t.sprint].join(' ').toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;

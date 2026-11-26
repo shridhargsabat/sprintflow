@@ -1,11 +1,14 @@
 """Black-box HTTP tests for /api/tasks (list, filters, CRUD, status, promote)."""
 import pytest
 
+import db as db_lib
+
 TASK_KEYS = {
-    "id", "title", "description", "assigneeId", "dueDate",
-    "status", "priority", "sprint", "points", "tag",
+    "id", "title", "description", "assigneeId", "assigneeUserId", "assignedUser",
+    "dueDate", "status", "priority", "sprint", "points", "tag",
 }
 MISSING_ID = "DEV-999999"
+UNKNOWN_USER_ID = 999999
 
 
 def _payload(title="New test task", **overrides):
@@ -268,3 +271,208 @@ def test_deleted_task_returns_404(client):
 
 def test_delete_unknown_task_404(client):
     assert client.delete(f"/api/tasks/{MISSING_ID}").status_code == 404
+
+
+# ---------- login-user assignee ----------
+
+def _directory(client):
+    resp = client.get("/api/users/directory")
+    assert resp.status_code == 200
+    return resp.json()
+
+
+def _ensure_user(client, email, name, password, role):
+    resp = client.post(
+        "/api/auth/users",
+        json={"email": email, "name": name, "password": password, "role": role},
+    )
+    if resp.status_code == 201:
+        return resp.json()
+    assert resp.status_code == 400, resp.text  # already registered earlier in session
+    found = next(u for u in _directory(client) if u["email"] == email)
+    login = client.post("/api/auth/login", json={"email": email, "password": password})
+    assert login.status_code == 200
+    return {**found, "role": login.json()["user"]["role"]}
+
+
+def _user_assignee(client):
+    return _ensure_user(
+        client, "assignee@sprintflow.local", "Task Assignee", "Assignee123!", "member"
+    )
+
+
+def test_create_task_with_user_only(client):
+    user = _user_assignee(client)
+    resp = client.post(
+        "/api/tasks", json=_payload(assigneeId=None, assigneeUserId=user["id"])
+    )
+    assert resp.status_code == 201
+    created = resp.json()
+    assert TASK_KEYS <= set(created)
+    assert created["assigneeId"] is None
+    assert created["assigneeUserId"] == user["id"]
+    assert created["assignedUser"] == {"name": user["name"], "email": user["email"]}
+
+
+def test_create_task_with_both_assignees(client):
+    user = _user_assignee(client)
+    member_id = _first_member_id(client)
+    resp = client.post(
+        "/api/tasks",
+        json=_payload(assigneeId=member_id, assigneeUserId=user["id"]),
+    )
+    assert resp.status_code == 201
+    created = resp.json()
+    assert created["assigneeId"] == member_id
+    assert created["assigneeUserId"] == user["id"]
+    assert created["assignedUser"] == {"name": user["name"], "email": user["email"]}
+
+
+def test_create_task_with_neither_assignee_nulls(client):
+    resp = client.post("/api/tasks", json=_payload())
+    assert resp.status_code == 201
+    created = resp.json()
+    assert created["assigneeId"] is None
+    assert created["assigneeUserId"] is None
+    assert created["assignedUser"] is None
+
+
+def test_update_task_sets_and_clears_user_assignee(client):
+    user = _user_assignee(client)
+    created = client.post("/api/tasks", json=_payload()).json()
+    assert created["assigneeUserId"] is None
+    updated = client.put(
+        f"/api/tasks/{created['id']}", json=_payload(assigneeUserId=user["id"])
+    )
+    assert updated.status_code == 200
+    assert updated.json()["assigneeUserId"] == user["id"]
+    assert updated.json()["assignedUser"] == {
+        "name": user["name"],
+        "email": user["email"],
+    }
+    cleared = client.put(
+        f"/api/tasks/{created['id']}", json=_payload(assigneeUserId=None)
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["assigneeUserId"] is None
+    assert cleared.json()["assignedUser"] is None
+
+
+def test_create_task_unknown_user_400(client):
+    resp = client.post(
+        "/api/tasks", json=_payload(assigneeUserId=UNKNOWN_USER_ID)
+    )
+    assert resp.status_code == 400
+
+
+def test_update_task_unknown_user_400(client):
+    created = client.post("/api/tasks", json=_payload()).json()
+    resp = client.put(
+        f"/api/tasks/{created['id']}", json=_payload(assigneeUserId=UNKNOWN_USER_ID)
+    )
+    assert resp.status_code == 400
+
+
+def test_list_filter_assignee_user_id(client):
+    user = _user_assignee(client)
+    mine = client.post(
+        "/api/tasks",
+        json=_payload(title="User-filtered task", assigneeUserId=user["id"]),
+    ).json()
+    other = client.post("/api/tasks", json=_payload(title="Unassigned task")).json()
+    resp = client.get("/api/tasks", params={"assigneeUserId": user["id"]})
+    assert resp.status_code == 200
+    got = resp.json()
+    assert got
+    assert mine["id"] in {t["id"] for t in got}
+    assert other["id"] not in {t["id"] for t in got}
+    assert all(t["assigneeUserId"] == user["id"] for t in got)
+
+
+def test_list_filter_assignee_user_id_combines_with_status(client):
+    user = _user_assignee(client)
+    target = client.post(
+        "/api/tasks",
+        json=_payload(status="in_progress", assigneeUserId=user["id"]),
+    ).json()
+    decoy = client.post(
+        "/api/tasks", json=_payload(status="todo", assigneeUserId=user["id"])
+    ).json()
+    resp = client.get(
+        "/api/tasks",
+        params={"assigneeUserId": user["id"], "status": "in_progress"},
+    )
+    assert resp.status_code == 200
+    got = resp.json()
+    assert target["id"] in {t["id"] for t in got}
+    assert decoy["id"] not in {t["id"] for t in got}
+    assert all(
+        t["assigneeUserId"] == user["id"] and t["status"] == "in_progress" for t in got
+    )
+
+
+# ---------- user directory ----------
+
+def test_user_directory_shape_sorted_by_name(client):
+    second = _ensure_user(
+        client, "aaron@sprintflow.local", "Aaron Aardvark", "Aaron123!", "viewer"
+    )
+    entries = _directory(client)
+    assert entries
+    for entry in entries:
+        assert set(entry.keys()) == {"id", "name", "email"}
+    names = [e["name"] for e in entries]
+    assert names == sorted(names, key=str.lower)
+    assert {second["email"], "admin@sprintflow.local"} <= {e["email"] for e in entries}
+
+
+def test_user_directory_open_to_viewer_but_closed_anon(client, anon_client):
+    viewer = _ensure_user(
+        client, "dirviewer@sprintflow.local", "Dir Viewer", "Dirview123!", "viewer"
+    )
+    assert viewer["role"] == "viewer"
+    login = anon_client.post(
+        "/api/auth/login",
+        json={"email": "dirviewer@sprintflow.local", "password": "Dirview123!"},
+    )
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+    resp = anon_client.get(
+        "/api/users/directory", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+    assert anon_client.get("/api/users/directory").status_code == 401
+
+
+# ---------- migration backfill ----------
+
+def test_backfill_copies_linked_member_user_without_overwriting(client):
+    user = _user_assignee(client)
+    other = _ensure_user(
+        client, "backfill@sprintflow.local", "Backfill Other", "Backfill123!", "member"
+    )
+    member = client.get("/api/team").json()[0]
+    link = client.put(
+        f"/api/team/{member['id']}",
+        json={"name": member["name"], "userId": user["id"]},
+    )
+    assert link.status_code == 200
+    # Member-only task: no auto-fill on create, backfilled by init_db.
+    inherited = client.post(
+        "/api/tasks", json=_payload(assigneeId=member["id"])
+    ).json()
+    assert inherited["assigneeUserId"] is None
+    # Explicit user assignee must survive the backfill untouched.
+    explicit = client.post(
+        "/api/tasks",
+        json=_payload(assigneeId=member["id"], assigneeUserId=other["id"]),
+    ).json()
+    db_lib.init_db()
+    tasks = {t["id"]: t for t in _all_tasks(client)}
+    assert tasks[inherited["id"]]["assigneeUserId"] == user["id"]
+    assert tasks[inherited["id"]]["assignedUser"] == {
+        "name": user["name"],
+        "email": user["email"],
+    }
+    assert tasks[explicit["id"]]["assigneeUserId"] == other["id"]

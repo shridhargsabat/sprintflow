@@ -380,6 +380,9 @@ export default function DashboardView({
                 <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400 mt-2">
                   <span className="flex items-center gap-1.5">
                     <span className={`w-5 h-5 rounded-full ${m.color} text-white text-[9px] font-bold inline-flex items-center justify-center`}>{getInitials(m.name)}</span>
+                    {t.assigneeUserId != null && (
+                      <span title={t.assignedUser ? `${t.assignedUser.name} (${t.assignedUser.email})` : `User #${t.assigneeUserId}`} className="w-5 h-5 rounded-full bg-indigo-500 text-white text-[9px] font-bold inline-flex items-center justify-center">{t.assignedUser ? getInitials(t.assignedUser.name) : 'U'}</span>
+                    )}
                     <span className="font-medium text-slate-800 dark:text-slate-200">{m.name}</span>
                   </span>
                   <span className={due.cls}>{due.text}</span>
@@ -417,7 +420,13 @@ export default function DashboardView({
                   </div>
                   <div className="min-w-0">
                     <p className="text-xs font-semibold truncate">{t.title}</p>
-                    <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate">{m.name} · {t.tag} · <span className={due.cls}>{due.text}</span></p>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate">
+                      {m.name}
+                      {t.assigneeUserId != null && (
+                        <span title={t.assignedUser ? `${t.assignedUser.name} (${t.assignedUser.email})` : `User #${t.assigneeUserId}`} className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-indigo-500 text-white text-[8px] font-bold ml-1 align-middle">{t.assignedUser ? getInitials(t.assignedUser.name) : 'U'}</span>
+                      )}
+                      {' '}· {t.tag} · <span className={due.cls}>{due.text}</span>
+                    </p>
                   </div>
                 </div>
                 <span className={`w-2.5 h-2.5 rounded-full ${p.dot} shrink-0`} />

@@ -14,6 +14,7 @@ class TaskPayload(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     description: str = ""
     assigneeId: Optional[str] = None
+    assigneeUserId: Optional[int] = None
     dueDate: str = Field(..., min_length=4, max_length=32)
     status: StatusType = "todo"
     priority: PriorityType = "medium"

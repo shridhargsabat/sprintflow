@@ -110,7 +110,11 @@ def test_import_round_trip_and_reset_restores_seeds(client):
         {k: m[k] for k in ("id", "name", "role", "color")} for m in got_team
     ] == sorted(payload["team"], key=lambda m: m["id"])
     got_tasks = sorted(client.get("/api/tasks").json(), key=lambda t: t["id"])
-    assert got_tasks == sorted(payload["tasks"], key=lambda t: t["id"])
+    expected_tasks = [
+        {**t, "assigneeUserId": None, "assignedUser": None}
+        for t in sorted(payload["tasks"], key=lambda t: t["id"])
+    ]
+    assert got_tasks == expected_tasks
 
     summary = client.get("/api/dashboard/summary", params={"sprint": "Sprint 99"}).json()
     assert summary["totalTasks"] == 2

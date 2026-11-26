@@ -34,6 +34,12 @@ export interface ManagedUser {
   role: Role;
 }
 
+export interface UserDirectoryEntry {
+  id: number;
+  name: string;
+  email: string;
+}
+
 export interface CreateUserPayload {
   email: string;
   name: string;
@@ -142,5 +148,8 @@ export const api = {
   deleteUser: (id: number): Promise<{ deleted: number }> =>
     request<{ deleted: number }>(`/auth/users/${id}`, { method: 'DELETE' }),
   updateUser: (id: number, payload: UpdateUserPayload): Promise<ManagedUser> =>
-    request<ManagedUser>(`/auth/users/${id}`, { method: 'PUT', body: JSON.stringify(payload) })
+    request<ManagedUser>(`/auth/users/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+
+  listUserDirectory: (): Promise<UserDirectoryEntry[]> =>
+    request<UserDirectoryEntry[]>('/users/directory')
 };

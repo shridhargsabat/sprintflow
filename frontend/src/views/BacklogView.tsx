@@ -91,9 +91,19 @@ export default function BacklogView({ tasks, team, onOpenTask, onOpenDetails, on
                       </div>
                     </td>
                     <td className="py-3.5 px-3 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <span className={`w-6 h-6 rounded-full ${m.color} text-white text-[10px] font-bold flex items-center justify-center shrink-0`}>{getInitials(m.name)}</span>
-                        <span className="font-medium">{m.name}</span>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-6 h-6 rounded-full ${m.color} text-white text-[10px] font-bold flex items-center justify-center shrink-0`}>{getInitials(m.name)}</span>
+                          <span className="font-medium">{m.name}</span>
+                        </div>
+                        {t.assigneeUserId != null && (
+                          <GlassTooltip label={t.assignedUser ? t.assignedUser.email : `User #${t.assigneeUserId}`} position="bottom" className="inline-flex">
+                            <div className="flex items-center gap-2">
+                              <span className="w-6 h-6 rounded-full bg-indigo-500 text-white text-[10px] font-bold flex items-center justify-center shrink-0">{t.assignedUser ? getInitials(t.assignedUser.name) : 'U'}</span>
+                              <span className="font-medium">{t.assignedUser ? t.assignedUser.name : `User #${t.assigneeUserId}`}</span>
+                            </div>
+                          </GlassTooltip>
+                        )}
                       </div>
                     </td>
                     <td className={`py-3.5 px-3 whitespace-nowrap ${due.cls}`}>{due.text}</td>

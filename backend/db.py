@@ -90,6 +90,7 @@ def init_db(db_path: Optional[str] = None) -> None:
                 tag TEXT NOT NULL DEFAULT 'Frontend',
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                assignee_user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
                 FOREIGN KEY (assignee_id) REFERENCES team_members(id) ON DELETE SET NULL
             );
 
@@ -125,6 +126,10 @@ def init_db(db_path: Optional[str] = None) -> None:
         cols = [r[1] for r in conn.execute("PRAGMA table_info(team_members)").fetchall()]
         if "user_id" not in cols:
             conn.execute("ALTER TABLE team_members ADD COLUMN user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL")
+        # Additive auto-migration: optional login-user assignee on tasks.
+        task_cols = [r[1] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()]
+        if "assignee_user_id" not in task_cols:
+            conn.execute("ALTER TABLE tasks ADD COLUMN assignee_user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL")
         # Link-integrity migrations (idempotent, run on every startup):
         # 1) Backfill: dangling user_id (no matching users row) -> NULL so no
         #    ghost linkedUser is ever surfaced.
@@ -155,6 +160,23 @@ def init_db(db_path: Optional[str] = None) -> None:
         )
         # Always ensure the seeded admin login exists (idempotent).
         seed_users(conn)
+        # Backfill (idempotent, NULLs only — never overwrites explicit values):
+        # tasks whose assignee member is linked to a login user inherit that
+        # user as their direct assignee.
+        conn.execute(
+            """
+            UPDATE tasks
+            SET assignee_user_id = (
+                SELECT m.user_id FROM team_members m WHERE m.id = tasks.assignee_id
+            )
+            WHERE assignee_user_id IS NULL
+              AND assignee_id IS NOT NULL
+              AND EXISTS (
+                  SELECT 1 FROM team_members m
+                  WHERE m.id = tasks.assignee_id AND m.user_id IS NOT NULL
+              )
+            """
+        )
 
 
 def seed_data(conn: sqlite3.Connection) -> None:
@@ -213,12 +235,32 @@ def reset_db(db_path: Optional[str] = None) -> None:
         seed_data(conn)
 
 
+TASK_WITH_USER_SQL = """
+    SELECT t.*, u.name AS assigned_name, u.email AS assigned_email
+    FROM tasks t LEFT JOIN users u ON u.id = t.assignee_user_id
+    WHERE t.id = ?
+"""
+
+
 def row_to_task(row: sqlite3.Row) -> Dict[str, Any]:
+    keys = set(row.keys())
+    assignee_user_id = row["assignee_user_id"] if "assignee_user_id" in keys else None
+    assigned_name = row["assigned_name"] if "assigned_name" in keys else None
+    assigned_email = row["assigned_email"] if "assigned_email" in keys else None
+    # Ghost-free like list_team: a dangling assignee_user_id (no matching
+    # users row) surfaces assignedUser None rather than {None, None}.
+    assigned_user = (
+        {"name": assigned_name, "email": assigned_email}
+        if assigned_name is not None
+        else None
+    )
     return {
         "id": row["id"],
         "title": row["title"],
         "description": row["description"],
         "assigneeId": row["assignee_id"],
+        "assigneeUserId": assignee_user_id,
+        "assignedUser": assigned_user,
         "dueDate": row["due_date"],
         "status": row["status"],
         "priority": row["priority"],
@@ -226,6 +268,14 @@ def row_to_task(row: sqlite3.Row) -> Dict[str, Any]:
         "points": row["points"],
         "tag": row["tag"],
     }
+
+
+def fetch_task(conn: sqlite3.Connection, task_id: str) -> Dict[str, Any]:
+    """Single task row with its assigned login user joined in."""
+    row = conn.execute(TASK_WITH_USER_SQL, (task_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return row_to_task(row)
 
 
 def next_task_id(conn: sqlite3.Connection) -> str:
@@ -309,6 +359,7 @@ def list_tasks(
     status: Optional[str] = None,
     priority: Optional[str] = None,
     assignee_id: Optional[str] = None,
+    assignee_user_id: Optional[int] = None,
     search: Optional[str] = None,
     db_path: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
@@ -316,29 +367,43 @@ def list_tasks(
     params: List[Any] = []
     if sprint and sprint != "all":
         if sprint == "Backlog":
-            clauses.append("(sprint = 'Backlog' OR status = 'backlog')")
+            clauses.append("(t.sprint = 'Backlog' OR t.status = 'backlog')")
         else:
-            clauses.append("sprint = ?")
+            clauses.append("t.sprint = ?")
             params.append(sprint)
     if status and status != "all":
-        clauses.append("status = ?")
+        clauses.append("t.status = ?")
         params.append(status)
     if priority and priority != "all":
-        clauses.append("priority = ?")
+        clauses.append("t.priority = ?")
         params.append(priority)
     if assignee_id and assignee_id != "all":
-        clauses.append("assignee_id = ?")
+        clauses.append("t.assignee_id = ?")
         params.append(assignee_id)
+    if assignee_user_id is not None:
+        clauses.append("t.assignee_user_id = ?")
+        params.append(assignee_user_id)
     if search and search.strip():
         like = f"%{search.strip()}%"
-        clauses.append("(id LIKE ? OR title LIKE ? OR description LIKE ? OR tag LIKE ?)")
+        clauses.append("(t.id LIKE ? OR t.title LIKE ? OR t.description LIKE ? OR t.tag LIKE ?)")
         params.extend([like, like, like, like])
 
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-    sql = f"SELECT * FROM tasks {where} ORDER BY updated_at DESC, rowid DESC"
+    sql = f"""SELECT t.*, u.name AS assigned_name, u.email AS assigned_email
+              FROM tasks t LEFT JOIN users u ON u.id = t.assignee_user_id
+              {where} ORDER BY t.updated_at DESC, t.rowid DESC"""
     with get_conn(db_path) as conn:
         rows = conn.execute(sql, params).fetchall()
         return [row_to_task(r) for r in rows]
+
+
+def list_user_directory(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Login-user directory for task assignment: [{id, name, email}], by name."""
+    with get_conn(db_path) as conn:
+        rows = conn.execute(
+            "SELECT id, name, email FROM users ORDER BY name COLLATE NOCASE ASC"
+        ).fetchall()
+        return [dict(r) for r in rows]
 
 
 def validate_assignee_id(conn: sqlite3.Connection, assignee_id: Optional[str]) -> None:
@@ -359,4 +424,17 @@ def validate_assignee_id(conn: sqlite3.Connection, assignee_id: Optional[str]) -
     if row is None:
         raise HTTPException(
             status_code=400, detail=f"Unknown assigneeId: {assignee_id}"
+        )
+
+
+def validate_assignee_user_id(conn: sqlite3.Connection, assignee_user_id: Optional[int]) -> None:
+    """Reject an unknown login-user task assignee with HTTP 400. None OK."""
+    if assignee_user_id is None:
+        return
+    row = conn.execute(
+        "SELECT 1 FROM users WHERE id = ?", (assignee_user_id,)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(
+            status_code=400, detail=f"Unknown assigneeUserId: {assignee_user_id}"
         )

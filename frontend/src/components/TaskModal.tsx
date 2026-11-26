@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import Dropdown from './Dropdown';
 import Calendar from './Calendar';
 import { useEscapeKey } from '../hooks/useEscapeKey';
+import { api, type UserDirectoryEntry } from '../api';
 import { GLASS_PANEL, GLASS_PILL, STATUS_COLUMNS } from '../constants';
 import type { Task, TaskFormValues, TaskPriority, TaskStatus, TeamMember } from '../types';
 
@@ -21,12 +22,25 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
   const [title, setTitle] = useState<string>(task ? task.title : '');
   const [description, setDescription] = useState<string>(task ? task.description || '' : '');
   const [assigneeId, setAssigneeId] = useState<string | null>(task ? task.assigneeId : (team[0] ? team[0].id : ''));
+  const [assigneeUserId, setAssigneeUserId] = useState<number | null>(task?.assigneeUserId ?? null);
+  const [directory, setDirectory] = useState<UserDirectoryEntry[]>([]);
+  const [dirFailed, setDirFailed] = useState<boolean>(false);
   const [dueDate, setDueDate] = useState<string>(task ? task.dueDate : '2026-12-02');
   const [status, setStatus] = useState<TaskStatus>(task ? task.status : defaultStatus);
   const [priority, setPriority] = useState<TaskPriority>(task ? task.priority : 'medium');
   const [sprint, setSprint] = useState<string>(task ? task.sprint : (defaultStatus === 'backlog' ? 'Sprint 15' : defaultSprint));
   const [points, setPoints] = useState<number>(task ? Number(task.points || 3) : 3);
   const [tag, setTag] = useState<string>(task ? task.tag : 'Frontend');
+
+  // Fail-soft: if the directory cannot load, the Login user picker is hidden
+  // and the task simply keeps/submits no login-user assignment.
+  useEffect(() => {
+    let cancelled = false;
+    api.listUserDirectory()
+      .then(users => { if (!cancelled) setDirectory(users); })
+      .catch(() => { if (!cancelled) setDirFailed(true); });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleSubmit = (e: React.FormEvent): void => {
     e.preventDefault();
@@ -36,6 +50,7 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
       title: title.trim(),
       description: description.trim(),
       assigneeId,
+      assigneeUserId,
       dueDate,
       status,
       priority,
@@ -67,24 +82,38 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
             <label className="block text-xs font-semibold mb-1">Description</label>
             <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} className="w-full px-3.5 py-2.5 rounded-2xl text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold mb-1">Assignee (Who)</label>
-              <Dropdown
-                value={assigneeId || ''}
-                onChange={setAssigneeId}
-                options={team.map(m => ({ value: m.id, label: `${m.name} (${m.role || 'Team'})${m.linkedUser ? ` · ${m.linkedUser.email}` : ''}` }))}
-                className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text"
-              />
+          <div>
+            <label className="block text-xs font-semibold mb-1">Assignee (Who)</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">Team member</span>
+                <Dropdown
+                  value={assigneeId || ''}
+                  onChange={setAssigneeId}
+                  options={team.map(m => ({ value: m.id, label: `${m.name} (${m.role || 'Team'})${m.linkedUser ? ` · ${m.linkedUser.email}` : ''}` }))}
+                  className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text"
+                />
+              </div>
+              {!dirFailed && (
+                <div>
+                  <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">Login user</span>
+                  <Dropdown
+                    value={assigneeUserId == null ? '' : String(assigneeUserId)}
+                    onChange={(v) => setAssigneeUserId(v === '' ? null : Number(v))}
+                    options={[{ value: '', label: 'No user' }, ...directory.map(u => ({ value: String(u.id), label: `${u.name} (${u.email})` }))]}
+                    className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text"
+                  />
+                </div>
+              )}
             </div>
-            <div>
-              <label className="block text-xs font-semibold mb-1">Due Date (When) *</label>
-              <Calendar
-                value={dueDate}
-                onChange={setDueDate}
-                className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text"
-              />
-            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1">Due Date (When) *</label>
+            <Calendar
+              value={dueDate}
+              onChange={setDueDate}
+              className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text"
+            />
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>

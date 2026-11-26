@@ -74,6 +74,21 @@ export function TaskDetailsModal({ task, member, onClose, onEdit, onDelete, onPr
             </div>
           </div>
 
+          {task.assigneeUserId != null && (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-white/45 dark:bg-white/[0.05] border border-white/65 dark:border-white/10">
+              <span className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 bg-indigo-500">
+                {task.assignedUser ? getInitials(task.assignedUser.name) : 'U'}
+              </span>
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Login user</p>
+                <p className="text-sm font-semibold truncate">{task.assignedUser ? task.assignedUser.name : `User #${task.assigneeUserId}`}</p>
+                {task.assignedUser && (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{task.assignedUser.email}</p>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center gap-2 text-sm">
             <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0" />
             <span className="text-slate-500 dark:text-slate-400">Due {formatShortDate(task.dueDate)}</span>

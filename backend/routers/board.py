@@ -98,17 +98,19 @@ def import_board(
                 (m["id"], m["name"], m.get("role", "Engineer"), m.get("color", "bg-indigo-600"), user_id),
             )
         for t in payload.tasks:
+            task_uid = _resolve_import_assignee_user_id(t, warnings, conn)
             conn.execute(
                 """
                 INSERT INTO tasks
-                    (id, title, description, assignee_id, due_date, status, priority, sprint, points, tag)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, title, description, assignee_id, assignee_user_id, due_date, status, priority, sprint, points, tag)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     t["id"],
                     t["title"],
                     t.get("description", ""),
                     t.get("assigneeId"),
+                    task_uid,
                     t.get("dueDate", "2026-12-02"),
                     t.get("status", "todo"),
                     t.get("priority", "medium"),
@@ -118,6 +120,27 @@ def import_board(
                 ),
             )
     return {"team": len(payload.team), "tasks": len(payload.tasks), "warnings": warnings}
+
+
+def _resolve_import_assignee_user_id(
+    task: Dict[str, Any], warnings: List[str], conn: Any
+) -> Optional[int]:
+    """Validate an imported task's assigneeUserId; unknown -> NULL + warning."""
+    uid = task.get("assigneeUserId")
+    if uid is None:
+        return None
+    try:
+        uid_int: Optional[int] = int(uid)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        uid_int = None
+    if uid_int is None or conn.execute(
+        "SELECT 1 FROM users WHERE id = ?", (uid_int,)
+    ).fetchone() is None:
+        warnings.append(
+            f"Task '{task.get('id', '?')}' references unknown assigneeUserId {uid!r}; cleared (set to NULL)"
+        )
+        return None
+    return uid_int
 
 
 @router.post("/reset")

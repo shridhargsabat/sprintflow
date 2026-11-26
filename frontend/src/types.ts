@@ -18,6 +18,8 @@ export interface Task {
   title: string;
   description: string;
   assigneeId: string | null;
+  assigneeUserId?: number | null;
+  assignedUser?: { name: string; email: string } | null;
   dueDate: string;
   status: TaskStatus;
   priority: TaskPriority;

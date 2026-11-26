@@ -109,7 +109,12 @@ export default function KanbanView({ tasks, team, onOpenTask, onOpenDetails, onM
                       <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-slate-900/[0.07] dark:border-white/10">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <span className={`w-5 h-5 rounded-full ${m.color} text-white text-[9px] font-bold flex items-center justify-center shrink-0`}>{getInitials(m.name)}</span>
-                          <span className="text-[11px] font-medium truncate">{m.name}</span>
+                          {t.assigneeUserId != null && (
+                            <GlassTooltip label={t.assignedUser ? `${t.assignedUser.name} (${t.assignedUser.email})` : `User #${t.assigneeUserId}`}>
+                              <span className="w-5 h-5 rounded-full bg-indigo-500 text-white text-[9px] font-bold flex items-center justify-center shrink-0">{t.assignedUser ? getInitials(t.assignedUser.name) : 'U'}</span>
+                            </GlassTooltip>
+                          )}
+                          <span className="text-[11px] font-medium truncate">{m.name}{t.assignedUser ? ` + ${t.assignedUser.name}` : ''}</span>
                         </div>
                         <span className={`text-[10px] shrink-0 ${due.cls}`}>{due.text}</span>
                       </div>
