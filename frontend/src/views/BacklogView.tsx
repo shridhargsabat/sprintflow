@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import Dropdown from '../components/Dropdown';
+import GlassTooltip from '../components/GlassTooltip';
 import type { Task, TaskStatus, TeamMember } from '../types';
 import { GLASS_PANEL, GLASS_PILL, PRIORITY_META, STATUS_COLUMNS } from '../constants';
 import { getDueMeta, getInitials } from '../utils/format';
@@ -109,18 +110,24 @@ export default function BacklogView({ tasks, team, onOpenTask, onOpenDetails, on
                     </td>
                     <td className="py-3.5 px-3 whitespace-nowrap">
                       <span className="font-semibold">{t.sprint}</span>
-                      <span className="text-slate-500 dark:text-slate-400 ml-1">· {t.points} pts</span>
+                      <GlassTooltip label="Story point estimate">
+                        <span className="text-slate-500 dark:text-slate-400 ml-1">· {t.points} pts</span>
+                      </GlassTooltip>
                     </td>
                     <td className="py-3.5 px-5 whitespace-nowrap text-right">
                       <div className="inline-flex items-center gap-1.5">
                         {t.status === 'backlog' && (
-                          <button type="button" onClick={() => onPromoteTask(t.id)} className="px-3 py-1 rounded-full text-[11px] font-semibold bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-400/30">
-                            Pull to Sprint
-                          </button>
+                          <GlassTooltip label="Pull into sprint">
+                            <button type="button" onClick={() => onPromoteTask(t.id)} className="px-3 py-1 rounded-full text-[11px] font-semibold bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-400/30">
+                              Pull to Sprint
+                            </button>
+                          </GlassTooltip>
                         )}
-                        <button type="button" onClick={() => onOpenTask(t, t.status)} className={`px-3 py-1 rounded-full text-[11px] font-semibold ${GLASS_PILL}`}>
-                          Edit
-                        </button>
+                        <GlassTooltip label="Edit this task">
+                          <button type="button" onClick={() => onOpenTask(t, t.status)} className={`px-3 py-1 rounded-full text-[11px] font-semibold ${GLASS_PILL}`}>
+                            Edit
+                          </button>
+                        </GlassTooltip>
                       </div>
                     </td>
                   </tr>

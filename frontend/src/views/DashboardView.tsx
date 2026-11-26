@@ -20,6 +20,7 @@ import {
   Line
 } from 'recharts';
 import type { PriorityFilter, SprintConfig, Task, TaskPriority, TaskStatus, TeamMember } from '../types';
+import GlassTooltip from '../components/GlassTooltip';
 import { PRIORITY_META, GLASS_PANEL, GLASS_SUBCARD, GLASS_PILL, TODAY_ISO } from '../constants';
 import { getInitials, formatShortDate, getDueMeta } from '../utils/format';
 
@@ -203,15 +204,17 @@ export default function DashboardView({
 
         <div className="relative z-10 grid grid-cols-4 gap-2 pt-3 border-t border-white/20">
           {[
-            { label: 'Ongoing', val: kpis.ongoing },
-            { label: 'Review', val: kpis.review },
-            { label: 'Backlog', val: kpis.backlog },
-            { label: 'Critical', val: kpis.criticalOpen, highlight: true }
+            { label: 'Ongoing', val: kpis.ongoing, tip: 'Tasks in progress' },
+            { label: 'Review', val: kpis.review, tip: 'Tasks in review' },
+            { label: 'Backlog', val: kpis.backlog, tip: 'Queued backlog tasks' },
+            { label: 'Critical', val: kpis.criticalOpen, highlight: true, tip: 'Open critical tasks' }
           ].map(kpi => (
-            <div key={kpi.label} className="rounded-2xl bg-white/15 backdrop-blur-md border border-white/25 px-3 py-2">
-              <p className={`text-[10px] uppercase tracking-wider font-semibold ${kpi.highlight ? 'text-rose-100' : 'text-white/75'}`}>{kpi.label}</p>
-              <p className="text-lg font-bold mt-0.5">{kpi.val}</p>
-            </div>
+            <GlassTooltip key={kpi.label} label={kpi.tip} className="block">
+              <div className="rounded-2xl bg-white/15 backdrop-blur-md border border-white/25 px-3 py-2">
+                <p className={`text-[10px] uppercase tracking-wider font-semibold ${kpi.highlight ? 'text-rose-100' : 'text-white/75'}`}>{kpi.label}</p>
+                <p className="text-lg font-bold mt-0.5">{kpi.val}</p>
+              </div>
+            </GlassTooltip>
           ))}
         </div>
       </div>
@@ -240,13 +243,15 @@ export default function DashboardView({
         </div>
         <div className="grid grid-cols-2 gap-2 mt-2">
           {priorityData.map(item => (
-            <button key={item.key} type="button" onClick={() => onOpenKanban(item.key)} className={`flex items-center justify-between px-3 py-1.5 rounded-full text-left ${GLASS_SUBCARD}`}>
-              <span className="flex items-center gap-1.5 text-[11px] font-medium">
-                <span className={`w-2 h-2 rounded-full ${PRIORITY_META[item.key].dot}`} />
-                {item.name}
-              </span>
-              <span className="text-xs font-bold">{item.value}</span>
-            </button>
+            <GlassTooltip key={item.key} label={`Filter ${item.name} in Kanban`} className="block">
+              <button type="button" onClick={() => onOpenKanban(item.key)} className={`w-full flex items-center justify-between px-3 py-1.5 rounded-full text-left ${GLASS_SUBCARD}`}>
+                <span className="flex items-center gap-1.5 text-[11px] font-medium">
+                  <span className={`w-2 h-2 rounded-full ${PRIORITY_META[item.key].dot}`} />
+                  {item.name}
+                </span>
+                <span className="text-xs font-bold">{item.value}</span>
+              </button>
+            </GlassTooltip>
           ))}
         </div>
       </div>
@@ -257,9 +262,11 @@ export default function DashboardView({
             <h3 className="text-sm font-semibold tracking-tight">Sprint Burndown</h3>
             <p className="text-[11px] text-slate-600 dark:text-slate-400">Ideal vs. remaining story points</p>
           </div>
-          <span className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold border ${burndownOnTrack ? 'bg-emerald-500/15 text-emerald-700 border-emerald-400/30 dark:text-emerald-300' : 'bg-amber-500/15 text-amber-800 border-amber-400/30 dark:text-amber-300'}`}>
-            {burndownOnTrack ? 'On Track' : 'Slightly Behind'}
-          </span>
+          <GlassTooltip label={burndownOnTrack ? 'Sprint pace on track' : 'Sprint pace slightly behind'}>
+            <span className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold border ${burndownOnTrack ? 'bg-emerald-500/15 text-emerald-700 border-emerald-400/30 dark:text-emerald-300' : 'bg-amber-500/15 text-amber-800 border-amber-400/30 dark:text-amber-300'}`}>
+              {burndownOnTrack ? 'On Track' : 'Slightly Behind'}
+            </span>
+          </GlassTooltip>
         </div>
         <div className="h-48 w-full mt-2">
           <ResponsiveContainer width="100%" height="100%">
@@ -287,9 +294,11 @@ export default function DashboardView({
             <h3 className="text-sm font-semibold tracking-tight">Who Is Doing What</h3>
             <p className="text-[11px] text-slate-600 dark:text-slate-400">Live team allocation, active focus &amp; next deadline</p>
           </div>
-          <button type="button" onClick={onOpenTeam} className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
-            <UserCog className="w-3.5 h-3.5" /> Rename Team
-          </button>
+          <GlassTooltip label="Rename team members">
+            <button type="button" onClick={onOpenTeam} className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
+              <UserCog className="w-3.5 h-3.5" /> Rename Team
+            </button>
+          </GlassTooltip>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1">
           {team.map(member => {
@@ -337,9 +346,11 @@ export default function DashboardView({
             <h3 className="text-sm font-semibold tracking-tight">Ongoing Tasks</h3>
             <p className="text-[11px] text-slate-600 dark:text-slate-400">Currently in progress or code review</p>
           </div>
-          <button type="button" onClick={() => onOpenKanban()} className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
-            Open Kanban <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+          <GlassTooltip label="Open Kanban board">
+            <button type="button" onClick={() => onOpenKanban()} className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
+              Open Kanban <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </GlassTooltip>
         </div>
         <div className="space-y-2.5 overflow-y-auto scroll-slim max-h-[320px] pr-1">
           {ongoingTasks.length === 0 ? (
@@ -418,9 +429,11 @@ export default function DashboardView({
             <h3 className="text-sm font-semibold tracking-tight">Priority Backlog</h3>
             <p className="text-[11px] text-slate-600 dark:text-slate-400">Queued work ready to pull into active sprint</p>
           </div>
-          <button type="button" onClick={onOpenBacklog} className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
-            Full Backlog <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+          <GlassTooltip label="Open full backlog">
+            <button type="button" onClick={onOpenBacklog} className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
+              Full Backlog <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </GlassTooltip>
         </div>
         <div className="space-y-2.5 overflow-y-auto scroll-slim max-h-[260px] pr-1">
           {backlogTasks.length === 0 ? (
@@ -438,9 +451,11 @@ export default function DashboardView({
                   <p className="text-xs font-semibold truncate">{t.title}</p>
                   <p className="text-[10px] text-slate-600 dark:text-slate-400">{m.name} · Target {formatShortDate(t.dueDate)}</p>
                 </div>
-                <button type="button" onClick={() => onPromoteTask(t.id)} className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-semibold hover:text-blue-600 ${GLASS_PILL}`}>
-                  Pull to Sprint
-                </button>
+                <GlassTooltip label="Pull into sprint" className="inline-flex shrink-0">
+                  <button type="button" onClick={() => onPromoteTask(t.id)} className={`px-3 py-1.5 rounded-full text-[11px] font-semibold hover:text-blue-600 ${GLASS_PILL}`}>
+                    Pull to Sprint
+                  </button>
+                </GlassTooltip>
               </div>
             );
           })}

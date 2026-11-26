@@ -16,6 +16,7 @@ import {
   Users,
 } from 'lucide-react';
 import { GLASS_PANEL, GLASS_PILL } from '../constants';
+import { GlassTooltip } from './GlassTooltip';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import type { ViewId } from '../types';
 
@@ -115,24 +116,28 @@ export default function Header({
           </nav>
 
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => onOpenTeam()}
-              className={`hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium ${GLASS_PILL}`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>Team</span>
-            </button>
-
-            <div className="relative">
+            <GlassTooltip label="Manage team" position="bottom" className="hidden sm:inline-flex">
               <button
                 type="button"
-                onClick={() => onOpenMenu()}
-                aria-label="Data options"
-                className={`inline-flex items-center justify-center w-9 h-9 rounded-full ${GLASS_PILL}`}
+                onClick={() => onOpenTeam()}
+                className={`hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium ${GLASS_PILL}`}
               >
-                <MoreVertical className="w-4 h-4" />
+                <Users className="w-3.5 h-3.5" />
+                <span>Team</span>
               </button>
+            </GlassTooltip>
+
+            <div className="relative">
+              <GlassTooltip label="Data options: export, import, reset" position="bottom">
+                <button
+                  type="button"
+                  onClick={() => onOpenMenu()}
+                  aria-label="Data options"
+                  className={`inline-flex items-center justify-center w-9 h-9 rounded-full ${GLASS_PILL}`}
+                >
+                  <MoreVertical className="w-4 h-4" />
+                </button>
+              </GlassTooltip>
               {menuOpen && (
                 <div className={`lg-dropdown lg-refract absolute right-0 mt-2.5 w-52 rounded-3xl py-2 z-40 ${GLASS_PANEL}`}>
                   <button type="button" onClick={() => { onCloseMenu(); onOpenTeam(); }} className="sm:hidden w-full px-4 py-2 text-left text-xs font-medium hover:bg-white/60 dark:hover:bg-white/10 flex items-center gap-2.5">
@@ -153,9 +158,11 @@ export default function Header({
               <input ref={fileInputRef} type="file" accept=".json" onChange={onImportJson} className="hidden" />
             </div>
 
-            <button type="button" onClick={() => onToggleDark()} aria-label="Toggle dark mode" className={`inline-flex items-center justify-center w-9 h-9 rounded-full ${GLASS_PILL}`}>
-              {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            </button>
+            <GlassTooltip label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'} position="bottom">
+              <button type="button" onClick={() => onToggleDark()} aria-label="Toggle dark mode" className={`inline-flex items-center justify-center w-9 h-9 rounded-full ${GLASS_PILL}`}>
+                {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </button>
+            </GlassTooltip>
 
             <button
               type="button"

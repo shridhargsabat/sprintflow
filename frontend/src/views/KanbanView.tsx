@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import Dropdown from '../components/Dropdown';
+import GlassTooltip from '../components/GlassTooltip';
 import type { Task, TaskStatus, TeamMember } from '../types';
 import { GLASS_PILL, PRIORITY_META, STATUS_COLUMNS } from '../constants';
 import { getDueMeta, getInitials } from '../utils/format';
@@ -63,13 +64,19 @@ export default function KanbanView({ tasks, team, onOpenTask, onOpenDetails, onM
                 <div className="flex items-center gap-2">
                   <span className={`w-2.5 h-2.5 rounded-full ${col.dot}`} />
                   <h3 className="text-xs font-semibold uppercase tracking-wider">{col.label}</h3>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${col.badge}`}>{colTasks.length}</span>
+                  <GlassTooltip label={`${colTasks.length} tasks in column`}>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${col.badge}`}>{colTasks.length}</span>
+                  </GlassTooltip>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">{colPts} pts</span>
-                  <button type="button" onClick={() => onOpenTask(null, col.id)} className="w-6 h-6 rounded-full hover:bg-white/80 dark:hover:bg-white/15 flex items-center justify-center">
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
+                  <GlassTooltip label={`${colPts} story points`}>
+                    <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">{colPts} pts</span>
+                  </GlassTooltip>
+                  <GlassTooltip label={`Add ${col.label} task`}>
+                    <button type="button" onClick={() => onOpenTask(null, col.id)} className="w-6 h-6 rounded-full hover:bg-white/80 dark:hover:bg-white/15 flex items-center justify-center">
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </GlassTooltip>
                 </div>
               </div>
 
