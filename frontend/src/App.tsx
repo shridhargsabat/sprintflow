@@ -6,6 +6,7 @@ import { TaskModal } from './components/TaskModal';
 import { TaskDetailsModal } from './components/TaskDetailsModal';
 import { TeamModal } from './components/TeamModal';
 import { UsersModal } from './components/UsersModal';
+import { TagsModal } from './components/TagsModal';
 import { SprintSettingsModal } from './components/SprintSettingsModal';
 import { Toasts } from './components/Toasts';
 import { LiquidGlassFilter } from './components/LiquidGlassFilter';
@@ -32,6 +33,7 @@ function BoardApp() {
   const [detailsModal, setDetailsModal] = useState<{ open: boolean; task: Task | null }>({ open: false, task: null });
   const [teamModalOpen, setTeamModalOpen] = useState<boolean>(false);
   const [usersModalOpen, setUsersModalOpen] = useState<boolean>(false);
+  const [tagsModalOpen, setTagsModalOpen] = useState<boolean>(false);
   const [sprintSettingsOpen, setSprintSettingsOpen] = useState<boolean>(false);
   const [newMemberName, setNewMemberName] = useState<string>('');
   const [newMemberRole, setNewMemberRole] = useState<string>('');
@@ -126,6 +128,7 @@ function BoardApp() {
           onCloseMenu={() => setMenuOpen(false)}
           onOpenTeam={() => setTeamModalOpen(true)}
           onOpenUsers={() => setUsersModalOpen(true)}
+          onOpenTags={() => setTagsModalOpen(true)}
           onNewTask={() => openTaskModal(null, 'todo')}
           onExportJson={() => { board.handleExportJson(); setMenuOpen(false); }}
           onResetDemo={() => { void board.handleResetDemo(); setMenuOpen(false); }}
@@ -238,6 +241,7 @@ function BoardApp() {
             onRoleChange={setNewMemberRole}
             onUpdateMember={board.handleUpdateMember}
             onAddMember={board.handleAddMember}
+            onAddMemberFromUser={board.handleAddMemberFromUser}
             onRemoveMember={board.handleRemoveMember}
             onBulkAdd={board.handleBulkAddMembers}
             onRenameMember={(id, patch) => board.setTeam(prev => prev.map(x => (x.id === id ? { ...x, ...patch } : x)))}
@@ -255,6 +259,10 @@ function BoardApp() {
 
         {usersModalOpen && (
           <UsersModal onClose={() => setUsersModalOpen(false)} />
+        )}
+
+        {tagsModalOpen && (
+          <TagsModal onClose={() => setTagsModalOpen(false)} />
         )}
 
         <Toasts toasts={board.toasts} />

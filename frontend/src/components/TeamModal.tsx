@@ -23,6 +23,7 @@ export interface TeamModalProps {
   onRoleChange: (value: string) => void;
   onUpdateMember: (member: TeamMember) => void | Promise<void>;
   onAddMember: (e: React.FormEvent) => void;
+  onAddMemberFromUser: (user: { id: number; name: string }) => void | Promise<void>;
   onRemoveMember: (id: string) => void | Promise<void>;
   onRenameMember: (id: string, patch: Partial<TeamMember>) => void;
   /** Bulk-add handler (useBoard.handleBulkAddMembers). Falls back to direct api calls when absent. */
@@ -66,7 +67,7 @@ function draftFrom(member: TeamMember): EditDraft {
   };
 }
 
-export function TeamModal({ team, tasks, newMemberName, newMemberRole, onNameChange, onRoleChange, onUpdateMember, onAddMember, onRemoveMember, onBulkAdd, onClose }: TeamModalProps): React.JSX.Element {
+export function TeamModal({ team, tasks, newMemberName, newMemberRole, onNameChange, onRoleChange, onUpdateMember, onAddMember, onAddMemberFromUser, onRemoveMember, onBulkAdd, onClose }: TeamModalProps): React.JSX.Element {
   const { can } = usePermissions();
   const canManage = can('team.manage');
 
@@ -410,10 +411,29 @@ export function TeamModal({ team, tasks, newMemberName, newMemberRole, onNameCha
           {canManage && (
             <>
               <form onSubmit={onAddMember} className="flex gap-2 pt-3 border-t border-slate-900/10 dark:border-white/10">
-                <input type="text" required value={newMemberName} onChange={e => onNameChange(e.target.value)} placeholder="Add team member..." className={`flex-1 px-3.5 py-2 rounded-full text-xs field-text ${GLASS_PILL}`} />
+                <input type="text" required value={newMemberName} onChange={e => onNameChange(e.target.value)} placeholder="New member name..." className={`flex-1 px-3.5 py-2 rounded-full text-xs field-text ${GLASS_PILL}`} />
                 <input type="text" value={newMemberRole} onChange={e => onRoleChange(e.target.value)} placeholder="Role" className={`w-24 px-3 py-2 rounded-full text-xs field-text ${GLASS_PILL}`} />
                 <button type="submit" className="px-4 py-2 rounded-full text-xs font-semibold bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white">Add</button>
               </form>
+              {linkUsers !== null && (() => {
+                const unlinked = linkUsers.filter(u => !team.some(m => m.userId === u.id));
+                if (unlinked.length === 0) return null;
+                return (
+                  <div className="flex gap-2 items-center">
+                    <div className="flex-1 min-w-0">
+                      <Dropdown
+                        value=""
+                        onChange={(v) => {
+                          const u = unlinked.find(x => String(x.id) === v);
+                          if (u) void onAddMemberFromUser({ id: u.id, name: u.name });
+                        }}
+                        options={[{ value: '', label: 'Add existing login as member...' }, ...unlinked.map(u => ({ value: String(u.id), label: `${u.name} (${u.email})` }))]}
+                        className={`inline-flex w-full items-center justify-between gap-2 rounded-full px-3.5 py-2 text-xs field-text ${GLASS_PILL}`}
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
               <div className="pt-3 border-t border-slate-900/10 dark:border-white/10 space-y-2">
                 <label htmlFor="team-bulk-add" className="block text-xs font-medium text-slate-600 dark:text-slate-300">
                   Bulk add — one &ldquo;Name[, Role]&rdquo; per line

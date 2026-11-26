@@ -48,6 +48,7 @@ export interface UseBoard {
   deleteTask: (taskId: string) => Promise<void>;
   handleUpdateMember: (member: TeamMember) => Promise<void>;
   handleAddMember: (e: React.FormEvent) => Promise<void>;
+  handleAddMemberFromUser: (user: { id: number; name: string }) => Promise<void>;
   handleBulkAddMembers: (entries: BulkMemberEntry[]) => Promise<BulkAddMembersResult>;
   handleRemoveMember: (id: string) => Promise<void>;
   handleExportJson: () => void;
@@ -212,6 +213,17 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
     }
   };
 
+  const handleAddMemberFromUser = async (user: { id: number; name: string }): Promise<void> => {
+    try {
+      const created = await api.addMember({ name: user.name, role: 'Engineer', userId: user.id });
+      setTeam(prev => [...prev, created]);
+      showToast(`Added ${created.name} to team`, 'success');
+    } catch {
+      showToast('Failed to add member', 'error');
+      throw new Error('Failed to add member');
+    }
+  };
+
   const handleRemoveMember = async (id: string): Promise<void> => {
     if (team.length <= 1) return;
     try {
@@ -274,6 +286,7 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
     deleteTask,
     handleUpdateMember,
     handleAddMember,
+    handleAddMemberFromUser,
     handleBulkAddMembers,
     handleRemoveMember,
     handleExportJson,
