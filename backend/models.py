@@ -27,6 +27,14 @@ class TaskPayload(BaseModel):
     points: int = Field(default=3, ge=1, le=50)
     tag: str = Field(default="Frontend", max_length=60)
 
+    @field_validator("title", "sprint")
+    @classmethod
+    def _strip_title_sprint(cls, value: str) -> str:
+        # L2: strip only; blank-after-strip is rejected with HTTP 400 by the
+        # tasks router / import validation (a ValueError here would surface
+        # as 422 instead). Runs after min_length, so "   " arrives intact.
+        return value.strip()
+
 
 class StatusUpdatePayload(BaseModel):
     status: StatusType

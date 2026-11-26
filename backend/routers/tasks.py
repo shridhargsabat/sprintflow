@@ -46,14 +46,23 @@ def get_tasks(
     )
 
 
+# L2: whitespace-only titles/sprints pass min_length but must never be stored.
+def _require_nonblank_title_sprint(payload: TaskPayload) -> None:
+    if not payload.title:
+        raise HTTPException(status_code=400, detail="Task title must not be blank")
+    if not payload.sprint:
+        raise HTTPException(status_code=400, detail="Task sprint must not be blank")
+
+
 @router.post("/tasks", status_code=201)
 def create_task(
     payload: TaskPayload,
     _user: Dict[str, Any] = Depends(auth.require_permissions("tasks.create")),
 ) -> Dict[str, Any]:
+    _require_nonblank_title_sprint(payload)
     with db.get_conn() as conn:
         assignees = db.validate_assignees(conn, payload.assignees)
-        db.validate_tag(conn, payload.tag)
+        tag = db.validate_tag(conn, payload.tag)
         # H1: next_task_id is SELECT-max+1, so concurrent creators can collide
         # on the same DEV-* id. Retry with a recomputed id; never leak a 500.
         for _ in range(CREATE_ID_MAX_ATTEMPTS):
@@ -74,7 +83,7 @@ def create_task(
                         payload.priority,
                         payload.sprint,
                         payload.points,
-                        payload.tag,
+                        tag,
                     ),
                 )
             except sqlite3.IntegrityError:
@@ -96,13 +105,14 @@ def update_task(
     payload: TaskPayload,
     _user: Dict[str, Any] = Depends(auth.require_permissions("tasks.edit")),
 ) -> Dict[str, Any]:
+    _require_nonblank_title_sprint(payload)
     with db.get_conn() as conn:
         existing = conn.execute("SELECT id FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Task not found")
         assignees = db.validate_assignees(conn, payload.assignees)
-        db.validate_tag(conn, payload.tag)
-        conn.execute(
+        tag = db.validate_tag(conn, payload.tag)
+        cur = conn.execute(
             """
             UPDATE tasks
             SET title = ?, description = ?, due_date = ?,
@@ -118,10 +128,14 @@ def update_task(
                 payload.priority,
                 payload.sprint,
                 payload.points,
-                payload.tag,
+                tag,
                 task_id,
             ),
         )
+        # L12: the task may have vanished between the existence check and
+        # the UPDATE — 0 rows means 404, not a 500 from the FK insert below.
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Task not found")
         db.set_task_assignees(conn, task_id, assignees)
         return db.fetch_task(conn, task_id)
 

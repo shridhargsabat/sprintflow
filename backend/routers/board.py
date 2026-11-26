@@ -164,6 +164,17 @@ def import_board(
             tag_value = tag_value.strip() if isinstance(tag_value, str) else "Frontend"
             if not tag_value:
                 tag_value = "Frontend"
+            # L11: store the canonical tag name (ensure_tag above guarantees
+            # the row exists; the SELECT resolves slug-id inputs to names).
+            canonical = conn.execute(
+                "SELECT name FROM tags WHERE name = ? COLLATE NOCASE OR id = ? COLLATE NOCASE",
+                (tag_value, tag_value),
+            ).fetchone()
+            # L2: store stripped title/sprint (validation already rejected
+            # blank-after-strip, so these are non-empty here).
+            title = t["title"].strip() if isinstance(t["title"], str) else t["title"]
+            sprint = t.get("sprint", "Sprint 14")
+            sprint = sprint.strip() if isinstance(sprint, str) else sprint
             conn.execute(
                 """
                 INSERT INTO tasks
@@ -172,14 +183,14 @@ def import_board(
                 """,
                 (
                     t["id"],
-                    t["title"],
+                    title,
                     t.get("description", ""),
                     t.get("dueDate", "2026-12-02"),
                     t.get("status", "todo"),
                     t.get("priority", "medium"),
-                    t.get("sprint", "Sprint 14"),
+                    sprint,
                     int(t.get("points", 3)),
-                    tag_value,
+                    canonical["name"] if canonical else tag_value,
                 ),
             )
             for kind, ident in _resolve_import_assignees(t, warnings, conn):
@@ -254,7 +265,7 @@ def _validate_import_task_row(t: Any, index: int, seen_ids: set) -> List[str]:
     # every present value must satisfy TaskPayload (title/status/priority/
     # points ranges, length caps, assignee shapes).
     try:
-        TaskPayload(
+        task = TaskPayload(
             title=t.get("title"),  # type: ignore[arg-type]  # None -> ValidationError -> per-row 400
             description=t.get("description", ""),
             assignees=t.get("assignees"),
@@ -267,6 +278,13 @@ def _validate_import_task_row(t: Any, index: int, seen_ids: set) -> List[str]:
         )
     except ValidationError as exc:
         errs.extend(_format_validation_errors(prefix, exc))
+    else:
+        # L2 (mirror POST /api/tasks): blank-after-strip titles/sprints are
+        # 400, never stored.
+        if not task.title:
+            errs.append(f"{prefix}.title: must not be blank")
+        if not task.sprint:
+            errs.append(f"{prefix}.sprint: must not be blank")
     raw = t.get("assignees")
     if isinstance(raw, list):
         # Mirror POST /api/tasks: more than MAX_ASSIGNEES is a 400.
