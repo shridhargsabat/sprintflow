@@ -3,6 +3,7 @@ import { AlertCircle } from 'lucide-react';
 import { PRIORITY_META } from './constants';
 import { useBoard } from './hooks/useBoard';
 import { TaskModal } from './components/TaskModal';
+import { TaskDetailsModal } from './components/TaskDetailsModal';
 import { TeamModal } from './components/TeamModal';
 import { SprintSettingsModal } from './components/SprintSettingsModal';
 import { Toasts } from './components/Toasts';
@@ -24,6 +25,7 @@ export default function App() {
 
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const [taskModal, setTaskModal] = useState<TaskModalState>({ open: false, task: null, defaultStatus: 'todo' });
+  const [detailsModal, setDetailsModal] = useState<{ open: boolean; task: Task | null }>({ open: false, task: null });
   const [teamModalOpen, setTeamModalOpen] = useState<boolean>(false);
   const [sprintSettingsOpen, setSprintSettingsOpen] = useState<boolean>(false);
   const [newMemberName, setNewMemberName] = useState<string>('');
@@ -78,6 +80,14 @@ export default function App() {
 
   const openTaskModal = (task: Task | null, defaultStatus: TaskStatus): void => {
     setTaskModal({ open: true, task, defaultStatus });
+  };
+
+  const openDetails = (task: Task): void => {
+    setDetailsModal({ open: true, task });
+  };
+
+  const closeDetails = (): void => {
+    setDetailsModal({ open: false, task: null });
   };
 
   const moveTask = (taskId: string, status: TaskStatus): void => {
@@ -147,7 +157,7 @@ export default function App() {
                   sprintFilter={sprintFilter}
                   sprints={board.sprints}
                   darkMode={darkMode}
-                  onOpenTask={openTaskModal}
+                  onOpenDetails={(task) => openDetails(task)}
                   onOpenSprintSettings={() => setSprintSettingsOpen(true)}
                   onPromoteTask={promoteTask}
                   onMoveTaskStatus={moveTask}
@@ -163,6 +173,7 @@ export default function App() {
                   tasks={filteredTasks}
                   team={board.team}
                   onOpenTask={openTaskModal}
+                  onOpenDetails={(task) => openDetails(task)}
                   onMoveTaskStatus={moveTask}
                 />
               )}
@@ -171,6 +182,7 @@ export default function App() {
                   tasks={filteredTasks}
                   team={board.team}
                   onOpenTask={openTaskModal}
+                  onOpenDetails={(task) => openDetails(task)}
                   onMoveTaskStatus={moveTask}
                   onPromoteTask={promoteTask}
                 />
@@ -189,6 +201,17 @@ export default function App() {
             onClose={() => setTaskModal({ open: false, task: null, defaultStatus: 'todo' })}
             onSave={board.saveTask}
             onDelete={board.deleteTask}
+          />
+        )}
+
+        {detailsModal.open && detailsModal.task && (
+          <TaskDetailsModal
+            task={detailsModal.task}
+            member={getMember(detailsModal.task.assigneeId)}
+            onClose={closeDetails}
+            onEdit={() => { const t = detailsModal.task; closeDetails(); if (t) openTaskModal(t, t.status); }}
+            onDelete={(id) => { void board.deleteTask(id); closeDetails(); }}
+            onPromote={(id) => { promoteTask(id); closeDetails(); }}
           />
         )}
 

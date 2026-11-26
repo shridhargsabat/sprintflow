@@ -9,10 +9,11 @@ interface KanbanViewProps {
   tasks: Task[];
   team: TeamMember[];
   onOpenTask: (task: Task | null, defaultStatus: TaskStatus) => void;
+  onOpenDetails: (task: Task) => void;
   onMoveTaskStatus: (taskId: string, status: TaskStatus) => void;
 }
 
-export default function KanbanView({ tasks, team, onOpenTask, onMoveTaskStatus }: KanbanViewProps) {
+export default function KanbanView({ tasks, team, onOpenTask, onOpenDetails, onMoveTaskStatus }: KanbanViewProps) {
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
 
@@ -91,7 +92,7 @@ export default function KanbanView({ tasks, team, onOpenTask, onMoveTaskStatus }
                         <span className="text-[10px] font-bold text-slate-500">{t.id}</span>
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${p.pill}`}>{p.label}</span>
                       </div>
-                      <h4 onClick={() => onOpenTask(t, t.status)} className="cursor-pointer text-xs font-semibold leading-snug mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-300">
+                      <h4 onClick={() => onOpenDetails(t)} className="cursor-pointer text-xs font-semibold leading-snug mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-300">
                         {t.title}
                       </h4>
                       <div className="flex flex-wrap items-center gap-1.5 mb-3">

@@ -39,7 +39,7 @@ export interface DashboardViewProps {
   sprintFilter: string;
   sprints: SprintConfig[];
   darkMode: boolean;
-  onOpenTask: (task: Task | null, defaultStatus: TaskStatus) => void;
+  onOpenDetails: (task: Task) => void;
   onOpenSprintSettings: () => void;
   onPromoteTask: (taskId: string) => void;
   onMoveTaskStatus: (taskId: string, status: TaskStatus) => void;
@@ -56,7 +56,7 @@ export default function DashboardView({
   sprintFilter,
   sprints,
   darkMode,
-  onOpenTask,
+  onOpenDetails,
   onOpenSprintSettings,
   onPromoteTask,
   onOpenKanban,
@@ -349,7 +349,7 @@ export default function DashboardView({
             const p = PRIORITY_META[t.priority];
             const due = getDueMeta(t.dueDate, t.status);
             return (
-              <div key={t.id} onClick={() => onOpenTask(t, t.status)} className={`cursor-pointer p-3.5 rounded-[22px] ${GLASS_SUBCARD}`}>
+              <div key={t.id} onClick={() => onOpenDetails(t)} className={`cursor-pointer p-3.5 rounded-[22px] ${GLASS_SUBCARD}`}>
                 <div className="flex items-start justify-between gap-2 mb-1.5">
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 mb-0.5">
@@ -394,7 +394,7 @@ export default function DashboardView({
             const due = getDueMeta(t.dueDate, t.status);
             const [mon, day] = formatShortDate(t.dueDate).split(' ');
             return (
-              <div key={t.id} onClick={() => onOpenTask(t, t.status)} className="cursor-pointer flex items-center justify-between gap-3 p-2.5 rounded-2xl hover:bg-white/60 dark:hover:bg-white/[0.08] transition-colors">
+              <div key={t.id} onClick={() => onOpenDetails(t)} className="cursor-pointer flex items-center justify-between gap-3 p-2.5 rounded-2xl hover:bg-white/60 dark:hover:bg-white/[0.08] transition-colors">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-12 text-center py-1 rounded-2xl bg-white/70 dark:bg-white/10 border border-white/80 dark:border-white/15 shrink-0">
                     <p className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">{mon}</p>
@@ -430,7 +430,7 @@ export default function DashboardView({
             const p = PRIORITY_META[t.priority];
             return (
               <div key={t.id} className={`flex items-center justify-between gap-2.5 p-3 rounded-[22px] ${GLASS_SUBCARD}`}>
-                <div onClick={() => onOpenTask(t, t.status)} className="cursor-pointer min-w-0 flex-1">
+                <div onClick={() => onOpenDetails(t)} className="cursor-pointer min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 mb-0.5">
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${p.pill}`}>{p.label}</span>
                     <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">{t.id} · {t.points} pts</span>

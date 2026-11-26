@@ -8,11 +8,12 @@ interface BacklogViewProps {
   tasks: Task[];
   team: TeamMember[];
   onOpenTask: (task: Task | null, defaultStatus: TaskStatus) => void;
+  onOpenDetails: (task: Task) => void;
   onMoveTaskStatus: (taskId: string, status: TaskStatus) => void;
   onPromoteTask: (taskId: string) => void;
 }
 
-export default function BacklogView({ tasks, team, onOpenTask, onMoveTaskStatus, onPromoteTask }: BacklogViewProps) {
+export default function BacklogView({ tasks, team, onOpenTask, onOpenDetails, onMoveTaskStatus, onPromoteTask }: BacklogViewProps) {
   const [backlogSort, setBacklogSort] = useState<string>('priority');
 
   const getMember = (id: string | null): TeamMember =>
@@ -80,7 +81,7 @@ export default function BacklogView({ tasks, team, onOpenTask, onMoveTaskStatus,
                 return (
                   <tr key={t.id} className="hover:bg-white/50 dark:hover:bg-white/[0.06] transition-colors">
                     <td className="py-3.5 px-5 max-w-xs">
-                      <div onClick={() => onOpenTask(t, t.status)} className="cursor-pointer group">
+                      <div onClick={() => onOpenDetails(t)} className="cursor-pointer group">
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="text-[10px] font-bold text-slate-500">{t.id}</span>
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-900/[0.06] dark:bg-white/10">{t.tag}</span>
