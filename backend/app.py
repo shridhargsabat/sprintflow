@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import db
-from routers import board, tasks, team
+from routers import board, sprints, tasks, team
 
 
 @asynccontextmanager
@@ -35,3 +35,4 @@ app.add_middleware(
 app.include_router(tasks.router)
 app.include_router(team.router)
 app.include_router(board.router)
+app.include_router(sprints.router)

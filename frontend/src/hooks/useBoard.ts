@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { STATUS_COLUMNS } from '../constants';
-import type { BoardImport, Task, TaskFormValues, TaskStatus, TeamMember, Toast, ToastType } from '../types';
+import type { BoardImport, SprintConfig, SprintPatch, Task, TaskFormValues, TaskStatus, TeamMember, Toast, ToastType } from '../types';
 
 export interface UseBoardDeps {
   setTaskModal: (v: { open: boolean; task: Task | null; defaultStatus: TaskStatus }) => void;
@@ -15,6 +15,7 @@ export interface UseBoardDeps {
 export interface UseBoard {
   team: TeamMember[];
   tasks: Task[];
+  sprints: SprintConfig[];
   loading: boolean;
   apiError: string;
   toasts: Toast[];
@@ -22,6 +23,7 @@ export interface UseBoard {
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   showToast: (message: string, type?: ToastType) => void;
   refreshAll: () => Promise<void>;
+  updateSprint: (id: string, patch: SprintPatch) => Promise<void>;
   moveTaskStatus: (taskId: string, newStatus: TaskStatus) => Promise<void>;
   promoteTask: (taskId: string) => Promise<void>;
   saveTask: (formValues: TaskFormValues) => Promise<void>;
@@ -37,6 +39,7 @@ export interface UseBoard {
 export function useBoard(deps: UseBoardDeps): UseBoard {
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [sprints, setSprints] = useState<SprintConfig[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [apiError, setApiError] = useState<string>('');
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -52,9 +55,10 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
   const refreshAll = async (): Promise<void> => {
     try {
       setApiError('');
-      const [teamData, tasksData] = await Promise.all([api.getTeam(), api.getTasks()]);
+      const [teamData, tasksData, sprintsData] = await Promise.all([api.getTeam(), api.getTasks(), api.getSprints()]);
       setTeam(teamData);
       setTasks(tasksData);
+      setSprints(sprintsData);
     } catch {
       setApiError('Unable to reach the Python SQLite backend. Start uvicorn on port 8000 and retry.');
     } finally {
@@ -191,9 +195,20 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
     }
   };
 
+  const updateSprint = async (id: string, patch: SprintPatch): Promise<void> => {
+    try {
+      const updated = await api.updateSprint(id, patch);
+      setSprints(prev => prev.map(s => (s.id === id ? updated : s)));
+      showToast(`Updated ${updated.name} sprint settings`, 'success');
+    } catch {
+      showToast('Failed to update sprint', 'error');
+    }
+  };
+
   return {
     team,
     tasks,
+    sprints,
     loading,
     apiError,
     toasts,
@@ -201,6 +216,7 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
     fileInputRef,
     showToast,
     refreshAll,
+    updateSprint,
     moveTaskStatus,
     promoteTask,
     saveTask,

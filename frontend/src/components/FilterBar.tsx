@@ -1,10 +1,12 @@
 import { Search } from 'lucide-react';
 import { GLASS_PANEL, GLASS_PILL } from '../constants';
-import type { PriorityFilter, TeamMember } from '../types';
+import { formatShortDate } from '../utils/format';
+import type { PriorityFilter, SprintConfig, TeamMember } from '../types';
 
 export interface FilterBarProps {
   sprintFilter: string;
   onSprintFilterChange: (value: string) => void;
+  sprints: SprintConfig[];
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
   priorityFilter: PriorityFilter;
@@ -19,6 +21,7 @@ export interface FilterBarProps {
 export default function FilterBar({
   sprintFilter,
   onSprintFilterChange,
+  sprints,
   searchQuery,
   onSearchQueryChange,
   priorityFilter,
@@ -35,8 +38,14 @@ export default function FilterBar({
         <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[240px]">
           <select value={sprintFilter} onChange={e => onSprintFilterChange(e.target.value)} className={`px-3.5 py-1.5 rounded-full text-xs font-semibold cursor-pointer ${GLASS_PILL}`}>
             <option value="all" className="text-slate-900">All Sprints &amp; Backlog</option>
-            <option value="Sprint 14" className="text-slate-900">Sprint 14 (Active · Nov 23 – Dec 6)</option>
-            <option value="Sprint 15" className="text-slate-900">Sprint 15 (Next · Dec 7 – Dec 20)</option>
+            {sprints.length > 0 ? sprints.map(s => (
+              <option key={s.id} value={s.id} className="text-slate-900">{s.name} ({formatShortDate(s.startDate)} – {formatShortDate(s.endDate)})</option>
+            )) : (
+              <>
+                <option value="Sprint 14" className="text-slate-900">Sprint 14</option>
+                <option value="Sprint 15" className="text-slate-900">Sprint 15</option>
+              </>
+            )}
             <option value="Backlog" className="text-slate-900">Unassigned Backlog</option>
           </select>
 

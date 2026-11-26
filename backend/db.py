@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import sqlite3
 from contextlib import contextmanager
+from datetime import date, timedelta
 from typing import Any, Dict, Generator, List, Optional
 
 DB_PATH = os.environ.get(
@@ -36,6 +37,12 @@ DEFAULT_TASKS = [
     ("DEV-113", "Load Testing 10k Concurrent Sessions", "Benchmark API gateway latency and DB connection pool saturation at peak traffic.", "m4", "2026-12-10", "backlog", "critical", "Sprint 15", 5, "QA"),
     ("DEV-114", "Custom Dashboard Widget Layout Preferences", "Allow leads to toggle visibility and order of executive KPI cards.", "m2", "2026-12-15", "backlog", "medium", "Sprint 15", 5, "Frontend"),
     ("DEV-115", "Automated Compliance Evidence Collector", "Archive weekly access reviews and deployment logs into encrypted object storage.", "m1", "2026-12-18", "backlog", "low", "Backlog", 3, "DevOps"),
+]
+
+
+DEFAULT_SPRINTS = [
+    ("Sprint 14", "Sprint 14", "2026-11-23", 14),
+    ("Sprint 15", "Sprint 15", "2026-12-07", 14),
 ]
 
 
@@ -86,12 +93,21 @@ def init_db(db_path: Optional[str] = None) -> None:
             CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
             CREATE INDEX IF NOT EXISTS idx_tasks_sprint ON tasks(sprint);
             CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority);
+
+            CREATE TABLE IF NOT EXISTS sprints (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                start_date TEXT NOT NULL,
+                length_days INTEGER NOT NULL DEFAULT 14
+            );
             """
         )
 
         member_count = conn.execute("SELECT COUNT(*) FROM team_members").fetchone()[0]
         if member_count == 0:
             seed_data(conn)
+        # Additive auto-migration for live DBs that predate the sprints table.
+        seed_sprints(conn)
 
 
 def seed_data(conn: sqlite3.Connection) -> None:
@@ -107,12 +123,21 @@ def seed_data(conn: sqlite3.Connection) -> None:
         """,
         DEFAULT_TASKS,
     )
+    seed_sprints(conn)
+
+
+def seed_sprints(conn: sqlite3.Connection) -> None:
+    conn.executemany(
+        "INSERT OR IGNORE INTO sprints (id, name, start_date, length_days) VALUES (?, ?, ?, ?)",
+        DEFAULT_SPRINTS,
+    )
 
 
 def reset_db(db_path: Optional[str] = None) -> None:
     with get_conn(db_path) as conn:
         conn.execute("DELETE FROM tasks")
         conn.execute("DELETE FROM team_members")
+        conn.execute("DELETE FROM sprints")
         seed_data(conn)
 
 
@@ -142,6 +167,45 @@ def next_task_id(conn: sqlite3.Connection) -> str:
         except (IndexError, ValueError):
             continue
     return f"DEV-{max_num + 1}"
+
+
+def sprint_end_date(start_date: str, length_days: int) -> str:
+    return (date.fromisoformat(start_date) + timedelta(days=length_days - 1)).isoformat()
+
+
+def row_to_sprint(row: sqlite3.Row) -> Dict[str, Any]:
+    length_days = int(row["length_days"])
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "startDate": row["start_date"],
+        "lengthDays": length_days,
+        "endDate": sprint_end_date(row["start_date"], length_days),
+    }
+
+
+def list_sprints(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    with get_conn(db_path) as conn:
+        rows = conn.execute("SELECT * FROM sprints ORDER BY start_date ASC").fetchall()
+        return [row_to_sprint(r) for r in rows]
+
+
+def update_sprint(
+    sprint_id: str,
+    start_date: Optional[str] = None,
+    length_days: Optional[int] = None,
+    db_path: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    with get_conn(db_path) as conn:
+        existing = conn.execute("SELECT id FROM sprints WHERE id = ?", (sprint_id,)).fetchone()
+        if not existing:
+            return None
+        if start_date is not None:
+            conn.execute("UPDATE sprints SET start_date = ? WHERE id = ?", (start_date, sprint_id))
+        if length_days is not None:
+            conn.execute("UPDATE sprints SET length_days = ? WHERE id = ?", (length_days, sprint_id))
+        row = conn.execute("SELECT * FROM sprints WHERE id = ?", (sprint_id,)).fetchone()
+        return row_to_sprint(row)
 
 
 def list_team(db_path: Optional[str] = None) -> List[Dict[str, Any]]:

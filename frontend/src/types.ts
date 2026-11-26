@@ -57,3 +57,16 @@ export interface BoardImport {
   team: TeamMember[];
   tasks: Task[];
 }
+
+export interface SprintConfig {
+  id: string;
+  name: string;
+  startDate: string;
+  lengthDays: number;
+  endDate: string;
+}
+
+export interface SprintPatch {
+  startDate?: string;
+  lengthDays?: number;
+}

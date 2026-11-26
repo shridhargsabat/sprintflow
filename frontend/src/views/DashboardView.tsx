@@ -3,7 +3,8 @@ import {
   Flag,
   CalendarClock,
   ArrowRight,
-  UserCog
+  UserCog,
+  Pencil
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -18,17 +19,28 @@ import {
   CartesianGrid,
   Line
 } from 'recharts';
-import type { PriorityFilter, Task, TaskPriority, TaskStatus, TeamMember } from '../types';
-import { PRIORITY_META, GLASS_PANEL, GLASS_SUBCARD, GLASS_PILL } from '../constants';
+import type { PriorityFilter, SprintConfig, Task, TaskPriority, TaskStatus, TeamMember } from '../types';
+import { PRIORITY_META, GLASS_PANEL, GLASS_SUBCARD, GLASS_PILL, TODAY_ISO } from '../constants';
 import { getInitials, formatShortDate, getDueMeta } from '../utils/format';
+
+function addDaysISO(startISO: string, offset: number): string {
+  const [y, m, d] = startISO.split('-').map(Number);
+  if (!y || !m || !d) return startISO;
+  const dt = new Date(y, m - 1, d + offset);
+  const mm = String(dt.getMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getDate()).padStart(2, '0');
+  return `${dt.getFullYear()}-${mm}-${dd}`;
+}
 
 export interface DashboardViewProps {
   tasks: Task[];
   backlogTasks: Task[];
   team: TeamMember[];
   sprintFilter: string;
+  sprints: SprintConfig[];
   darkMode: boolean;
   onOpenTask: (task: Task | null, defaultStatus: TaskStatus) => void;
+  onOpenSprintSettings: () => void;
   onPromoteTask: (taskId: string) => void;
   onMoveTaskStatus: (taskId: string, status: TaskStatus) => void;
   onOpenKanban: (priority?: PriorityFilter) => void;
@@ -42,8 +54,10 @@ export default function DashboardView({
   backlogTasks,
   team,
   sprintFilter,
+  sprints,
   darkMode,
   onOpenTask,
+  onOpenSprintSettings,
   onPromoteTask,
   onOpenKanban,
   onOpenBacklog,
@@ -84,13 +98,22 @@ export default function DashboardView({
   const burndownData = useMemo(() => {
     const total = Math.max(kpis.totalPts, 10);
     const remaining = Math.max(0, kpis.totalPts - kpis.donePts);
-    const labels = ['Nov 23', 'Nov 25', 'Nov 27', 'Nov 29', 'Dec 1', 'Dec 3', 'Dec 6'];
+    const activeSprint = sprints.find(s => s.id === sprintFilter || s.name === sprintFilter) ?? sprints[0] ?? null;
+    let labels = ['Nov 23', 'Nov 25', 'Nov 27', 'Nov 29', 'Dec 1', 'Dec 3', 'Dec 6'];
+    if (activeSprint) {
+      const len = Math.max(1, activeSprint.lengthDays);
+      const tickCount = 7;
+      labels = Array.from({ length: tickCount }, (_, i) => {
+        const offset = Math.round((i * (len - 1)) / (tickCount - 1));
+        return formatShortDate(addDaysISO(activeSprint.startDate, offset));
+      });
+    }
     return labels.map((day, i) => ({
       day,
       ideal: Math.round(total * (1 - i / (labels.length - 1))),
       remaining: i === 0 ? total : i === 1 ? Math.round(total - kpis.donePts * 0.65) : i === 2 ? remaining : null
     }));
-  }, [kpis.totalPts, kpis.donePts]);
+  }, [kpis.totalPts, kpis.donePts, sprints, sprintFilter]);
 
   const burndownOnTrack = useMemo(() => {
     const remaining = Math.max(0, kpis.totalPts - kpis.donePts);
@@ -99,6 +122,22 @@ export default function DashboardView({
   }, [kpis.totalPts, kpis.donePts, burndownData]);
 
   const sprintHeader = useMemo(() => {
+    const matched = sprints.find(s => s.id === sprintFilter || s.name === sprintFilter);
+    if (matched) {
+      const dates = `${formatShortDate(matched.startDate)} – ${formatShortDate(matched.endDate)}, ${matched.endDate.slice(0, 4)}`;
+      const isFirst = sprints.length > 0 && sprints[0].id === matched.id;
+      const badge = `${matched.name} · ${isFirst ? 'Active' : 'Planned'}`;
+      const todayMs = new Date(`${TODAY_ISO}T00:00:00`).getTime();
+      const daysLeft = Math.max(0, Math.round((new Date(`${matched.endDate}T00:00:00`).getTime() - todayMs) / 86400000));
+      const daysUntilStart = Math.max(0, Math.round((new Date(`${matched.startDate}T00:00:00`).getTime() - todayMs) / 86400000));
+      if (matched.name === 'Sprint 14' || sprintFilter === 'Sprint 14') {
+        return { badge, dates, title: 'Core Platform v2.4 Delivery', sub: `${daysLeft} days remaining · Synced with SQLite backend` };
+      }
+      if (matched.name === 'Sprint 15' || sprintFilter === 'Sprint 15') {
+        return { badge, dates, title: 'Scale & Reliability Hardening', sub: `Starts in ${daysUntilStart} days · Backlog grooming & capacity planning` };
+      }
+      return { badge, dates, title: `${matched.name} Delivery`, sub: 'Sprint overview · Synced with SQLite backend' };
+    }
     if (sprintFilter === 'Sprint 14') {
       return { badge: 'Sprint 14 · Active', dates: 'Nov 23 – Dec 6, 2026', title: 'Core Platform v2.4 Delivery', sub: '10 days remaining · Synced with SQLite backend' };
     }
@@ -109,7 +148,7 @@ export default function DashboardView({
       return { badge: 'Product Backlog', dates: 'Unscheduled Queue', title: 'Upcoming Engineering Backlog', sub: 'Prioritized work ready to pull into upcoming sprints' };
     }
     return { badge: 'All Sprints · Portfolio', dates: 'Q4 2026 Roadmap', title: 'Full Project Delivery Overview', sub: 'Combined view of active sprint, planned sprint & backlog' };
-  }, [sprintFilter]);
+  }, [sprintFilter, sprints]);
 
   const ongoingTasks = useMemo(
     () => tasks
@@ -135,7 +174,12 @@ export default function DashboardView({
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
               {sprintHeader.badge}
             </span>
-            <span className="text-xs font-medium text-white/85">{sprintHeader.dates}</span>
+            <span className="flex items-center gap-1.5">
+              <span className="text-xs font-medium text-white/85">{sprintHeader.dates}</span>
+              <button type="button" onClick={onOpenSprintSettings} title="Sprint settings" aria-label="Edit sprint settings" className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/35 backdrop-blur-md border border-white/35 flex items-center justify-center transition-colors">
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            </span>
           </div>
           <h2 className="text-2xl font-bold tracking-tight mb-1">{sprintHeader.title}</h2>
           <p className="text-xs text-white/80 mb-5">{sprintHeader.sub}</p>

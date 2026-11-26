@@ -4,6 +4,7 @@ import { PRIORITY_META } from './constants';
 import { useBoard } from './hooks/useBoard';
 import { TaskModal } from './components/TaskModal';
 import { TeamModal } from './components/TeamModal';
+import { SprintSettingsModal } from './components/SprintSettingsModal';
 import { Toasts } from './components/Toasts';
 import Header from './components/Header';
 import FilterBar from './components/FilterBar';
@@ -24,6 +25,7 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const [taskModal, setTaskModal] = useState<TaskModalState>({ open: false, task: null, defaultStatus: 'todo' });
   const [teamModalOpen, setTeamModalOpen] = useState<boolean>(false);
+  const [sprintSettingsOpen, setSprintSettingsOpen] = useState<boolean>(false);
   const [newMemberName, setNewMemberName] = useState<string>('');
   const [newMemberRole, setNewMemberRole] = useState<string>('');
 
@@ -120,6 +122,7 @@ export default function App() {
         <FilterBar
           sprintFilter={sprintFilter}
           onSprintFilterChange={setSprintFilter}
+          sprints={board.sprints}
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
           priorityFilter={priorityFilter}
@@ -142,8 +145,10 @@ export default function App() {
                   backlogTasks={allBacklogTasks}
                   team={board.team}
                   sprintFilter={sprintFilter}
+                  sprints={board.sprints}
                   darkMode={darkMode}
                   onOpenTask={openTaskModal}
+                  onOpenSprintSettings={() => setSprintSettingsOpen(true)}
                   onPromoteTask={promoteTask}
                   onMoveTaskStatus={moveTask}
                   onOpenKanban={(priority) => { if (priority) setPriorityFilter(priority); setActiveView('kanban'); }}
@@ -199,6 +204,14 @@ export default function App() {
             onRemoveMember={board.handleRemoveMember}
             onRenameMember={(id, patch) => board.setTeam(prev => prev.map(x => (x.id === id ? { ...x, ...patch } : x)))}
             onClose={() => setTeamModalOpen(false)}
+          />
+        )}
+
+        {sprintSettingsOpen && (
+          <SprintSettingsModal
+            sprints={board.sprints}
+            onClose={() => setSprintSettingsOpen(false)}
+            onSave={(id, patch) => { void board.updateSprint(id, patch); }}
           />
         )}
 
