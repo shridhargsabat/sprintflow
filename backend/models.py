@@ -10,11 +10,15 @@ StatusType = Literal["backlog", "todo", "in_progress", "in_review", "done"]
 PriorityType = Literal["critical", "high", "medium", "low"]
 
 
+class AssigneeInput(BaseModel):
+    type: Literal["member", "user"]
+    id: Any
+
+
 class TaskPayload(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     description: str = ""
-    assigneeId: Optional[str] = None
-    assigneeUserId: Optional[int] = None
+    assignees: Optional[List[AssigneeInput]] = None
     dueDate: str = Field(..., min_length=4, max_length=32)
     status: StatusType = "todo"
     priority: PriorityType = "medium"

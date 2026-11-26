@@ -1,25 +1,26 @@
 import { ArrowUpToLine, Calendar, Pencil, X } from 'lucide-react';
 import { GLASS_PANEL, GLASS_PILL, PRIORITY_META, STATUS_COLUMNS } from '../constants';
 import { formatShortDate, getDueMeta, getInitials } from '../utils/format';
-import type { Task, TeamMember } from '../types';
+import type { Task } from '../types';
 import GlassTooltip from './GlassTooltip';
+import AssigneeCluster, { assigneeColor } from './AssigneeCluster';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface TaskDetailsModalProps {
   task: Task;
-  member: TeamMember;
   onClose: () => void;
   onEdit: () => void;
   onDelete: (taskId: string) => void;
   onPromote: (taskId: string) => void;
 }
 
-export function TaskDetailsModal({ task, member, onClose, onEdit, onDelete, onPromote }: TaskDetailsModalProps) {
+export function TaskDetailsModal({ task, onClose, onEdit, onDelete, onPromote }: TaskDetailsModalProps) {
   useEscapeKey(onClose);
   const statusMeta = STATUS_COLUMNS.find(s => s.id === task.status);
   const priorityMeta = PRIORITY_META[task.priority];
   const dueMeta = getDueMeta(task.dueDate, task.status);
   const description = task.description?.trim() ?? '';
+  const assignees = task.assignees ?? [];
 
   return (
     <div onClick={onClose} className="lg-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/35 backdrop-blur-md">
@@ -59,35 +60,33 @@ export function TaskDetailsModal({ task, member, onClose, onEdit, onDelete, onPr
             </span>
           </div>
 
-          <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-white/45 dark:bg-white/[0.05] border border-white/65 dark:border-white/10">
-            <span
-              className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${member.color}`}
-            >
-              {getInitials(member.name)}
-            </span>
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Assignee</p>
-              <p className="text-sm font-semibold truncate">{member.name}</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                {member.role}{member.linkedUser ? ` · ${member.linkedUser.email}` : ''}
+          <div className="px-4 py-3 rounded-2xl bg-white/45 dark:bg-white/[0.05] border border-white/65 dark:border-white/10">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Assignee{assignees.length === 1 ? '' : 's'}{assignees.length > 0 ? ` (${assignees.length})` : ''}
               </p>
+              {assignees.length > 0 && <AssigneeCluster assignees={assignees} size="sm" />}
             </div>
+            {assignees.length === 0 ? (
+              <p className="text-sm italic text-slate-400 dark:text-slate-500">No assignees — unassigned</p>
+            ) : (
+              <ul className="space-y-2">
+                {assignees.map((a, i) => (
+                  <li key={`${a.type}-${String(a.id)}-${i}`} className="flex items-center gap-2.5 min-w-0">
+                    <span className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 ${assigneeColor(a)}`}>
+                      {getInitials(a.name)}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold truncate">{a.name}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                        {[a.role, a.email].filter(Boolean).join(' · ') || (a.type === 'user' ? 'Login user' : 'Team member')}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
-
-          {task.assigneeUserId != null && (
-            <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-white/45 dark:bg-white/[0.05] border border-white/65 dark:border-white/10">
-              <span className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 bg-indigo-500">
-                {task.assignedUser ? getInitials(task.assignedUser.name) : 'U'}
-              </span>
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Login user</p>
-                <p className="text-sm font-semibold truncate">{task.assignedUser ? task.assignedUser.name : `User #${task.assigneeUserId}`}</p>
-                {task.assignedUser && (
-                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{task.assignedUser.email}</p>
-                )}
-              </div>
-            </div>
-          )}
 
           <div className="flex items-center gap-2 text-sm">
             <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0" />

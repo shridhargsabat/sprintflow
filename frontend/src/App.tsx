@@ -15,7 +15,7 @@ import FilterBar from './components/FilterBar';
 import DashboardView from './views/DashboardView';
 const KanbanView = lazy(() => import('./views/KanbanView'));
 const BacklogView = lazy(() => import('./views/BacklogView'));
-import type { PriorityFilter, Task, TaskModalState, TaskStatus, TeamMember, ViewId } from './types';
+import type { PriorityFilter, Task, TaskModalState, TaskStatus, ViewId } from './types';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import LoginView from './views/LoginView';
 
@@ -54,9 +54,6 @@ function BoardApp() {
     setNewMemberRole
   });
 
-  const getMember = (id: string | null): TeamMember =>
-    board.team.find(m => m.id === id) || { id: 'unassigned', name: 'Unassigned', role: 'Open', color: 'bg-slate-400' };
-
   const filteredTasks = useMemo(() => {
     return board.tasks.filter(t => {
       if (sprintFilter !== 'all') {
@@ -68,21 +65,23 @@ function BoardApp() {
       }
       if (priorityFilter !== 'all' && t.priority !== priorityFilter) return false;
       if (assigneeFilter !== 'all') {
+        const assignees = t.assignees ?? [];
         if (assigneeFilter.startsWith('user:')) {
-          if (String(t.assigneeUserId ?? '') !== assigneeFilter.slice(5)) return false;
-        } else if (t.assigneeId !== assigneeFilter) {
+          const uid = assigneeFilter.slice(5);
+          if (!assignees.some(a => a.type === 'user' && String(a.id) === uid)) return false;
+        } else if (!assignees.some(a => a.type === 'member' && String(a.id) === assigneeFilter)) {
           return false;
         }
       }
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
-        const m = getMember(t.assigneeId);
-        const hay = [t.id, t.title, t.description, t.tag, m.name, t.assignedUser?.name ?? '', t.assignedUser?.email ?? '', t.sprint].join(' ').toLowerCase();
+        const who = (t.assignees ?? []).map(a => `${a.name} ${a.email ?? ''}`).join(' ');
+        const hay = [t.id, t.title, t.description, t.tag, who, t.sprint].join(' ').toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [board.tasks, board.team, sprintFilter, priorityFilter, assigneeFilter, searchQuery]);
+  }, [board.tasks, sprintFilter, priorityFilter, assigneeFilter, searchQuery]);
 
   const allBacklogTasks = useMemo(
     () => board.tasks.filter(t => t.status === 'backlog').sort((a, b) => PRIORITY_META[b.priority].weight - PRIORITY_META[a.priority].weight),
@@ -223,7 +222,6 @@ function BoardApp() {
         {detailsModal.open && detailsModal.task && (
           <TaskDetailsModal
             task={detailsModal.task}
-            member={getMember(detailsModal.task.assigneeId)}
             onClose={closeDetails}
             onEdit={() => { const t = detailsModal.task; closeDetails(); if (t) openTaskModal(t, t.status); }}
             onDelete={(id) => { void board.deleteTask(id); closeDetails(); }}

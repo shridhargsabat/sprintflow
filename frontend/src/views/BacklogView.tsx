@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import Dropdown from '../components/Dropdown';
 import GlassTooltip from '../components/GlassTooltip';
+import AssigneeCluster, { assigneeNames } from '../components/AssigneeCluster';
 import type { Task, TaskStatus, TeamMember } from '../types';
 import { GLASS_PANEL, GLASS_PILL, PRIORITY_META, STATUS_COLUMNS } from '../constants';
-import { getDueMeta, getInitials } from '../utils/format';
+import { getDueMeta } from '../utils/format';
 
 interface BacklogViewProps {
   tasks: Task[];
@@ -14,11 +15,8 @@ interface BacklogViewProps {
   onPromoteTask: (taskId: string) => void;
 }
 
-export default function BacklogView({ tasks, team, onOpenTask, onOpenDetails, onMoveTaskStatus, onPromoteTask }: BacklogViewProps) {
+export default function BacklogView({ tasks, onOpenTask, onOpenDetails, onMoveTaskStatus, onPromoteTask }: BacklogViewProps) {
   const [backlogSort, setBacklogSort] = useState<string>('priority');
-
-  const getMember = (id: string | null): TeamMember =>
-    team.find(m => m.id === id) || { id: 'unassigned', name: 'Unassigned', role: 'Open', color: 'bg-slate-400' };
 
   const sortedBacklog = useMemo(() => {
     const statusOrder = { in_progress: 1, in_review: 2, todo: 3, backlog: 4, done: 5 };
@@ -75,10 +73,10 @@ export default function BacklogView({ tasks, team, onOpenTask, onOpenDetails, on
               {sortedBacklog.length === 0 ? (
                 <tr><td colSpan={7} className="py-12 text-center text-slate-400">No tasks match your current filters.</td></tr>
               ) : sortedBacklog.map(t => {
-                const m = getMember(t.assigneeId);
                 const p = PRIORITY_META[t.priority];
                 const due = getDueMeta(t.dueDate, t.status);
                 const col = STATUS_COLUMNS.find(c => c.id === t.status) || STATUS_COLUMNS[0];
+                const names = assigneeNames(t.assignees);
                 return (
                   <tr key={t.id} className="hover:bg-white/50 dark:hover:bg-white/[0.06] transition-colors">
                     <td className="py-3.5 px-5 max-w-xs">
@@ -90,20 +88,10 @@ export default function BacklogView({ tasks, team, onOpenTask, onOpenDetails, on
                         <p className="font-semibold group-hover:text-blue-600 dark:group-hover:text-blue-300 truncate">{t.title}</p>
                       </div>
                     </td>
-                    <td className="py-3.5 px-3 whitespace-nowrap">
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-6 h-6 rounded-full ${m.color} text-white text-[10px] font-bold flex items-center justify-center shrink-0`}>{getInitials(m.name)}</span>
-                          <span className="font-medium">{m.name}</span>
-                        </div>
-                        {t.assigneeUserId != null && (
-                          <GlassTooltip label={t.assignedUser ? t.assignedUser.email : `User #${t.assigneeUserId}`} position="bottom" className="inline-flex">
-                            <div className="flex items-center gap-2">
-                              <span className="w-6 h-6 rounded-full bg-indigo-500 text-white text-[10px] font-bold flex items-center justify-center shrink-0">{t.assignedUser ? getInitials(t.assignedUser.name) : 'U'}</span>
-                              <span className="font-medium">{t.assignedUser ? t.assignedUser.name : `User #${t.assigneeUserId}`}</span>
-                            </div>
-                          </GlassTooltip>
-                        )}
+                    <td className="py-3.5 px-3">
+                      <div className="flex items-center gap-2 min-w-0 max-w-56">
+                        <AssigneeCluster assignees={t.assignees} size="sm" />
+                        {names !== '' && <span className="font-medium truncate">{names}</span>}
                       </div>
                     </td>
                     <td className={`py-3.5 px-3 whitespace-nowrap ${due.cls}`}>{due.text}</td>

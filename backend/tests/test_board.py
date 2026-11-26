@@ -92,10 +92,12 @@ def test_import_round_trip_and_reset_restores_seeds(client):
         ],
         "tasks": [
             {"id": "IMP-1", "title": "Imported task one", "description": "first",
-             "assigneeId": "mx1", "dueDate": "2026-12-20", "status": "todo",
+             "assignees": [{"type": "member", "id": "mx1"}],
+             "dueDate": "2026-12-20", "status": "todo",
              "priority": "high", "sprint": "Sprint 99", "points": 5, "tag": "Backend"},
             {"id": "IMP-2", "title": "Imported task two", "description": "",
-             "assigneeId": None, "dueDate": "2026-12-21", "status": "done",
+             "assignees": [],
+             "dueDate": "2026-12-21", "status": "done",
              "priority": "low", "sprint": "Sprint 99", "points": 2, "tag": "QA"},
         ],
     }
@@ -110,10 +112,15 @@ def test_import_round_trip_and_reset_restores_seeds(client):
         {k: m[k] for k in ("id", "name", "role", "color")} for m in got_team
     ] == sorted(payload["team"], key=lambda m: m["id"])
     got_tasks = sorted(client.get("/api/tasks").json(), key=lambda t: t["id"])
-    expected_tasks = [
-        {**t, "assigneeUserId": None, "assignedUser": None}
-        for t in sorted(payload["tasks"], key=lambda t: t["id"])
-    ]
+    enriched_mx1 = {
+        "type": "member", "id": "mx1", "name": "Imported One",
+        "role": "Dev", "color": "bg-sky-600",
+    }
+    expected_tasks = []
+    for task in sorted(payload["tasks"], key=lambda t: t["id"]):
+        expected = {k: v for k, v in task.items() if k != "assignees"}
+        expected["assignees"] = [enriched_mx1] if task["id"] == "IMP-1" else []
+        expected_tasks.append(expected)
     assert got_tasks == expected_tasks
 
     summary = client.get("/api/dashboard/summary", params={"sprint": "Sprint 99"}).json()
@@ -241,8 +248,75 @@ def test_lead_blocked_from_team_import_but_allowed_tasks_only(client, anon_clien
     allowed = anon_client.post("/api/import", json={
         "team": [],
         "tasks": [{"id": "LEAD-1", "title": "Lead task", "description": "",
-                   "assigneeId": None, "dueDate": "2026-12-20", "status": "todo",
+                   "assignees": [], "dueDate": "2026-12-20", "status": "todo",
                    "priority": "high", "sprint": "Sprint 99", "points": 3, "tag": "Backend"}],
     }, headers=headers)
     assert allowed.status_code == 200
     assert allowed.json()["tasks"] == 1
+
+
+# ---------- import/export assignee arrays ----------
+
+def _refs(task):
+    return {(a["type"], a["id"]) for a in task["assignees"]}
+
+
+def test_export_import_round_trip_preserves_assignees(client):
+    members = client.get("/api/team").json()
+    me = client.get("/api/auth/me").json()
+    created = client.post("/api/tasks", json={
+        "title": "Multi-assignee probe", "dueDate": "2026-12-20",
+        "assignees": [
+            {"type": "member", "id": members[0]["id"]},
+            {"type": "member", "id": members[1]["id"]},
+            {"type": "user", "id": me["id"]},
+        ],
+    }).json()
+    want = {
+        ("member", members[0]["id"]),
+        ("member", members[1]["id"]),
+        ("user", me["id"]),
+    }
+    assert _refs(created) == want
+
+    exported = client.get("/api/export").json()
+    # Import back the exact export shape (tasks carry enriched assignees).
+    resp = client.post(
+        "/api/import",
+        json={"team": exported["team"], "tasks": exported["tasks"]},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["warnings"] == []
+    got = {t["id"]: t for t in client.get("/api/tasks").json()}
+    assert _refs(got[created["id"]]) == want
+    assert {t["id"] for t in got.values()} == {t["id"] for t in exported["tasks"]}
+
+
+def test_import_unknown_assignee_ids_skipped_with_warnings(client):
+    me = client.get("/api/auth/me").json()
+    payload = {
+        "team": [
+            {"id": "mxk", "name": "Known", "role": "Dev", "color": "bg-sky-600"},
+        ],
+        "tasks": [
+            {"id": "IMP-U1", "title": "Mixed assignees", "description": "",
+             "assignees": [
+                 {"type": "member", "id": "mxk"},
+                 {"type": "member", "id": "m-ghost"},
+                 {"type": "user", "id": me["id"]},
+                 {"type": "user", "id": 999999},
+             ],
+             "dueDate": "2026-12-20", "status": "todo",
+             "priority": "medium", "sprint": "Sprint 99", "points": 3, "tag": "QA"},
+        ],
+    }
+    resp = client.post("/api/import", json=payload)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["tasks"] == 1
+    assert len(body["warnings"]) == 2
+    assert any("m-ghost" in w for w in body["warnings"])
+    assert any("999999" in w for w in body["warnings"])
+
+    got = {t["id"]: t for t in client.get("/api/tasks").json()}
+    assert _refs(got["IMP-U1"]) == {("member", "mxk"), ("user", me["id"])}

@@ -39,21 +39,18 @@ def create_task(
 ) -> Dict[str, Any]:
     with db.get_conn() as conn:
         task_id = db.next_task_id(conn)
-        db.validate_assignee_id(conn, payload.assigneeId)
-        db.validate_assignee_user_id(conn, payload.assigneeUserId)
+        assignees = db.validate_assignees(conn, payload.assignees)
         db.validate_tag(conn, payload.tag)
         conn.execute(
             """
             INSERT INTO tasks
-                (id, title, description, assignee_id, assignee_user_id, due_date, status, priority, sprint, points, tag)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (id, title, description, due_date, status, priority, sprint, points, tag)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 task_id,
                 payload.title.strip(),
                 payload.description.strip(),
-                payload.assigneeId,
-                payload.assigneeUserId,
                 payload.dueDate,
                 payload.status,
                 payload.priority,
@@ -62,6 +59,7 @@ def create_task(
                 payload.tag,
             ),
         )
+        db.set_task_assignees(conn, task_id, assignees)
         return db.fetch_task(conn, task_id)
 
 
@@ -75,13 +73,12 @@ def update_task(
         existing = conn.execute("SELECT id FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Task not found")
-        db.validate_assignee_id(conn, payload.assigneeId)
-        db.validate_assignee_user_id(conn, payload.assigneeUserId)
+        assignees = db.validate_assignees(conn, payload.assignees)
         db.validate_tag(conn, payload.tag)
         conn.execute(
             """
             UPDATE tasks
-            SET title = ?, description = ?, assignee_id = ?, assignee_user_id = ?, due_date = ?,
+            SET title = ?, description = ?, due_date = ?,
                 status = ?, priority = ?, sprint = ?, points = ?, tag = ?,
                 updated_at = datetime('now')
             WHERE id = ?
@@ -89,8 +86,6 @@ def update_task(
             (
                 payload.title.strip(),
                 payload.description.strip(),
-                payload.assigneeId,
-                payload.assigneeUserId,
                 payload.dueDate,
                 payload.status,
                 payload.priority,
@@ -100,6 +95,7 @@ def update_task(
                 task_id,
             ),
         )
+        db.set_task_assignees(conn, task_id, assignees)
         return db.fetch_task(conn, task_id)
 
 

@@ -44,7 +44,7 @@ def _task_payload(**overrides):
     data = {
         "title": "Tagged probe",
         "description": "",
-        "assigneeId": None,
+        "assignees": [],
         "dueDate": "2026-12-05",
         "status": "todo",
         "priority": "medium",
@@ -206,13 +206,13 @@ def test_import_autocreates_missing_tags_with_warnings(client):
         "tasks": [
             {
                 "id": "IMP-T1", "title": "New stream work", "description": "",
-                "assigneeId": None, "dueDate": "2026-12-20", "status": "todo",
+                "assignees": [], "dueDate": "2026-12-20", "status": "todo",
                 "priority": "medium", "sprint": "Sprint 99", "points": 3,
                 "tag": "Observability",
             },
             {
                 "id": "IMP-T2", "title": "Seed stream work", "description": "",
-                "assigneeId": None, "dueDate": "2026-12-21", "status": "todo",
+                "assignees": [], "dueDate": "2026-12-21", "status": "todo",
                 "priority": "low", "sprint": "Sprint 99", "points": 2, "tag": "QA",
             },
         ],
@@ -233,7 +233,7 @@ def test_import_known_tags_produce_no_tag_warnings(client):
         "tasks": [
             {
                 "id": "IMP-K1", "title": "Seed work", "description": "",
-                "assigneeId": None, "dueDate": "2026-12-20", "status": "todo",
+                "assignees": [], "dueDate": "2026-12-20", "status": "todo",
                 "priority": "medium", "sprint": "Sprint 99", "points": 3, "tag": "Backend",
             }
         ],

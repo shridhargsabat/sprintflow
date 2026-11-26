@@ -121,7 +121,9 @@ export default function FilterBar({
               <Dropdown
                 value={assigneeFilter}
                 onChange={onAssigneeFilterChange}
-                options={[{ value: 'all', label: 'Who: Everyone' }, ...team.map(m => ({ value: m.id, label: m.linkedUser ? `${m.name} · ${m.linkedUser.email}` : m.name })), ...directory.map(u => ({ value: `user:${u.id}`, label: `${u.name} · ${u.email}` }))]}
+                searchable
+                searchPlaceholder="Search people…"
+                options={[{ value: 'all', label: 'Who: Everyone' }, ...team.map(m => ({ value: m.id, label: m.linkedUser ? `${m.name} · ${m.linkedUser.email}` : m.name, group: 'Team members' })), ...directory.map(u => ({ value: `user:${u.id}`, label: `${u.name} · ${u.email}`, group: 'Login users' }))]}
                 className={`inline-flex w-full items-center justify-between gap-2 rounded-full px-3.5 py-1.5 text-xs font-medium cursor-pointer ${GLASS_PILL}`}
               />
             </GlassTooltip>

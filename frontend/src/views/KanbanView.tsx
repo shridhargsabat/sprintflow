@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import Dropdown from '../components/Dropdown';
 import GlassTooltip from '../components/GlassTooltip';
+import AssigneeCluster, { assigneeNames } from '../components/AssigneeCluster';
 import type { Task, TaskStatus, TeamMember } from '../types';
 import { GLASS_PILL, PRIORITY_META, STATUS_COLUMNS } from '../constants';
-import { getDueMeta, getInitials } from '../utils/format';
+import { getDueMeta } from '../utils/format';
 
 interface KanbanViewProps {
   tasks: Task[];
@@ -14,12 +15,9 @@ interface KanbanViewProps {
   onMoveTaskStatus: (taskId: string, status: TaskStatus) => void;
 }
 
-export default function KanbanView({ tasks, team, onOpenTask, onOpenDetails, onMoveTaskStatus }: KanbanViewProps) {
+export default function KanbanView({ tasks, onOpenTask, onOpenDetails, onMoveTaskStatus }: KanbanViewProps) {
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
-
-  const getMember = (id: string | null): TeamMember =>
-    team.find(m => m.id === id) || { id: 'unassigned', name: 'Unassigned', role: 'Open', color: 'bg-slate-400' };
 
   const totalPts = tasks.reduce((s, t) => s + Number(t.points || 0), 0);
 
@@ -84,9 +82,9 @@ export default function KanbanView({ tasks, team, onOpenTask, onOpenDetails, onM
                 {colTasks.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-slate-400/40 dark:border-white/15 py-8 px-3 text-center text-[11px] text-slate-500">Drop task here</div>
                 ) : colTasks.map(t => {
-                  const m = getMember(t.assigneeId);
                   const p = PRIORITY_META[t.priority];
                   const due = getDueMeta(t.dueDate, t.status);
+                  const names = assigneeNames(t.assignees);
                   return (
                     <div
                       key={t.id}
@@ -108,13 +106,8 @@ export default function KanbanView({ tasks, team, onOpenTask, onOpenDetails, onM
                       </div>
                       <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-slate-900/[0.07] dark:border-white/10">
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <span className={`w-5 h-5 rounded-full ${m.color} text-white text-[9px] font-bold flex items-center justify-center shrink-0`}>{getInitials(m.name)}</span>
-                          {t.assigneeUserId != null && (
-                            <GlassTooltip label={t.assignedUser ? `${t.assignedUser.name} (${t.assignedUser.email})` : `User #${t.assigneeUserId}`}>
-                              <span className="w-5 h-5 rounded-full bg-indigo-500 text-white text-[9px] font-bold flex items-center justify-center shrink-0">{t.assignedUser ? getInitials(t.assignedUser.name) : 'U'}</span>
-                            </GlassTooltip>
-                          )}
-                          <span className="text-[11px] font-medium truncate">{m.name}{t.assignedUser ? ` + ${t.assignedUser.name}` : ''}</span>
+                          <AssigneeCluster assignees={t.assignees} size="xs" />
+                          {names !== '' && <span className="text-[11px] font-medium truncate">{names}</span>}
                         </div>
                         <span className={`text-[10px] shrink-0 ${due.cls}`}>{due.text}</span>
                       </div>

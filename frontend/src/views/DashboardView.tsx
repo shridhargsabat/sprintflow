@@ -21,6 +21,7 @@ import {
 } from 'recharts';
 import type { PriorityFilter, SprintConfig, Task, TaskPriority, TaskStatus, TeamMember } from '../types';
 import GlassTooltip from '../components/GlassTooltip';
+import AssigneeCluster, { assigneeNames } from '../components/AssigneeCluster';
 import { GlassChartTooltip } from '../components/GlassChartTooltip';
 import { PRIORITY_META, GLASS_PANEL, GLASS_SUBCARD, GLASS_PILL, TODAY_ISO } from '../constants';
 import { getInitials, formatShortDate, getDueMeta } from '../utils/format';
@@ -66,9 +67,6 @@ export default function DashboardView({
   onSelectAssignee,
   onOpenTeam
 }: DashboardViewProps) {
-  const getMember = (id: string | null): TeamMember =>
-    team.find(m => m.id === id) || { id: 'unassigned', name: 'Unassigned', role: 'Open', color: 'bg-slate-400' };
-
   const kpis = useMemo(() => {
     const totalTasks = tasks.length;
     const doneTasks = tasks.filter(t => t.status === 'done').length;
@@ -306,7 +304,7 @@ export default function DashboardView({
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1">
           {team.map(member => {
-            const mTasks = tasks.filter(t => t.assigneeId === member.id);
+            const mTasks = tasks.filter(t => (t.assignees ?? []).some(a => a.type === 'member' && String(a.id) === member.id));
             const active = mTasks.filter(t => t.status === 'in_progress' || t.status === 'in_review');
             const open = mTasks.filter(t => t.status !== 'done');
             const pts = open.reduce((s, t) => s + Number(t.points || 0), 0);
@@ -360,9 +358,9 @@ export default function DashboardView({
           {ongoingTasks.length === 0 ? (
             <div className="py-10 text-center text-xs text-slate-400">No ongoing tasks match current filters.</div>
           ) : ongoingTasks.map(t => {
-            const m = getMember(t.assigneeId);
             const p = PRIORITY_META[t.priority];
             const due = getDueMeta(t.dueDate, t.status);
+            const names = assigneeNames(t.assignees);
             return (
               <div key={t.id} onClick={() => onOpenDetails(t)} className={`cursor-pointer p-3.5 rounded-[22px] ${GLASS_SUBCARD}`}>
                 <div className="flex items-start justify-between gap-2 mb-1.5">
@@ -378,12 +376,9 @@ export default function DashboardView({
                   <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold border shrink-0 ${p.pill}`}>{p.label}</span>
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400 mt-2">
-                  <span className="flex items-center gap-1.5">
-                    <span className={`w-5 h-5 rounded-full ${m.color} text-white text-[9px] font-bold inline-flex items-center justify-center`}>{getInitials(m.name)}</span>
-                    {t.assigneeUserId != null && (
-                      <span title={t.assignedUser ? `${t.assignedUser.name} (${t.assignedUser.email})` : `User #${t.assigneeUserId}`} className="w-5 h-5 rounded-full bg-indigo-500 text-white text-[9px] font-bold inline-flex items-center justify-center">{t.assignedUser ? getInitials(t.assignedUser.name) : 'U'}</span>
-                    )}
-                    <span className="font-medium text-slate-800 dark:text-slate-200">{m.name}</span>
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    <AssigneeCluster assignees={t.assignees} size="xs" />
+                    {names !== '' && <span className="font-medium text-slate-800 dark:text-slate-200 truncate">{names}</span>}
                   </span>
                   <span className={due.cls}>{due.text}</span>
                 </div>
@@ -407,9 +402,9 @@ export default function DashboardView({
           {upcomingDeadlines.length === 0 ? (
             <div className="py-8 text-center text-xs text-slate-400">All tasks in this view are completed.</div>
           ) : upcomingDeadlines.map(t => {
-            const m = getMember(t.assigneeId);
             const p = PRIORITY_META[t.priority];
             const due = getDueMeta(t.dueDate, t.status);
+            const names = assigneeNames(t.assignees) || 'Unassigned';
             const [mon, day] = formatShortDate(t.dueDate).split(' ');
             return (
               <div key={t.id} onClick={() => onOpenDetails(t)} className="cursor-pointer flex items-center justify-between gap-3 p-2.5 rounded-2xl hover:bg-white/60 dark:hover:bg-white/[0.08] transition-colors">
@@ -421,11 +416,8 @@ export default function DashboardView({
                   <div className="min-w-0">
                     <p className="text-xs font-semibold truncate">{t.title}</p>
                     <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate">
-                      {m.name}
-                      {t.assigneeUserId != null && (
-                        <span title={t.assignedUser ? `${t.assignedUser.name} (${t.assignedUser.email})` : `User #${t.assigneeUserId}`} className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-indigo-500 text-white text-[8px] font-bold ml-1 align-middle">{t.assignedUser ? getInitials(t.assignedUser.name) : 'U'}</span>
-                      )}
-                      {' '}· {t.tag} · <span className={due.cls}>{due.text}</span>
+                      <span className="mr-1 inline-flex align-middle"><AssigneeCluster assignees={t.assignees} size="xs" /></span>
+                      {names} · {t.tag} · <span className={due.cls}>{due.text}</span>
                     </p>
                   </div>
                 </div>
@@ -452,8 +444,8 @@ export default function DashboardView({
           {backlogTasks.length === 0 ? (
             <div className="py-8 text-center text-xs text-slate-400">Backlog is empty.</div>
           ) : backlogTasks.slice(0, 5).map(t => {
-            const m = getMember(t.assigneeId);
             const p = PRIORITY_META[t.priority];
+            const names = assigneeNames(t.assignees) || 'Unassigned';
             return (
               <div key={t.id} className={`flex items-center justify-between gap-2.5 p-3 rounded-[22px] ${GLASS_SUBCARD}`}>
                 <div onClick={() => onOpenDetails(t)} className="cursor-pointer min-w-0 flex-1">
@@ -462,7 +454,7 @@ export default function DashboardView({
                     <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">{t.id} · {t.points} pts</span>
                   </div>
                   <p className="text-xs font-semibold truncate">{t.title}</p>
-                  <p className="text-[10px] text-slate-600 dark:text-slate-400">{m.name} · Target {formatShortDate(t.dueDate)}</p>
+                  <p className="text-[10px] text-slate-600 dark:text-slate-400">{names} · Target {formatShortDate(t.dueDate)}</p>
                 </div>
                 <GlassTooltip label="Pull into sprint" position="bottom" className="inline-flex shrink-0">
                   <button type="button" onClick={() => onPromoteTask(t.id)} className={`px-3 py-1.5 rounded-full text-[11px] font-semibold hover:text-blue-600 ${GLASS_PILL}`}>

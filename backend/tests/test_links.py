@@ -186,25 +186,51 @@ def test_startup_dedupe_keeps_lowest_rowid(client, tmp_path):
 
 def _seed_task(client, assignee_id):
     resp = client.post("/api/tasks", json={
-        "title": "Leaver task", "dueDate": "2026-12-07", "assigneeId": assignee_id,
+        "title": "Leaver task", "dueDate": "2026-12-07",
+        "assignees": [{"type": "member", "id": assignee_id}],
     })
     assert resp.status_code == 201
     return resp.json()
+
+
+def _has_member(task, member_id):
+    return ("member", member_id) in {(a["type"], a["id"]) for a in task["assignees"]}
 
 
 def test_delete_defaults_to_unassign(client):
     members = _team_by_id(client)
     victim = sorted(members)[-1]
     task = _seed_task(client, victim)
-    owned_before = sum(1 for t in client.get("/api/tasks").json() if t["assigneeId"] == victim)
+    owned_before = sum(1 for t in client.get("/api/tasks").json() if _has_member(t, victim))
     resp = client.delete(f"/api/team/{victim}")
     assert resp.status_code == 200
     assert resp.json() == {
         "deleted": victim, "reassignedTasks": owned_before, "fallback": None,
     }
     tasks = {t["id"]: t for t in client.get("/api/tasks").json()}
-    assert tasks[task["id"]]["assigneeId"] is None
+    assert not _has_member(tasks[task["id"]], victim)
+    assert tasks[task["id"]]["assignees"] == []
     assert victim not in _team_by_id(client)
+
+
+def test_delete_unassign_preserves_other_assignees(client):
+    """Row-delete semantics: only the victim's rows go, co-assignees stay."""
+    members = _team_by_id(client)
+    ids = sorted(members)
+    victim, keeper = ids[-1], ids[0]
+    resp = client.post("/api/tasks", json={
+        "title": "Shared task", "dueDate": "2026-12-07",
+        "assignees": [
+            {"type": "member", "id": victim},
+            {"type": "member", "id": keeper},
+        ],
+    })
+    assert resp.status_code == 201
+    task_id = resp.json()["id"]
+    assert client.delete(f"/api/team/{victim}").status_code == 200
+    tasks = {t["id"]: t for t in client.get("/api/tasks").json()}
+    refs = {(a["type"], a["id"]) for a in tasks[task_id]["assignees"]}
+    assert refs == {("member", keeper)}
 
 
 def test_delete_with_reassignTo_moves_tasks(client):
@@ -212,14 +238,35 @@ def test_delete_with_reassignTo_moves_tasks(client):
     ids = sorted(members)
     victim, target = ids[-1], ids[0]
     task = _seed_task(client, victim)
-    owned_before = sum(1 for t in client.get("/api/tasks").json() if t["assigneeId"] == victim)
+    owned_before = sum(1 for t in client.get("/api/tasks").json() if _has_member(t, victim))
     resp = client.delete(f"/api/team/{victim}?reassignTo={target}")
     assert resp.status_code == 200
     assert resp.json() == {
         "deleted": victim, "reassignedTasks": owned_before, "fallback": target,
     }
     tasks = {t["id"]: t for t in client.get("/api/tasks").json()}
-    assert tasks[task["id"]]["assigneeId"] == target
+    assert _has_member(tasks[task["id"]], target)
+    assert not _has_member(tasks[task["id"]], victim)
+
+
+def test_delete_with_reassignTo_dedupes_existing_target_assignment(client):
+    """Reassign onto a task the target already owns: no duplicate rows."""
+    members = _team_by_id(client)
+    ids = sorted(members)
+    victim, target = ids[-1], ids[0]
+    resp = client.post("/api/tasks", json={
+        "title": "Co-owned task", "dueDate": "2026-12-07",
+        "assignees": [
+            {"type": "member", "id": victim},
+            {"type": "member", "id": target},
+        ],
+    })
+    assert resp.status_code == 201
+    task_id = resp.json()["id"]
+    assert client.delete(f"/api/team/{victim}?reassignTo={target}").status_code == 200
+    tasks = {t["id"]: t for t in client.get("/api/tasks").json()}
+    refs = [(a["type"], a["id"]) for a in tasks[task_id]["assignees"]]
+    assert refs == [("member", target)]
 
 
 def test_delete_with_unknown_reassignTo_400(client):
@@ -258,14 +305,36 @@ def test_delete_unknown_member_404(client):
 
 # ---------- (4) validation ----------
 
-def test_validate_assignee_id_rejects_unknown(client):
+def test_validate_assignees_rejects_unknown(client):
     members = _team_by_id(client)
     known = sorted(members)[0]
+    user = client.get("/api/auth/me").json()
     with db_lib.get_conn() as conn:
-        db_lib.validate_assignee_id(conn, None)  # unset: OK
-        db_lib.validate_assignee_id(conn, known)  # known: OK
+        assert db_lib.validate_assignees(conn, None) == []  # unset: OK
+        assert db_lib.validate_assignees(conn, []) == []  # clear-all: OK
+        assert db_lib.validate_assignees(
+            conn, [{"type": "member", "id": known}]
+        ) == [("member", known)]
+        assert db_lib.validate_assignees(
+            conn, [{"type": "user", "id": user["id"]}]
+        ) == [("user", user["id"])]
+        # Dedupe, order-preserving.
+        assert db_lib.validate_assignees(
+            conn,
+            [{"type": "member", "id": known}, {"type": "member", "id": known}],
+        ) == [("member", known)]
         with pytest.raises(HTTPException) as exc:
-            db_lib.validate_assignee_id(conn, "m-no-such-member")
+            db_lib.validate_assignees(
+                conn, [{"type": "member", "id": "m-no-such-member"}]
+            )
+        assert exc.value.status_code == 400
+        with pytest.raises(HTTPException) as exc:
+            db_lib.validate_assignees(conn, [{"type": "user", "id": 999999999}])
+        assert exc.value.status_code == 400
+        with pytest.raises(HTTPException) as exc:
+            db_lib.validate_assignees(
+                conn, [{"type": "member", "id": known}] * 11
+            )
         assert exc.value.status_code == 400
 
 

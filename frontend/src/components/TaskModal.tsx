@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
-import Dropdown from './Dropdown';
+import Dropdown, { type DropdownOption } from './Dropdown';
 import Calendar from './Calendar';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { api, type Tag, type UserDirectoryEntry } from '../api';
 import { GLASS_PANEL, GLASS_PILL, STATUS_COLUMNS } from '../constants';
-import type { Task, TaskFormValues, TaskPriority, TaskStatus, TeamMember } from '../types';
+import type { AssigneeRef, AssigneeType, Task, TaskFormValues, TaskPriority, TaskStatus, TeamMember } from '../types';
 
 interface TaskModalProps {
   task: Task | null;
@@ -21,8 +21,9 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
   useEscapeKey(onClose);
   const [title, setTitle] = useState<string>(task ? task.title : '');
   const [description, setDescription] = useState<string>(task ? task.description || '' : '');
-  const [assigneeId, setAssigneeId] = useState<string | null>(task ? task.assigneeId : (team[0] ? team[0].id : ''));
-  const [assigneeUserId, setAssigneeUserId] = useState<number | null>(task?.assigneeUserId ?? null);
+  const [assigneeKeys, setAssigneeKeys] = useState<string[]>(() =>
+    (task?.assignees ?? []).map(a => `${a.type}:${String(a.id)}`)
+  );
   const [directory, setDirectory] = useState<UserDirectoryEntry[]>([]);
   const [dirFailed, setDirFailed] = useState<boolean>(false);
   const [dueDate, setDueDate] = useState<string>(task ? task.dueDate : '2026-12-02');
@@ -43,8 +44,7 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
     return () => { cancelled = true; };
   }, []);
 
-  // Fail-soft: if the directory cannot load, the Login user picker is hidden
-  // and the task simply keeps/submits no login-user assignment.
+  // Fail-soft: if the directory cannot load, the picker offers team members only.
   useEffect(() => {
     let cancelled = false;
     api.listUserDirectory()
@@ -53,15 +53,33 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
     return () => { cancelled = true; };
   }, []);
 
+  const assigneeOptions: DropdownOption[] = [
+    ...team.map(m => ({
+      value: `member:${m.id}`,
+      label: `${m.name} (${m.role || 'Team'})${m.linkedUser ? ` · ${m.linkedUser.email}` : ''}`,
+      group: 'Team members'
+    })),
+    ...(dirFailed ? [] : directory.map(u => ({
+      value: `user:${u.id}`,
+      label: `${u.name} (${u.email})`,
+      group: 'Login users'
+    })))
+  ];
+
   const handleSubmit = (e: React.FormEvent): void => {
     e.preventDefault();
     if (!title.trim()) return;
+    const assignees: AssigneeRef[] = assigneeKeys.map(k => {
+      const sep = k.indexOf(':');
+      const type = k.slice(0, sep) as AssigneeType;
+      const raw = k.slice(sep + 1);
+      return { type, id: type === 'user' ? Number(raw) : raw };
+    });
     onSave({
       id: task ? task.id : null,
       title: title.trim(),
       description: description.trim(),
-      assigneeId,
-      assigneeUserId,
+      assignees,
       dueDate,
       status,
       priority,
@@ -95,28 +113,16 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
           </div>
           <div>
             <label className="block text-xs font-semibold mb-1">Assignee (Who)</label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">Team member</span>
-                <Dropdown
-                  value={assigneeId || ''}
-                  onChange={setAssigneeId}
-                  options={team.map(m => ({ value: m.id, label: `${m.name} (${m.role || 'Team'})${m.linkedUser ? ` · ${m.linkedUser.email}` : ''}` }))}
-                  className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text"
-                />
-              </div>
-              {!dirFailed && (
-                <div>
-                  <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">Login user</span>
-                  <Dropdown
-                    value={assigneeUserId == null ? '' : String(assigneeUserId)}
-                    onChange={(v) => setAssigneeUserId(v === '' ? null : Number(v))}
-                    options={[{ value: '', label: 'No user' }, ...directory.map(u => ({ value: String(u.id), label: `${u.name} (${u.email})` }))]}
-                    className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text"
-                  />
-                </div>
-              )}
-            </div>
+            <Dropdown
+              multi
+              searchable
+              value={assigneeKeys}
+              onChange={setAssigneeKeys}
+              options={assigneeOptions}
+              placeholder="Select assignees…"
+              searchPlaceholder="Search people…"
+              className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text"
+            />
           </div>
           <div>
             <label className="block text-xs font-semibold mb-1">Due Date (When) *</label>

@@ -75,25 +75,25 @@ def init_db(db_path: Optional[str] = None) -> None:
                 color TEXT NOT NULL DEFAULT 'bg-indigo-600',
                 user_id INTEGER NULL UNIQUE REFERENCES users(id) ON DELETE SET NULL
             );
-
-            CREATE TABLE IF NOT EXISTS tasks (
-                id TEXT PRIMARY KEY,
-                title TEXT NOT NULL,
-                description TEXT NOT NULL DEFAULT '',
-                assignee_id TEXT,
-                due_date TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'todo'
-                    CHECK(status IN ('backlog', 'todo', 'in_progress', 'in_review', 'done')),
-                priority TEXT NOT NULL DEFAULT 'medium'
-                    CHECK(priority IN ('critical', 'high', 'medium', 'low')),
-                sprint TEXT NOT NULL DEFAULT 'Sprint 14',
-                points INTEGER NOT NULL DEFAULT 3,
-                tag TEXT NOT NULL DEFAULT 'Frontend',
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-                assignee_user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
-                FOREIGN KEY (assignee_id) REFERENCES team_members(id) ON DELETE SET NULL
+            """
+            + TASKS_TABLE_DDL
+            + """
+            CREATE TABLE IF NOT EXISTS task_assignees (
+                task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                member_id TEXT NULL REFERENCES team_members(id) ON DELETE CASCADE,
+                user_id INTEGER NULL REFERENCES users(id) ON DELETE CASCADE,
+                CHECK (
+                    (member_id IS NOT NULL AND user_id IS NULL)
+                    OR (member_id IS NULL AND user_id IS NOT NULL)
+                ),
+                UNIQUE (task_id, member_id, user_id)
             );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_task_assignee_member
+                ON task_assignees(task_id, member_id) WHERE member_id IS NOT NULL;
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_task_assignee_user
+                ON task_assignees(task_id, user_id) WHERE user_id IS NOT NULL;
+            CREATE INDEX IF NOT EXISTS idx_task_assignees_task ON task_assignees(task_id);
 
             CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
             CREATE INDEX IF NOT EXISTS idx_tasks_sprint ON tasks(sprint);
@@ -135,10 +135,11 @@ def init_db(db_path: Optional[str] = None) -> None:
         cols = [r[1] for r in conn.execute("PRAGMA table_info(team_members)").fetchall()]
         if "user_id" not in cols:
             conn.execute("ALTER TABLE team_members ADD COLUMN user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL")
-        # Additive auto-migration: optional login-user assignee on tasks.
-        task_cols = [r[1] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()]
-        if "assignee_user_id" not in task_cols:
-            conn.execute("ALTER TABLE tasks ADD COLUMN assignee_user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL")
+        # Multi-assignee migration (idempotent, guarded by PRAGMA checks so
+        # fresh + already-migrated DBs are no-ops): legacy tasks.assignee_id /
+        # tasks.assignee_user_id columns are backfilled into task_assignees,
+        # then dropped.
+        _migrate_task_assignees(conn)
         # Link-integrity migrations (idempotent, run on every startup):
         # 1) Backfill: dangling user_id (no matching users row) -> NULL so no
         #    ghost linkedUser is ever surfaced.
@@ -169,23 +170,109 @@ def init_db(db_path: Optional[str] = None) -> None:
         )
         # Always ensure the seeded admin login exists (idempotent).
         seed_users(conn)
-        # Backfill (idempotent, NULLs only — never overwrites explicit values):
-        # tasks whose assignee member is linked to a login user inherit that
-        # user as their direct assignee.
+
+
+def _migrate_task_assignees(conn: sqlite3.Connection) -> None:
+    """Backfill task_assignees from legacy tasks columns, then drop them.
+
+    Idempotent: PRAGMA-guarded, so fresh DBs (no legacy columns) and
+    already-migrated DBs are no-ops. Only rows referencing existing
+    members/users are backfilled (dangling ids are dropped, never ghosted).
+
+    Column removal prefers `ALTER TABLE ... DROP COLUMN`; when that fails
+    (SQLite refuses to drop a column named in a table-level FOREIGN KEY
+    constraint, which legacy `assignee_id` is), the tasks table is rebuilt
+    without the legacy columns instead. Same end state either way.
+    """
+    task_cols = [r[1] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()]
+    if "assignee_id" in task_cols:
         conn.execute(
             """
-            UPDATE tasks
-            SET assignee_user_id = (
-                SELECT m.user_id FROM team_members m WHERE m.id = tasks.assignee_id
-            )
-            WHERE assignee_user_id IS NULL
-              AND assignee_id IS NOT NULL
-              AND EXISTS (
-                  SELECT 1 FROM team_members m
-                  WHERE m.id = tasks.assignee_id AND m.user_id IS NOT NULL
-              )
+            INSERT OR IGNORE INTO task_assignees (task_id, member_id, user_id)
+            SELECT t.id, t.assignee_id, NULL FROM tasks t
+            WHERE t.assignee_id IS NOT NULL
+              AND EXISTS (SELECT 1 FROM team_members m WHERE m.id = t.assignee_id)
             """
         )
+    if "assignee_user_id" in task_cols:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO task_assignees (task_id, member_id, user_id)
+            SELECT t.id, NULL, t.assignee_user_id FROM tasks t
+            WHERE t.assignee_user_id IS NOT NULL
+              AND EXISTS (SELECT 1 FROM users u WHERE u.id = t.assignee_user_id)
+            """
+        )
+    for column in ("assignee_id", "assignee_user_id"):
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()]
+        if column not in cols:
+            continue
+        try:
+            conn.execute(f"ALTER TABLE tasks DROP COLUMN {column}")
+        except sqlite3.OperationalError:
+            _rebuild_tasks_without_legacy_columns(conn)
+
+
+TASKS_TABLE_DDL = """
+    CREATE TABLE IF NOT EXISTS tasks (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        due_date TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'todo'
+            CHECK(status IN ('backlog', 'todo', 'in_progress', 'in_review', 'done')),
+        priority TEXT NOT NULL DEFAULT 'medium'
+            CHECK(priority IN ('critical', 'high', 'medium', 'low')),
+        sprint TEXT NOT NULL DEFAULT 'Sprint 14',
+        points INTEGER NOT NULL DEFAULT 3,
+        tag TEXT NOT NULL DEFAULT 'Frontend',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+"""
+
+TASKS_CORE_COLUMNS = [
+    "id", "title", "description", "due_date", "status", "priority",
+    "sprint", "points", "tag", "created_at", "updated_at",
+]
+
+
+def _rebuild_tasks_without_legacy_columns(conn: sqlite3.Connection) -> None:
+    """Rebuild tasks without legacy assignee columns (DROP fallback).
+
+    Runs with FK enforcement off and legacy_alter_table on (committed out of
+    the caller's transaction first, since both PRAGMAs are no-ops inside one)
+    so the RENAME neither enforces nor rewrites task_assignees' FK — it keeps
+    pointing at `tasks`, which is recreated under the same name. The new
+    table keeps every core column and row; indexes are recreated.
+    """
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()]
+    if not ({"assignee_id", "assignee_user_id"} & set(cols)):
+        return
+    keep = [c for c in TASKS_CORE_COLUMNS if c in cols]
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute("PRAGMA legacy_alter_table = ON")
+    try:
+        conn.execute("DROP TABLE IF EXISTS _tasks_legacy_assignees")
+        conn.execute("DROP INDEX IF EXISTS idx_tasks_status")
+        conn.execute("DROP INDEX IF EXISTS idx_tasks_sprint")
+        conn.execute("DROP INDEX IF EXISTS idx_tasks_priority")
+        conn.execute("ALTER TABLE tasks RENAME TO _tasks_legacy_assignees")
+        conn.execute(TASKS_TABLE_DDL)
+        collist = ", ".join(keep)
+        conn.execute(
+            f"INSERT INTO tasks ({collist}) "
+            f"SELECT {collist} FROM _tasks_legacy_assignees"
+        )
+        conn.execute("DROP TABLE _tasks_legacy_assignees")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_sprint ON tasks(sprint)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority)")
+        conn.commit()
+    finally:
+        conn.execute("PRAGMA legacy_alter_table = OFF")
+        conn.execute("PRAGMA foreign_keys = ON")
 
 
 def seed_data(conn: sqlite3.Connection) -> None:
@@ -196,11 +283,18 @@ def seed_data(conn: sqlite3.Connection) -> None:
     conn.executemany(
         """
         INSERT OR IGNORE INTO tasks
-            (id, title, description, assignee_id, due_date, status, priority, sprint, points, tag)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, title, description, due_date, status, priority, sprint, points, tag)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        DEFAULT_TASKS,
+        [(t[0], t[1], t[2], t[4], t[5], t[6], t[7], t[8], t[9]) for t in DEFAULT_TASKS],
     )
+    # Seed assignees into the join table (DEFAULT_TASKS[3] is the member id).
+    for task in DEFAULT_TASKS:
+        if task[3]:
+            conn.execute(
+                "INSERT OR IGNORE INTO task_assignees (task_id, member_id, user_id) VALUES (?, ?, NULL)",
+                (task[0], task[3]),
+            )
     seed_sprints(conn)
     seed_tags(conn)
 
@@ -323,6 +417,7 @@ def seed_users(conn: sqlite3.Connection) -> None:
 
 def reset_db(db_path: Optional[str] = None) -> None:
     with get_conn(db_path) as conn:
+        conn.execute("DELETE FROM task_assignees")
         conn.execute("DELETE FROM tasks")
         conn.execute("DELETE FROM team_members")
         conn.execute("DELETE FROM sprints")
@@ -330,32 +425,73 @@ def reset_db(db_path: Optional[str] = None) -> None:
         seed_data(conn)
 
 
-TASK_WITH_USER_SQL = """
-    SELECT t.*, u.name AS assigned_name, u.email AS assigned_email
-    FROM tasks t LEFT JOIN users u ON u.id = t.assignee_user_id
-    WHERE t.id = ?
+MAX_ASSIGNEES = 10
+
+TASK_ASSIGNEES_SQL = """
+    SELECT ta.task_id, ta.member_id, ta.user_id,
+           m.name AS member_name, m.role AS member_role, m.color AS member_color,
+           u.name AS user_name, u.email AS user_email, u.role AS user_role
+    FROM task_assignees ta
+    LEFT JOIN team_members m ON m.id = ta.member_id
+    LEFT JOIN users u ON u.id = ta.user_id
 """
 
 
-def row_to_task(row: sqlite3.Row) -> Dict[str, Any]:
-    keys = set(row.keys())
-    assignee_user_id = row["assignee_user_id"] if "assignee_user_id" in keys else None
-    assigned_name = row["assigned_name"] if "assigned_name" in keys else None
-    assigned_email = row["assigned_email"] if "assigned_email" in keys else None
-    # Ghost-free like list_team: a dangling assignee_user_id (no matching
-    # users row) surfaces assignedUser None rather than {None, None}.
-    assigned_user = (
-        {"name": assigned_name, "email": assigned_email}
-        if assigned_name is not None
-        else None
-    )
+def _assignee_entry(row: sqlite3.Row) -> Optional[Dict[str, Any]]:
+    """One enriched assignee dict, or None for a dangling (ghost) row."""
+    if row["member_id"] is not None:
+        if row["member_name"] is None:  # dangling member: ghost-free skip
+            return None
+        return {
+            "type": "member",
+            "id": row["member_id"],
+            "name": row["member_name"],
+            "role": row["member_role"],
+            "color": row["member_color"],
+        }
+    if row["user_name"] is None:  # dangling user: ghost-free skip
+        return None
+    return {
+        "type": "user",
+        "id": row["user_id"],
+        "name": row["user_name"],
+        "email": row["user_email"],
+        "role": row["user_role"],
+    }
+
+
+def assignees_by_task(
+    conn: sqlite3.Connection, task_ids: List[str]
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Batch-fetch enriched assignees for many tasks (single JOIN query)."""
+    out: Dict[str, List[Dict[str, Any]]] = {tid: [] for tid in task_ids}
+    if not task_ids:
+        return out
+    placeholders = ",".join("?" for _ in task_ids)
+    rows = conn.execute(
+        TASK_ASSIGNEES_SQL + f" WHERE ta.task_id IN ({placeholders}) ORDER BY ta.rowid ASC",
+        task_ids,
+    ).fetchall()
+    for r in rows:
+        entry = _assignee_entry(r)
+        if entry is not None:
+            out.setdefault(r["task_id"], []).append(entry)
+    return out
+
+
+def assignees_for_task(
+    conn: sqlite3.Connection, task_id: str
+) -> List[Dict[str, Any]]:
+    """Enriched assignees for a single task (JOIN-enriched, [] when none)."""
+    return assignees_by_task(conn, [task_id]).get(task_id, [])
+
+
+def row_to_task(row: sqlite3.Row, assignees: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     return {
         "id": row["id"],
         "title": row["title"],
         "description": row["description"],
-        "assigneeId": row["assignee_id"],
-        "assigneeUserId": assignee_user_id,
-        "assignedUser": assigned_user,
+        "assignees": list(assignees) if assignees else [],
         "dueDate": row["due_date"],
         "status": row["status"],
         "priority": row["priority"],
@@ -366,11 +502,11 @@ def row_to_task(row: sqlite3.Row) -> Dict[str, Any]:
 
 
 def fetch_task(conn: sqlite3.Connection, task_id: str) -> Dict[str, Any]:
-    """Single task row with its assigned login user joined in."""
-    row = conn.execute(TASK_WITH_USER_SQL, (task_id,)).fetchone()
+    """Single task row with its JOIN-enriched assignees attached."""
+    row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    return row_to_task(row)
+    return row_to_task(row, assignees_for_task(conn, task_id))
 
 
 def next_task_id(conn: sqlite3.Connection) -> str:
@@ -473,10 +609,16 @@ def list_tasks(
         clauses.append("t.priority = ?")
         params.append(priority)
     if assignee_id and assignee_id != "all":
-        clauses.append("t.assignee_id = ?")
+        clauses.append(
+            "EXISTS (SELECT 1 FROM task_assignees ta "
+            "WHERE ta.task_id = t.id AND ta.member_id = ?)"
+        )
         params.append(assignee_id)
     if assignee_user_id is not None:
-        clauses.append("t.assignee_user_id = ?")
+        clauses.append(
+            "EXISTS (SELECT 1 FROM task_assignees ta "
+            "WHERE ta.task_id = t.id AND ta.user_id = ?)"
+        )
         params.append(assignee_user_id)
     if search and search.strip():
         like = f"%{search.strip()}%"
@@ -484,12 +626,12 @@ def list_tasks(
         params.extend([like, like, like, like])
 
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-    sql = f"""SELECT t.*, u.name AS assigned_name, u.email AS assigned_email
-              FROM tasks t LEFT JOIN users u ON u.id = t.assignee_user_id
+    sql = f"""SELECT t.* FROM tasks t
               {where} ORDER BY t.updated_at DESC, t.rowid DESC"""
     with get_conn(db_path) as conn:
         rows = conn.execute(sql, params).fetchall()
-        return [row_to_task(r) for r in rows]
+        assignee_map = assignees_by_task(conn, [r["id"] for r in rows])
+        return [row_to_task(r, assignee_map.get(r["id"], [])) for r in rows]
 
 
 def list_user_directory(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -501,35 +643,83 @@ def list_user_directory(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
         return [dict(r) for r in rows]
 
 
-def validate_assignee_id(conn: sqlite3.Connection, assignee_id: Optional[str]) -> None:
-    """Reject an unknown task assignee with HTTP 400. None clears/unset: OK.
+def validate_assignees(
+    conn: sqlite3.Connection, assignees: Optional[List[Any]]
+) -> List[tuple]:
+    """Validate a TaskPayload assignees list; 400 on unknown ids or >10.
 
-    NOTE FOR PARENT (routers/tasks.py is read-only for this agent): apply this
-    validator with one line inside the `with db.get_conn() as conn:` block of
-    BOTH handlers, before the INSERT/UPDATE executes:
-
-        create_task:  db.validate_assignee_id(conn, payload.assigneeId)
-        update_task:  db.validate_assignee_id(conn, payload.assigneeId)
+    Returns normalized [(type, id), ...] deduped (order-preserving):
+    member ids as str, user ids as int. None/[] clears: OK.
     """
-    if assignee_id is None:
-        return
-    row = conn.execute(
-        "SELECT 1 FROM team_members WHERE id = ?", (assignee_id,)
-    ).fetchone()
-    if row is None:
+    if not assignees:
+        return []
+    if len(assignees) > MAX_ASSIGNEES:
         raise HTTPException(
-            status_code=400, detail=f"Unknown assigneeId: {assignee_id}"
+            status_code=400,
+            detail=f"Too many assignees: max {MAX_ASSIGNEES}",
         )
+    normalized: List[tuple] = []
+    seen = set()
+    for entry in assignees:
+        if isinstance(entry, dict):
+            kind, raw_id = entry.get("type"), entry.get("id")
+        else:  # pydantic AssigneeInput (or any attr-style) model
+            kind, raw_id = getattr(entry, "type", None), getattr(entry, "id", None)
+        if kind == "member":
+            member_id = str(raw_id).strip() if raw_id is not None else ""
+            if not member_id or (
+                conn.execute(
+                    "SELECT 1 FROM team_members WHERE id = ?", (member_id,)
+                ).fetchone()
+                is None
+            ):
+                raise HTTPException(
+                    status_code=400, detail=f"Unknown assignee member id: {raw_id!r}"
+                )
+            key = ("member", member_id)
+        elif kind == "user":
+            try:
+                user_id = int(raw_id)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                raise HTTPException(
+                    status_code=400, detail=f"Unknown assignee user id: {raw_id!r}"
+                )
+            if (
+                conn.execute(
+                    "SELECT 1 FROM users WHERE id = ?", (user_id,)
+                ).fetchone()
+                is None
+            ):
+                raise HTTPException(
+                    status_code=400, detail=f"Unknown assignee user id: {raw_id!r}"
+                )
+            key = ("user", user_id)
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid assignee type: {kind!r} (expected 'member' or 'user')",
+            )
+        if key not in seen:
+            seen.add(key)
+            normalized.append(key)
+    return normalized
 
 
-def validate_assignee_user_id(conn: sqlite3.Connection, assignee_user_id: Optional[int]) -> None:
-    """Reject an unknown login-user task assignee with HTTP 400. None OK."""
-    if assignee_user_id is None:
-        return
-    row = conn.execute(
-        "SELECT 1 FROM users WHERE id = ?", (assignee_user_id,)
-    ).fetchone()
-    if row is None:
-        raise HTTPException(
-            status_code=400, detail=f"Unknown assigneeUserId: {assignee_user_id}"
-        )
+def set_task_assignees(
+    conn: sqlite3.Connection, task_id: str, normalized: List[tuple]
+) -> None:
+    """Replace a task's join-table assignee rows (full replacement)."""
+    conn.execute("DELETE FROM task_assignees WHERE task_id = ?", (task_id,))
+    for kind, ident in normalized:
+        if kind == "member":
+            conn.execute(
+                "INSERT OR IGNORE INTO task_assignees (task_id, member_id, user_id) "
+                "VALUES (?, ?, NULL)",
+                (task_id, ident),
+            )
+        else:
+            conn.execute(
+                "INSERT OR IGNORE INTO task_assignees (task_id, member_id, user_id) "
+                "VALUES (?, NULL, ?)",
+                (task_id, ident),
+            )

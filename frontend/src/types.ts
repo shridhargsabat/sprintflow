@@ -13,13 +13,27 @@ export interface TeamMember {
   linkedUser?: { name: string; email: string } | null;
 }
 
+export type AssigneeType = 'member' | 'user';
+
+export interface TaskAssignee {
+  type: AssigneeType;
+  id: string | number;
+  name: string;
+  email?: string;
+  role?: string;
+  color?: string;
+}
+
+export interface AssigneeRef {
+  type: AssigneeType;
+  id: string | number;
+}
+
 export interface Task {
   id: string;
   title: string;
   description: string;
-  assigneeId: string | null;
-  assigneeUserId?: number | null;
-  assignedUser?: { name: string; email: string } | null;
+  assignees: TaskAssignee[];
   dueDate: string;
   status: TaskStatus;
   priority: TaskPriority;
@@ -28,7 +42,17 @@ export interface Task {
   tag: string;
 }
 
-export type TaskPayload = Omit<Task, 'id'>;
+export interface TaskPayload {
+  title: string;
+  description: string;
+  assignees: AssigneeRef[];
+  dueDate: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  sprint: string;
+  points: number;
+  tag: string;
+}
 
 export type TaskFormValues = TaskPayload & { id: string | null };
 

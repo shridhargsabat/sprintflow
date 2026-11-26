@@ -1,41 +1,66 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, Search } from 'lucide-react';
 import { GLASS_PANEL, GLASS_PILL } from '../constants';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 
 export interface DropdownOption {
   value: string;
   label: string;
+  /** Section label; consecutive options sharing a group render under one sticky header. */
+  group?: string;
 }
 
-export interface DropdownProps {
+interface DropdownBaseProps {
   id?: string;
   label?: string;
-  value: string;
   options: DropdownOption[];
-  onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
   menuClassName?: string;
   align?: 'left' | 'right';
+  /** Show a filter input on top of the menu (filters by label, case-insensitive). */
+  searchable?: boolean;
+  searchPlaceholder?: string;
 }
+
+export interface DropdownSingleProps extends DropdownBaseProps {
+  multi?: false;
+  value: string;
+  onChange: (value: string) => void;
+}
+
+export interface DropdownMultiProps extends DropdownBaseProps {
+  multi: true;
+  value: string[];
+  onChange: (value: string[]) => void;
+}
+
+export type DropdownProps = DropdownSingleProps | DropdownMultiProps;
 
 const DEFAULT_TRIGGER_CLASS = `${GLASS_PILL} inline-flex w-full items-center justify-between gap-2 rounded-full px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 outline-none transition-all duration-200 hover:bg-white/70 dark:hover:bg-white/[0.12] focus-visible:ring-2 focus-visible:ring-blue-500/60 dark:focus-visible:ring-blue-400/60 disabled:cursor-not-allowed disabled:opacity-50`;
 
-export default function Dropdown({
-  id,
-  label,
-  value,
-  options,
-  onChange,
-  placeholder = 'Select…',
-  className,
-  menuClassName,
-  align = 'left',
-}: DropdownProps): React.JSX.Element {
+export default function Dropdown(props: DropdownProps): React.JSX.Element {
+  const {
+    id,
+    label,
+    options,
+    placeholder = 'Select…',
+    className,
+    menuClassName,
+    align = 'left',
+    searchable = false,
+    searchPlaceholder = 'Search…',
+  } = props;
+  const multi = props.multi === true;
+  const value: string | string[] = props.value;
+  const onChange = props.onChange as (v: string | string[]) => void;
+
   const [open, setOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(() => Math.max(0, options.findIndex((o) => o.value === value)));
+  const [activeIndex, setActiveIndex] = useState(() =>
+    multi ? 0 : Math.max(0, options.findIndex((o) => o.value === (value as string)))
+  );
+  const [query, setQuery] = useState('');
   const generatedId = useId();
   const baseId = id ?? generatedId.replace(/:/g, '');
   const labelId = `${baseId}-label`;
@@ -43,8 +68,15 @@ export default function Dropdown({
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const optionRefs = useRef<Array<HTMLLIElement | null>>([]);
-  const menuRef = useRef<HTMLUListElement | null>(null);
+  const menuRef = useRef<HTMLElement | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  const visibleOptions = useMemo(() => {
+    if (!searchable || query.trim() === '') return options;
+    const q = query.trim().toLowerCase();
+    return options.filter((o) => o.label.toLowerCase().includes(q));
+  }, [options, searchable, query]);
 
   const updateMenuPos = (): void => {
     const r = buttonRef.current?.getBoundingClientRect();
@@ -56,7 +88,12 @@ export default function Dropdown({
     setMenuPos({ top, left: align === 'right' ? r.right - width : r.left, width });
   };
 
-  const selected = options.find((o) => o.value === value) ?? null;
+  const selectedValues: string[] = multi ? (value as string[]) : [value as string];
+  const selected = multi ? null : (options.find((o) => o.value === value) ?? null);
+  const multiCount = multi ? selectedValues.length : 0;
+  const multiTitles = multi
+    ? selectedValues.map((v) => options.find((o) => o.value === v)?.label ?? v).join(', ')
+    : undefined;
 
   const close = (returnFocus: boolean): void => {
     setOpen(false);
@@ -66,17 +103,23 @@ export default function Dropdown({
   useEscapeKey(() => close(true), open);
 
   const openMenu = (index?: number): void => {
-    const selectedIdx = options.findIndex((o) => o.value === value);
+    setQuery('');
+    const selectedIdx = options.findIndex((o) => selectedValues.includes(o.value));
     setActiveIndex(index ?? (selectedIdx >= 0 ? selectedIdx : 0));
     updateMenuPos();
     setOpen(true);
   };
 
   const selectAt = (index: number): void => {
-    const opt = options[index];
+    const opt = visibleOptions[index];
     if (!opt) return;
-    onChange(opt.value);
-    close(true);
+    if (multi) {
+      const cur = value as string[];
+      onChange(cur.includes(opt.value) ? cur.filter((v) => v !== opt.value) : [...cur, opt.value]);
+    } else {
+      onChange(opt.value);
+      close(true);
+    }
   };
 
   useEffect(() => {
@@ -106,16 +149,24 @@ export default function Dropdown({
     if (open) optionRefs.current[activeIndex]?.scrollIntoView({ block: 'nearest' });
   }, [activeIndex, open]);
 
+  useEffect(() => {
+    if (open) setActiveIndex((i) => (i >= visibleOptions.length ? 0 : i));
+  }, [visibleOptions.length, open]);
+
+  useEffect(() => {
+    if (open && searchable) searchRef.current?.focus();
+  }, [open, searchable]);
+
   const onListKeyDown = (e: React.KeyboardEvent): void => {
-    if (options.length === 0) return;
+    if (visibleOptions.length === 0) return;
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        setActiveIndex((i) => (i + 1) % options.length);
+        setActiveIndex((i) => (i + 1) % visibleOptions.length);
         break;
       case 'ArrowUp':
         e.preventDefault();
-        setActiveIndex((i) => (i - 1 + options.length) % options.length);
+        setActiveIndex((i) => (i - 1 + visibleOptions.length) % visibleOptions.length);
         break;
       case 'Home':
         e.preventDefault();
@@ -123,7 +174,7 @@ export default function Dropdown({
         break;
       case 'End':
         e.preventDefault();
-        setActiveIndex(options.length - 1);
+        setActiveIndex(visibleOptions.length - 1);
         break;
       case 'Enter':
       case ' ':
@@ -144,13 +195,13 @@ export default function Dropdown({
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        if (open) setActiveIndex((i) => (i + 1) % Math.max(options.length, 1));
+        if (open) setActiveIndex((i) => (i + 1) % Math.max(visibleOptions.length, 1));
         else openMenu();
         break;
       case 'ArrowUp':
         e.preventDefault();
-        if (open) setActiveIndex((i) => (i - 1 + options.length) % Math.max(options.length, 1));
-        else openMenu(options.length - 1);
+        if (open) setActiveIndex((i) => (i - 1 + visibleOptions.length) % Math.max(visibleOptions.length, 1));
+        else openMenu(visibleOptions.length - 1);
         break;
       case 'Enter':
       case ' ':
@@ -168,6 +219,100 @@ export default function Dropdown({
         }
         break;
     }
+  };
+
+  const onSearchKeyDown = (e: React.KeyboardEvent): void => {
+    if (visibleOptions.length === 0 && e.key !== 'Escape') return;
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setActiveIndex((i) => (i + 1) % Math.max(visibleOptions.length, 1));
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setActiveIndex((i) => (i - 1 + visibleOptions.length) % Math.max(visibleOptions.length, 1));
+        break;
+      case 'Enter':
+        e.preventDefault();
+        selectAt(activeIndex);
+        break;
+      case 'Escape':
+        e.preventDefault();
+        close(true);
+        break;
+    }
+  };
+
+  const renderMenuItems = (): React.ReactNode => {
+    if (options.length === 0) {
+      return <li className="px-3 py-2 text-sm text-slate-400 dark:text-slate-500">No options</li>;
+    }
+    if (visibleOptions.length === 0) {
+      return <li className="px-3 py-2 text-sm text-slate-400 dark:text-slate-500">No matches</li>;
+    }
+    const items: React.ReactNode[] = [];
+    let lastGroup: string | undefined;
+    visibleOptions.forEach((opt, i) => {
+      if (opt.group !== lastGroup) {
+        lastGroup = opt.group;
+        if (opt.group) {
+          items.push(
+            <li
+              key={`group-${i}-${opt.group}`}
+              role="presentation"
+              aria-hidden="true"
+              className="sticky top-0 z-10 rounded-lg bg-white/90 px-3 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 backdrop-blur-xl dark:bg-slate-900/90 dark:text-slate-400"
+            >
+              {opt.group}
+            </li>
+          );
+        }
+      }
+      const isSelected = selectedValues.includes(opt.value);
+      const isActive = i === activeIndex;
+      items.push(
+        <li
+          key={opt.value}
+          ref={(el) => {
+            optionRefs.current[i] = el;
+          }}
+          id={`${baseId}-opt-${i}`}
+          role="option"
+          aria-selected={isSelected}
+          onClick={() => selectAt(i)}
+          onMouseEnter={() => setActiveIndex(i)}
+          className={`flex cursor-pointer items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm outline-none transition-colors duration-100 ${
+            isActive
+              ? 'bg-blue-500/15 text-slate-900 dark:bg-white/15 dark:text-white'
+              : 'text-slate-700 dark:text-slate-200'
+          }`}
+        >
+          {multi ? (
+            <>
+              <span
+                aria-hidden="true"
+                className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                  isSelected
+                    ? 'border-blue-500 bg-blue-500 text-white'
+                    : 'border-slate-300 text-transparent dark:border-white/30'
+                }`}
+              >
+                <Check className="h-3 w-3" strokeWidth={3} />
+              </span>
+              <span className="flex-1 truncate">{opt.label}</span>
+            </>
+          ) : (
+            <>
+              <span className="truncate">{opt.label}</span>
+              {isSelected ? (
+                <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />
+              ) : null}
+            </>
+          )}
+        </li>
+      );
+    });
+    return items;
   };
 
   return (
@@ -190,63 +335,82 @@ export default function Dropdown({
         aria-controls={listboxId}
         aria-labelledby={label ? labelId : undefined}
         aria-label={label ? undefined : placeholder}
+        title={multi && multiCount > 0 ? multiTitles : undefined}
         onClick={() => (open ? close(false) : openMenu())}
         onKeyDown={onTriggerKeyDown}
         className={className ?? DEFAULT_TRIGGER_CLASS}
       >
-        <span className={`truncate ${selected ? '' : 'text-slate-400 dark:text-slate-500'}`}>
-          {selected ? selected.label : placeholder}
-        </span>
+        {multi ? (
+          <span className={`truncate ${multiCount > 0 ? '' : 'text-slate-400 dark:text-slate-500'}`}>
+            {multiCount > 0 ? `${multiCount} selected` : placeholder}
+          </span>
+        ) : (
+          <span className={`truncate ${selected ? '' : 'text-slate-400 dark:text-slate-500'}`}>
+            {selected ? selected.label : placeholder}
+          </span>
+        )}
         <ChevronDown
           aria-hidden="true"
           className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 dark:text-slate-400 ${open ? 'rotate-180' : ''}`}
         />
       </button>
       {open && menuPos ? createPortal(
-        <ul
-          id={listboxId}
-          role="listbox"
-          aria-labelledby={label ? labelId : undefined}
-          aria-label={label ? undefined : placeholder}
-          aria-activedescendant={options[activeIndex] ? `${baseId}-opt-${activeIndex}` : undefined}
-          tabIndex={-1}
-          onKeyDown={onListKeyDown}
-          ref={menuRef}
-          style={{ top: menuPos.top, left: menuPos.left, width: menuPos.width }}
-          className={`lg-dropdown ${GLASS_PANEL} fixed z-[100] max-h-60 overflow-y-auto scroll-slim rounded-2xl p-1.5 outline-none ${menuClassName ?? ''}`}
-        >
-          {options.length === 0 ? (
-            <li className="px-3 py-2 text-sm text-slate-400 dark:text-slate-500">No options</li>
-          ) : (
-            options.map((opt, i) => {
-              const isSelected = opt.value === value;
-              const isActive = i === activeIndex;
-              return (
-                <li
-                  key={opt.value}
-                  ref={(el) => {
-                    optionRefs.current[i] = el;
-                  }}
-                  id={`${baseId}-opt-${i}`}
-                  role="option"
-                  aria-selected={isSelected}
-                  onClick={() => selectAt(i)}
-                  onMouseEnter={() => setActiveIndex(i)}
-                  className={`flex cursor-pointer items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm outline-none transition-colors duration-100 ${
-                    isActive
-                      ? 'bg-blue-500/15 text-slate-900 dark:bg-white/15 dark:text-white'
-                      : 'text-slate-700 dark:text-slate-200'
-                  }`}
-                >
-                  <span className="truncate">{opt.label}</span>
-                  {isSelected ? (
-                    <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />
-                  ) : null}
-                </li>
-              );
-            })
-          )}
-        </ul>,
+        searchable ? (
+          <div
+            ref={(el) => {
+              menuRef.current = el;
+            }}
+            style={{ top: menuPos.top, left: menuPos.left, width: menuPos.width }}
+            className={`lg-dropdown ${GLASS_PANEL} fixed z-[100] rounded-2xl p-1.5 outline-none ${menuClassName ?? ''}`}
+          >
+            <div className="relative p-1">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <input
+                ref={searchRef}
+                type="text"
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setActiveIndex(0);
+                }}
+                onKeyDown={onSearchKeyDown}
+                onClick={(e) => e.stopPropagation()}
+                placeholder={searchPlaceholder}
+                aria-label={searchPlaceholder}
+                className="w-full rounded-xl bg-slate-900/[0.05] py-1.5 pl-8 pr-2 text-xs text-slate-800 outline-none transition placeholder:text-slate-400 focus:bg-slate-900/[0.08] dark:bg-black/25 dark:text-slate-100 dark:focus:bg-black/40"
+              />
+            </div>
+            <ul
+              id={listboxId}
+              role="listbox"
+              aria-labelledby={label ? labelId : undefined}
+              aria-label={label ? undefined : placeholder}
+              aria-activedescendant={visibleOptions[activeIndex] ? `${baseId}-opt-${activeIndex}` : undefined}
+              tabIndex={-1}
+              onKeyDown={onListKeyDown}
+              className="max-h-56 overflow-y-auto scroll-slim outline-none"
+            >
+              {renderMenuItems()}
+            </ul>
+          </div>
+        ) : (
+          <ul
+            id={listboxId}
+            role="listbox"
+            aria-labelledby={label ? labelId : undefined}
+            aria-label={label ? undefined : placeholder}
+            aria-activedescendant={visibleOptions[activeIndex] ? `${baseId}-opt-${activeIndex}` : undefined}
+            tabIndex={-1}
+            onKeyDown={onListKeyDown}
+            ref={(el) => {
+              menuRef.current = el;
+            }}
+            style={{ top: menuPos.top, left: menuPos.left, width: menuPos.width }}
+            className={`lg-dropdown ${GLASS_PANEL} fixed z-[100] max-h-60 overflow-y-auto scroll-slim rounded-2xl p-1.5 outline-none ${menuClassName ?? ''}`}
+          >
+            {renderMenuItems()}
+          </ul>
+        ),
         document.body
       ) : null}
     </div>

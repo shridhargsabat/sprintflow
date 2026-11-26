@@ -4,18 +4,19 @@ import pytest
 import db as db_lib
 
 TASK_KEYS = {
-    "id", "title", "description", "assigneeId", "assigneeUserId", "assignedUser",
+    "id", "title", "description", "assignees",
     "dueDate", "status", "priority", "sprint", "points", "tag",
 }
 MISSING_ID = "DEV-999999"
 UNKNOWN_USER_ID = 999999
+UNKNOWN_MEMBER_ID = "m-no-such-member"
 
 
 def _payload(title="New test task", **overrides):
     data = {
         "title": title,
         "description": "created by pytest",
-        "assigneeId": None,
+        "assignees": [],
         "dueDate": "2026-12-05",
         "status": "todo",
         "priority": "medium",
@@ -25,6 +26,26 @@ def _payload(title="New test task", **overrides):
     }
     data.update(overrides)
     return data
+
+
+def _assert_echo(body, got, skip=("assignees",)):
+    for key, value in body.items():
+        if key in skip:
+            continue
+        assert got[key] == value, f"echo mismatch on {key}"
+
+
+def _assignee_refs(task):
+    """Normalized (type, id) refs from an enriched assignees array."""
+    return {(a["type"], a["id"]) for a in task["assignees"]}
+
+
+def _member_ref(member_id):
+    return {"type": "member", "id": member_id}
+
+
+def _user_ref(user_id):
+    return {"type": "user", "id": user_id}
 
 
 def _all_tasks(client):
@@ -47,6 +68,13 @@ def test_list_returns_seeded_tasks_with_shape(client):
     assert isinstance(tasks, list) and tasks, "seed tasks must be non-empty"
     for task in tasks:
         assert TASK_KEYS <= set(task), f"task missing keys: {task}"
+        assert "assigneeId" not in task
+        assert "assigneeUserId" not in task
+        assert "assignedUser" not in task
+        assert isinstance(task["assignees"], list)
+        for a in task["assignees"]:
+            assert {"type", "id", "name"} <= set(a)
+            assert a["type"] in ("member", "user")
 
 
 def test_list_filter_sprint(client):
@@ -89,21 +117,32 @@ def test_list_filter_priority(client):
 
 def test_list_filter_assignee(client):
     tasks = _all_tasks(client)
-    seeded = next((t for t in tasks if t.get("assigneeId")), None)
+    seeded = next(
+        (t for t in tasks if any(a["type"] == "member" for a in t["assignees"])),
+        None,
+    )
     if seeded is None:  # fall back to a task we assign ourselves
         member_id = _first_member_id(client)
-        created = client.post("/api/tasks", json=_payload(assigneeId=member_id)).json()
-        assignee = created["assigneeId"]
+        created = client.post(
+            "/api/tasks", json=_payload(assignees=[_member_ref(member_id)])
+        ).json()
+        assignee = member_id
         expected_ids = {created["id"]}
     else:
-        assignee = seeded["assigneeId"]
-        expected_ids = {t["id"] for t in tasks if t.get("assigneeId") == assignee}
+        assignee = next(
+            a["id"] for a in seeded["assignees"] if a["type"] == "member"
+        )
+        expected_ids = {
+            t["id"]
+            for t in tasks
+            if ("member", assignee) in _assignee_refs(t)
+        }
     resp = client.get("/api/tasks", params={"assigneeId": assignee})
     assert resp.status_code == 200
     got = resp.json()
     assert got
     assert {t["id"] for t in got} == expected_ids
-    assert all(t["assigneeId"] == assignee for t in got)
+    assert all(("member", assignee) in _assignee_refs(t) for t in got)
 
 
 def test_list_filter_search(client):
@@ -134,14 +173,20 @@ def test_list_combined_filters(client):
 
 def test_create_task_returns_201_and_shape(client):
     member_id = _first_member_id(client)
-    body = _payload(title="Ship dark mode", assigneeId=member_id, priority="high", points=5)
+    assignees = [_member_ref(member_id)]
+    body = _payload(title="Ship dark mode", assignees=assignees, priority="high", points=5)
     resp = client.post("/api/tasks", json=body)
     assert resp.status_code == 201
     created = resp.json()
     assert TASK_KEYS <= set(created)
     assert created["id"].startswith("DEV-")
-    for key, value in body.items():
-        assert created[key] == value, f"create echo mismatch on {key}"
+    _assert_echo(body, created)
+    assert _assignee_refs(created) == {("member", member_id)}
+    member = next(m for m in client.get("/api/team").json() if m["id"] == member_id)
+    assert created["assignees"] == [{
+        "type": "member", "id": member_id, "name": member["name"],
+        "role": member["role"], "color": member["color"],
+    }]
     assert created["id"] in {t["id"] for t in _all_tasks(client)}
 
 
@@ -155,7 +200,7 @@ def test_create_task_applies_defaults(client):
     assert created["points"] == 3
     assert created["tag"] == "Frontend"
     assert created["description"] == ""
-    assert created["assigneeId"] is None
+    assert created["assignees"] == []
 
 
 @pytest.mark.parametrize("body", [
@@ -180,8 +225,8 @@ def test_update_task(client):
     assert resp.status_code == 200
     updated = resp.json()
     assert updated["id"] == created["id"]
-    for key, value in body.items():
-        assert updated[key] == value, f"update echo mismatch on {key}"
+    _assert_echo(body, updated)
+    assert updated["assignees"] == []
 
 
 def test_update_task_rejects_empty_title_with_422(client):
@@ -273,7 +318,7 @@ def test_delete_unknown_task_404(client):
     assert client.delete(f"/api/tasks/{MISSING_ID}").status_code == 404
 
 
-# ---------- login-user assignee ----------
+# ---------- multi-assignee ----------
 
 def _directory(client):
     resp = client.get("/api/users/directory")
@@ -304,80 +349,153 @@ def _user_assignee(client):
 def test_create_task_with_user_only(client):
     user = _user_assignee(client)
     resp = client.post(
-        "/api/tasks", json=_payload(assigneeId=None, assigneeUserId=user["id"])
+        "/api/tasks", json=_payload(assignees=[_user_ref(user["id"])])
     )
     assert resp.status_code == 201
     created = resp.json()
     assert TASK_KEYS <= set(created)
-    assert created["assigneeId"] is None
-    assert created["assigneeUserId"] == user["id"]
-    assert created["assignedUser"] == {"name": user["name"], "email": user["email"]}
+    assert created["assignees"] == [{
+        "type": "user", "id": user["id"], "name": user["name"],
+        "email": user["email"], "role": user["role"],
+    }]
 
 
-def test_create_task_with_both_assignees(client):
+def test_create_task_with_member_and_user(client):
     user = _user_assignee(client)
     member_id = _first_member_id(client)
     resp = client.post(
         "/api/tasks",
-        json=_payload(assigneeId=member_id, assigneeUserId=user["id"]),
+        json=_payload(assignees=[_member_ref(member_id), _user_ref(user["id"])]),
     )
     assert resp.status_code == 201
     created = resp.json()
-    assert created["assigneeId"] == member_id
-    assert created["assigneeUserId"] == user["id"]
-    assert created["assignedUser"] == {"name": user["name"], "email": user["email"]}
+    assert _assignee_refs(created) == {("member", member_id), ("user", user["id"])}
+    by_type = {a["type"]: a for a in created["assignees"]}
+    assert by_type["user"] == {
+        "type": "user", "id": user["id"], "name": user["name"],
+        "email": user["email"], "role": user["role"],
+    }
+    assert by_type["member"]["id"] == member_id
+    assert by_type["member"]["name"]
 
 
-def test_create_task_with_neither_assignee_nulls(client):
+def test_create_task_with_no_assignees_empty_array(client):
     resp = client.post("/api/tasks", json=_payload())
     assert resp.status_code == 201
-    created = resp.json()
-    assert created["assigneeId"] is None
-    assert created["assigneeUserId"] is None
-    assert created["assignedUser"] is None
+    assert resp.json()["assignees"] == []
+    omitted = client.post(
+        "/api/tasks",
+        json={k: v for k, v in _payload().items() if k != "assignees"},
+    )
+    assert omitted.status_code == 201
+    assert omitted.json()["assignees"] == []
 
 
-def test_update_task_sets_and_clears_user_assignee(client):
+def test_create_task_dedupes_assignees(client):
     user = _user_assignee(client)
+    member_id = _first_member_id(client)
+    resp = client.post(
+        "/api/tasks",
+        json=_payload(assignees=[
+            _member_ref(member_id), _member_ref(member_id),
+            _user_ref(user["id"]), _user_ref(user["id"]),
+        ]),
+    )
+    assert resp.status_code == 201
+    assert _assignee_refs(resp.json()) == {
+        ("member", member_id), ("user", user["id"])
+    }
+    assert len(resp.json()["assignees"]) == 2
+
+
+def test_create_task_too_many_assignees_400(client):
+    members = client.get("/api/team").json()
+    refs = [_member_ref(m["id"]) for m in members]
+    user = _user_assignee(client)
+    refs += [_user_ref(user["id"])] * (11 - len(refs))
+    assert len(refs) == 11
+    resp = client.post("/api/tasks", json=_payload(assignees=refs))
+    assert resp.status_code == 400
+
+
+def test_update_task_sets_replaces_and_clears_assignees(client):
+    user = _user_assignee(client)
+    members = [m["id"] for m in client.get("/api/team").json()]
     created = client.post("/api/tasks", json=_payload()).json()
-    assert created["assigneeUserId"] is None
+    assert created["assignees"] == []
+
     updated = client.put(
-        f"/api/tasks/{created['id']}", json=_payload(assigneeUserId=user["id"])
+        f"/api/tasks/{created['id']}",
+        json=_payload(assignees=[_member_ref(members[0]), _user_ref(user["id"])]),
     )
     assert updated.status_code == 200
-    assert updated.json()["assigneeUserId"] == user["id"]
-    assert updated.json()["assignedUser"] == {
-        "name": user["name"],
-        "email": user["email"],
+    assert _assignee_refs(updated.json()) == {
+        ("member", members[0]), ("user", user["id"])
     }
+
+    # PUT replaces the whole set (member swapped out, user kept).
+    replaced = client.put(
+        f"/api/tasks/{created['id']}",
+        json=_payload(assignees=[_member_ref(members[1]), _user_ref(user["id"])]),
+    )
+    assert replaced.status_code == 200
+    assert _assignee_refs(replaced.json()) == {
+        ("member", members[1]), ("user", user["id"])
+    }
+
+    # Empty array clears all assignees.
     cleared = client.put(
-        f"/api/tasks/{created['id']}", json=_payload(assigneeUserId=None)
+        f"/api/tasks/{created['id']}", json=_payload(assignees=[])
     )
     assert cleared.status_code == 200
-    assert cleared.json()["assigneeUserId"] is None
-    assert cleared.json()["assignedUser"] is None
+    assert cleared.json()["assignees"] == []
+    # Omitted assignees also clears (PUT is a full replacement).
+    recleared = client.put(
+        f"/api/tasks/{created['id']}",
+        json={k: v for k, v in _payload().items() if k != "assignees"},
+    )
+    assert recleared.status_code == 200
+    assert recleared.json()["assignees"] == []
+
+
+def test_create_task_unknown_member_400(client):
+    resp = client.post(
+        "/api/tasks", json=_payload(assignees=[_member_ref(UNKNOWN_MEMBER_ID)])
+    )
+    assert resp.status_code == 400
 
 
 def test_create_task_unknown_user_400(client):
     resp = client.post(
-        "/api/tasks", json=_payload(assigneeUserId=UNKNOWN_USER_ID)
+        "/api/tasks", json=_payload(assignees=[_user_ref(UNKNOWN_USER_ID)])
     )
     assert resp.status_code == 400
 
 
-def test_update_task_unknown_user_400(client):
+def test_update_task_unknown_assignee_400(client):
     created = client.post("/api/tasks", json=_payload()).json()
     resp = client.put(
-        f"/api/tasks/{created['id']}", json=_payload(assigneeUserId=UNKNOWN_USER_ID)
+        f"/api/tasks/{created['id']}",
+        json=_payload(assignees=[_user_ref(UNKNOWN_USER_ID)]),
     )
     assert resp.status_code == 400
+    resp = client.put(
+        f"/api/tasks/{created['id']}",
+        json=_payload(assignees=[_member_ref(UNKNOWN_MEMBER_ID)]),
+    )
+    assert resp.status_code == 400
+    # Failed updates leave the stored assignees untouched.
+    got = next(t for t in _all_tasks(client) if t["id"] == created["id"])
+    assert got["assignees"] == []
 
 
 def test_list_filter_assignee_user_id(client):
     user = _user_assignee(client)
     mine = client.post(
         "/api/tasks",
-        json=_payload(title="User-filtered task", assigneeUserId=user["id"]),
+        json=_payload(
+            title="User-filtered task", assignees=[_user_ref(user["id"])]
+        ),
     ).json()
     other = client.post("/api/tasks", json=_payload(title="Unassigned task")).json()
     resp = client.get("/api/tasks", params={"assigneeUserId": user["id"]})
@@ -386,17 +504,17 @@ def test_list_filter_assignee_user_id(client):
     assert got
     assert mine["id"] in {t["id"] for t in got}
     assert other["id"] not in {t["id"] for t in got}
-    assert all(t["assigneeUserId"] == user["id"] for t in got)
+    assert all(("user", user["id"]) in _assignee_refs(t) for t in got)
 
 
 def test_list_filter_assignee_user_id_combines_with_status(client):
     user = _user_assignee(client)
     target = client.post(
         "/api/tasks",
-        json=_payload(status="in_progress", assigneeUserId=user["id"]),
+        json=_payload(status="in_progress", assignees=[_user_ref(user["id"])]),
     ).json()
     decoy = client.post(
-        "/api/tasks", json=_payload(status="todo", assigneeUserId=user["id"])
+        "/api/tasks", json=_payload(status="todo", assignees=[_user_ref(user["id"])])
     ).json()
     resp = client.get(
         "/api/tasks",
@@ -407,8 +525,33 @@ def test_list_filter_assignee_user_id_combines_with_status(client):
     assert target["id"] in {t["id"] for t in got}
     assert decoy["id"] not in {t["id"] for t in got}
     assert all(
-        t["assigneeUserId"] == user["id"] and t["status"] == "in_progress" for t in got
+        ("user", user["id"]) in _assignee_refs(t) and t["status"] == "in_progress"
+        for t in got
     )
+
+
+def test_list_filter_member_and_user_combined(client):
+    user = _user_assignee(client)
+    members = [m["id"] for m in client.get("/api/team").json()]
+    both = client.post(
+        "/api/tasks",
+        json=_payload(assignees=[_member_ref(members[0]), _user_ref(user["id"])]),
+    ).json()
+    member_only = client.post(
+        "/api/tasks", json=_payload(assignees=[_member_ref(members[0])])
+    ).json()
+    user_only = client.post(
+        "/api/tasks", json=_payload(assignees=[_user_ref(user["id"])])
+    ).json()
+    resp = client.get(
+        "/api/tasks",
+        params={"assigneeId": members[0], "assigneeUserId": user["id"]},
+    )
+    assert resp.status_code == 200
+    ids = {t["id"] for t in resp.json()}
+    assert both["id"] in ids
+    assert member_only["id"] not in ids
+    assert user_only["id"] not in ids
 
 
 # ---------- user directory ----------
@@ -445,34 +588,58 @@ def test_user_directory_open_to_viewer_but_closed_anon(client, anon_client):
     assert anon_client.get("/api/users/directory").status_code == 401
 
 
-# ---------- migration backfill ----------
+# ---------- legacy migration ----------
 
-def test_backfill_copies_linked_member_user_without_overwriting(client):
-    user = _user_assignee(client)
-    other = _ensure_user(
-        client, "backfill@sprintflow.local", "Backfill Other", "Backfill123!", "member"
+def test_legacy_assignee_columns_migrated_to_join_table(tmp_path):
+    """Legacy DB (assignee_id/assignee_user_id columns) migrates cleanly."""
+    import sqlite3
+
+    legacy = str(tmp_path / "legacy-assignees.db")
+    conn = sqlite3.connect(legacy)
+    conn.executescript(
+        """
+        CREATE TABLE team_members (id TEXT PRIMARY KEY, name TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'Engineer', color TEXT NOT NULL DEFAULT 'bg-indigo-600',
+            user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL);
+        CREATE TABLE tasks (id TEXT PRIMARY KEY, title TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '', assignee_id TEXT, due_date TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'todo', priority TEXT NOT NULL DEFAULT 'medium',
+            sprint TEXT NOT NULL DEFAULT 'Sprint 14', points INTEGER NOT NULL DEFAULT 3,
+            tag TEXT NOT NULL DEFAULT 'Frontend',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            assignee_user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+            FOREIGN KEY (assignee_id) REFERENCES team_members(id) ON DELETE SET NULL);
+        CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL, password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'member', created_at TEXT NOT NULL DEFAULT (datetime('now')));
+        INSERT INTO team_members (id, name) VALUES ('m-keep', 'Keeper');
+        INSERT INTO users (id, email, name, password_hash, role)
+            VALUES (11, 'kept@t.local', 'Kept', 'x', 'member');
+        INSERT INTO tasks (id, title, assignee_id, due_date, assignee_user_id)
+            VALUES ('DEV-900', 'Both', 'm-keep', '2026-12-01', 11);
+        INSERT INTO tasks (id, title, assignee_id, due_date)
+            VALUES ('DEV-901', 'Dangling', 'm-ghost', '2026-12-01');
+        """
     )
-    member = client.get("/api/team").json()[0]
-    link = client.put(
-        f"/api/team/{member['id']}",
-        json={"name": member["name"], "userId": user["id"]},
-    )
-    assert link.status_code == 200
-    # Member-only task: no auto-fill on create, backfilled by init_db.
-    inherited = client.post(
-        "/api/tasks", json=_payload(assigneeId=member["id"])
-    ).json()
-    assert inherited["assigneeUserId"] is None
-    # Explicit user assignee must survive the backfill untouched.
-    explicit = client.post(
-        "/api/tasks",
-        json=_payload(assigneeId=member["id"], assigneeUserId=other["id"]),
-    ).json()
-    db_lib.init_db()
-    tasks = {t["id"]: t for t in _all_tasks(client)}
-    assert tasks[inherited["id"]]["assigneeUserId"] == user["id"]
-    assert tasks[inherited["id"]]["assignedUser"] == {
-        "name": user["name"],
-        "email": user["email"],
+    conn.commit()
+    conn.close()
+
+    db_lib.init_db(legacy)  # must not raise; backfills then drops columns
+    db_lib.init_db(legacy)  # idempotent re-run
+
+    with db_lib.get_conn(legacy) as conn:
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()]
+        assert "assignee_id" not in cols
+        assert "assignee_user_id" not in cols
+        rows = {
+            (r["task_id"], r["member_id"], r["user_id"])
+            for r in conn.execute("SELECT task_id, member_id, user_id FROM task_assignees")
+        }
+        assert rows == {("DEV-900", "m-keep", None), ("DEV-900", None, 11)}
+        assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    tasks = {t["id"]: t for t in db_lib.list_tasks(db_path=legacy)}
+    assert {(a["type"], a["id"]) for a in tasks["DEV-900"]["assignees"]} == {
+        ("member", "m-keep"), ("user", 11)
     }
-    assert tasks[explicit["id"]]["assigneeUserId"] == other["id"]
+    assert tasks["DEV-901"]["assignees"] == []

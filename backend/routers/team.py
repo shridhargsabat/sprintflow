@@ -145,9 +145,10 @@ def delete_member(
     reassignTo: Optional[str] = Query(default=None),
     _user: Dict[str, Any] = Depends(auth.require_permissions("team.manage")),
 ) -> Dict[str, Any]:
-    """Delete a member. Default: their tasks are unassigned (SET NULL).
+    """Delete a member. Default: their assignee rows are deleted (unassigned).
 
-    Optional ?reassignTo=<memberId> moves their tasks to that member instead.
+    Optional ?reassignTo=<memberId> moves their task assignments to that
+    member instead (tasks already assigned to the target are deduped).
     """
     with db.get_conn() as conn:
         # Validate the reassign target BEFORE the last-member guard so a bad
@@ -168,19 +169,33 @@ def delete_member(
         members = conn.execute("SELECT id FROM team_members ORDER BY rowid ASC").fetchall()
         if len(members) <= 1:
             raise HTTPException(status_code=400, detail="Cannot remove the last team member")
+        owned = conn.execute(
+            "SELECT DISTINCT task_id FROM task_assignees WHERE member_id = ?",
+            (member_id,),
+        ).fetchall()
+        reassigned_tasks = len(owned)
         if reassignTo is not None:
-            cur = conn.execute(
-                "UPDATE tasks SET assignee_id = ? WHERE assignee_id = ?",
+            # Drop rows that would collide with the target's existing
+            # assignment on the same task, then move the rest over.
+            conn.execute(
+                """
+                DELETE FROM task_assignees
+                WHERE member_id = ?
+                  AND task_id IN (
+                      SELECT task_id FROM task_assignees WHERE member_id = ?
+                  )
+                """,
+                (member_id, reassignTo),
+            )
+            conn.execute(
+                "UPDATE task_assignees SET member_id = ? WHERE member_id = ?",
                 (reassignTo, member_id),
             )
-            reassigned_tasks = cur.rowcount
             fallback: Optional[str] = reassignTo
         else:
-            cur = conn.execute(
-                "UPDATE tasks SET assignee_id = NULL WHERE assignee_id = ?",
-                (member_id,),
+            conn.execute(
+                "DELETE FROM task_assignees WHERE member_id = ?", (member_id,)
             )
-            reassigned_tasks = cur.rowcount
             fallback = None
         cur = conn.execute("DELETE FROM team_members WHERE id = ?", (member_id,))
         if cur.rowcount == 0:

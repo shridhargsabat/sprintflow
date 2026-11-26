@@ -108,7 +108,11 @@ export function TeamModal({ team, tasks, newMemberName, newMemberRole, onNameCha
     if (!tasks) return null;
     const map = new Map<string, number>();
     for (const t of tasks) {
-      if (t.assigneeId) map.set(t.assigneeId, (map.get(t.assigneeId) ?? 0) + 1);
+      for (const a of t.assignees ?? []) {
+        if (a.type !== 'member') continue;
+        const key = String(a.id);
+        map.set(key, (map.get(key) ?? 0) + 1);
+      }
     }
     return map;
   }, [tasks]);
@@ -184,9 +188,9 @@ export function TeamModal({ team, tasks, newMemberName, newMemberRole, onNameCha
   };
 
   const deleteMessage = (m: TeamMember): string => {
-    if (!taskCounts) return 'Their tasks will be unassigned.';
+    if (!taskCounts) return 'Their tasks will lose this assignee.';
     const n = taskCounts.get(m.id) ?? 0;
-    return `${n} ${n === 1 ? 'task' : 'tasks'} will be unassigned.`;
+    return `${n} ${n === 1 ? 'task' : 'tasks'} will lose this assignee.`;
   };
 
   const runBulkAdd = async (): Promise<void> => {
