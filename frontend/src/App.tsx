@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Suspense, lazy, useMemo, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { PRIORITY_META } from './constants';
 import { useBoard } from './hooks/useBoard';
@@ -8,8 +8,8 @@ import { Toasts } from './components/Toasts';
 import Header from './components/Header';
 import FilterBar from './components/FilterBar';
 import DashboardView from './views/DashboardView';
-import KanbanView from './views/KanbanView';
-import BacklogView from './views/BacklogView';
+const KanbanView = lazy(() => import('./views/KanbanView'));
+const BacklogView = lazy(() => import('./views/BacklogView'));
 import type { PriorityFilter, Task, TaskModalState, TaskStatus, TeamMember, ViewId } from './types';
 
 export default function App() {
@@ -152,6 +152,7 @@ export default function App() {
                   onOpenTeam={() => setTeamModalOpen(true)}
                 />
               )}
+              <Suspense fallback={<div className="py-24 text-center text-sm text-slate-500">Loading view…</div>}>
               {activeView === 'kanban' && (
                 <KanbanView
                   tasks={filteredTasks}
@@ -169,6 +170,7 @@ export default function App() {
                   onPromoteTask={promoteTask}
                 />
               )}
+              </Suspense>
             </>
           )}
         </main>
