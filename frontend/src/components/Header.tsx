@@ -62,7 +62,7 @@ export default function Header({
   useEscapeKey(onCloseMenu, menuOpen);
   const { user, logout } = useAuth();
   const { can } = usePermissions();
-  const showUsers = can('team.manage');
+  const isAdmin = can('team.manage');
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   useEscapeKey(() => setUserMenuOpen(false), userMenuOpen);
   return (
@@ -159,7 +159,7 @@ export default function Header({
                       </span>
                     </div>
                     <div className="my-1.5 mx-3 border-t border-slate-900/10 dark:border-white/10" />
-                    {showUsers && (
+                    {isAdmin && (
                       <button type="button" onClick={() => { setUserMenuOpen(false); onOpenUsers(); }} className="w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-slate-900/5 dark:hover:bg-white/10 flex items-center gap-2.5">
                         <ShieldCheck className="w-3.5 h-3.5" /> Manage Users
                       </button>
@@ -204,11 +204,16 @@ export default function Header({
                   <button type="button" onClick={() => fileInputRef.current && fileInputRef.current.click()} className="w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-slate-900/5 dark:hover:bg-white/10 flex items-center gap-2.5">
                     <Upload className="w-3.5 h-3.5" /> Import JSON
                   </button>
-                  <div className="my-1.5 mx-3 border-t border-slate-900/10 dark:border-white/10" />
-                  <button type="button" onClick={onResetDemo} className="w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-rose-500/10 flex items-center gap-2.5 text-rose-600 dark:text-rose-400">
-                    <RotateCcw className="w-3.5 h-3.5" /> Reset SQLite Data
-                  </button>
-                  {showUsers && (
+                  {isAdmin && (
+                    <>
+                      <div className="my-1.5 mx-3 border-t border-slate-900/10 dark:border-white/10" />
+                      <button type="button" onClick={onResetDemo} className="w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-rose-500/10 flex items-center gap-2.5 text-rose-600 dark:text-rose-400">
+                        <RotateCcw className="w-3.5 h-3.5" /> Reset SQLite Data
+                      </button>
+                    </>
+                  )}
+                  <div className="md:hidden my-1.5 mx-3 border-t border-slate-900/10 dark:border-white/10" />
+                  {isAdmin && (
                     <button type="button" onClick={() => { onCloseMenu(); onOpenUsers(); }} className="md:hidden w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-slate-900/5 dark:hover:bg-white/10 flex items-center gap-2.5">
                       <ShieldCheck className="w-3.5 h-3.5" /> Manage Users
                     </button>
