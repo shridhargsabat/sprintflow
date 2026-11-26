@@ -51,7 +51,9 @@ ALL_PERMISSIONS = [
 ROLE_PERMISSIONS: Dict[str, List[str]] = {
     "admin": list(ALL_PERMISSIONS),
     "lead": [p for p in ALL_PERMISSIONS if p not in ("data.reset", "team.manage")],
-    "member": ["tasks.view", "tasks.create", "tasks.edit", "sprints.view", "data.export"],
+    "member": ["tasks.view", "tasks.create", "tasks.edit", "sprints.view", "data.export", "team.view"],
+    # NOTE: viewer deliberately lacks team.view — GET /api/team is 403 for
+    # viewers (M6 fix). Grant it here if the roster is ever opened to viewers.
     "viewer": ["tasks.view", "sprints.view"],
 }
 
@@ -59,6 +61,13 @@ VALID_ROLES = tuple(ROLE_PERMISSIONS.keys())
 
 
 # ---------- password hashing ----------
+
+# Precomputed bcrypt hash (cost 12) of a password nobody can type into the
+# login form. Used for the M2 timing fix: unknown-email logins still run a
+# full bcrypt verify against this dummy so their 401 latency matches a
+# known-email wrong-password 401 instead of leaking account existence.
+DUMMY_PASSWORD_HASH = "$2b$12$5sMEe.k2oIRv.cAIDbQPNuckchPJoYi7B6ACk1SeN2X4xz6ATb6XK"
+
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")

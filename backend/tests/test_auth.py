@@ -9,8 +9,17 @@
 import pytest
 
 import auth as auth_lib
+import ratelimit
 
 ADMIN = {"email": "admin@sprintflow.local", "password": "Admin123!"}
+
+
+@pytest.fixture(autouse=True)
+def _reset_login_limiter():
+    """Isolate login-throttle buckets between tests in this module."""
+    ratelimit.reset()
+    yield
+    ratelimit.reset()
 
 
 def _login(client, email, password):
@@ -125,11 +134,12 @@ def test_tasks_read_requires_auth(anon_client):
 
 
 def test_viewer_can_read_tasks_team_and_sprints(anon_client, role_users):
-    # Reads are open to every authenticated role; RBAC gates mutations.
+    # Reads are open to every authenticated role except the team roster,
+    # which needs team.view (M6: viewers get 403, members and up get 200).
     headers = _auth_headers(anon_client, "viewer@sprintflow.local", "Viewer123!")
     assert anon_client.get("/api/tasks", headers=headers).status_code == 200
     assert anon_client.get("/api/sprints", headers=headers).status_code == 200
-    assert anon_client.get("/api/team", headers=headers).status_code == 200
+    assert anon_client.get("/api/team", headers=headers).status_code == 403
     assert anon_client.get("/api/dashboard/summary", headers=headers).status_code == 200
 
 
@@ -262,3 +272,70 @@ def test_admin_can_update_user_but_not_own_role(anon_client):
         == 400
     )
     assert anon_client.delete(f"/api/auth/users/{uid}", headers=headers).status_code == 200
+
+
+# ---------- Hermaguard Batch A regressions (H2 / M2 / M6) ----------
+
+
+def test_login_burst_yields_429_with_retry_after_and_fast_rejects(anon_client):
+    """H2: a burst of bad logins is throttled before bcrypt.
+
+    First MAX_ATTEMPTS attempts burn bcrypt (401); further attempts are
+    rejected fast (429 + Retry-After header, no bcrypt).
+    """
+    import time
+
+    email = "burstprobe@sprintflow.local"  # unknown address, own bucket
+    slow, fast = [], []
+    statuses = []
+    for _ in range(ratelimit.MAX_ATTEMPTS + 7):
+        start = time.perf_counter()
+        resp = _login(anon_client, email, "wrong-password")
+        elapsed = time.perf_counter() - start
+        statuses.append(resp.status_code)
+        if resp.status_code == 401:
+            slow.append(elapsed)
+        elif resp.status_code == 429:
+            fast.append(elapsed)
+            assert "retry-after" in {k.lower() for k in resp.headers}
+            assert int(resp.headers["Retry-After"]) >= 1
+        else:  # pragma: no cover
+            pytest.fail(f"unexpected login status {resp.status_code}: {resp.text}")
+
+    assert statuses[: ratelimit.MAX_ATTEMPTS] == [401] * ratelimit.MAX_ATTEMPTS
+    assert len(fast) == 7  # every over-limit attempt rejected
+    # Fast rejects skip bcrypt: slowest 429 well under fastest 401.
+    assert max(fast) * 2 < min(slow)
+
+
+def test_login_unknown_and_known_bad_share_identical_401(anon_client, role_users):
+    """M2: unknown email and known email + wrong password are indistinguishable."""
+    import time
+
+    start = time.perf_counter()
+    unknown = _login(anon_client, "definitely-nobody@sprintflow.local", "Viewer123!")
+    unknown_elapsed = time.perf_counter() - start
+    known_bad = _login(anon_client, "viewer@sprintflow.local", "wrong-password")
+
+    assert unknown.status_code == 401
+    assert known_bad.status_code == 401
+    assert unknown.json() == known_bad.json() == {"detail": "Invalid email or password"}
+    # Dummy bcrypt ran for the unknown email (far above a ~2 ms DB-miss).
+    assert unknown_elapsed > 0.05
+
+
+def test_team_roster_needs_team_view(anon_client, role_users):
+    """M6: viewer GET /api/team is 403; member/lead/admin get 200."""
+    for email, password, expected in [
+        ("viewer@sprintflow.local", "Viewer123!", 403),
+        ("member@sprintflow.local", "Member123!", 200),
+        ("lead@sprintflow.local", "Lead123!", 200),
+        (ADMIN["email"], ADMIN["password"], 200),
+    ]:
+        headers = _auth_headers(anon_client, email, password)
+        resp = anon_client.get("/api/team", headers=headers)
+        assert resp.status_code == expected, f"{email}: {resp.text}"
+    # Viewer denial names the missing permission.
+    viewer_headers = _auth_headers(anon_client, "viewer@sprintflow.local", "Viewer123!")
+    body = anon_client.get("/api/team", headers=viewer_headers).json()
+    assert "team.view" in body["detail"]

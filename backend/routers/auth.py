@@ -3,10 +3,11 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 import auth
+import ratelimit
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -17,9 +18,25 @@ class LoginPayload(BaseModel):
 
 
 @router.post("/login")
-def login(payload: LoginPayload) -> Dict[str, Any]:
+def login(payload: LoginPayload, request: Request) -> Dict[str, Any]:
+    # H2: throttle BEFORE bcrypt so guessing cannot burn CPU unauthenticated.
+    client_ip = request.client.host if request.client else "unknown"
+    bucket_key = ratelimit.key_for(client_ip, payload.email)
+    allowed, retry_after = ratelimit.is_allowed(bucket_key)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many login attempts, try again later",
+            headers={"Retry-After": ratelimit.retry_after_header(retry_after)},
+        )
     user = auth.get_user_by_email(payload.email)
-    if user is None or not auth.verify_password(payload.password, user["password_hash"]):
+    # M2: on unknown email still run a full bcrypt verify against the dummy
+    # hash so the 401 latency matches known-email wrong-password (no oracle).
+    # Computed BEFORE the branch: `user is None or ...` would short-circuit.
+    password_hash = user["password_hash"] if user else auth.DUMMY_PASSWORD_HASH
+    password_ok = auth.verify_password(payload.password, password_hash)
+    if user is None or not password_ok:
+        ratelimit.record_failure(bucket_key)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
         )
