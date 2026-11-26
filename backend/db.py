@@ -51,7 +51,7 @@ DEFAULT_SPRINTS = [
 
 @contextmanager
 def get_conn(db_path: Optional[str] = None) -> Generator[sqlite3.Connection, None, None]:
-    conn = sqlite3.connect(db_path or DB_PATH)
+    conn = sqlite3.connect(db_path or DB_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
     try:

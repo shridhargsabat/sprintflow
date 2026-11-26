@@ -23,4 +23,4 @@ RUN useradd --create-home --uid 10001 appuser \
     && mkdir -p /data && chown -R appuser:appuser /app /data
 USER appuser
 EXPOSE 8000
-CMD [".venv/bin/uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD [".venv/bin/gunicorn", "app:app", "--workers", "3", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--timeout", "60", "--graceful-timeout", "30", "--access-logfile", "-", "--error-logfile", "-"]
