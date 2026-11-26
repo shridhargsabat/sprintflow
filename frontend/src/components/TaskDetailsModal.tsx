@@ -36,7 +36,7 @@ export function TaskDetailsModal({ task, member, onClose, onEdit, onDelete, onPr
           </GlassTooltip>
         </div>
 
-        <div className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+        <div className="p-6 space-y-5 max-h-[80vh] overflow-y-auto scroll-slim">
           <div className="flex flex-wrap items-center gap-2">
             {statusMeta && (
               <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${statusMeta.badge}`}>

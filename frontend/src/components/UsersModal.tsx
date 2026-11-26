@@ -5,6 +5,7 @@ import { GLASS_PANEL, GLASS_PILL, GLASS_SUBCARD } from '../constants';
 import { getInitials } from '../utils/format';
 import { api } from '../api';
 import type { ManagedUser, Role } from '../api';
+import Dropdown from './Dropdown';
 import { useAuth } from '../auth/AuthContext';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 
@@ -110,9 +111,14 @@ export function UsersModal({ onClose }: { onClose: () => void }): React.JSX.Elem
           <form onSubmit={handleCreate} className="space-y-2 pt-3 border-t border-slate-900/10 dark:border-white/10">
             <div className="flex gap-2">
               <input type="text" required value={name} onChange={e => setName(e.target.value)} placeholder="Full name" className={`flex-1 min-w-0 ${FIELD}`} />
-              <select value={role} onChange={e => setRole(e.target.value as Role)} title="Role" className={`w-28 ${FIELD} ${GLASS_PILL}`}>
-                {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
+              <div className="w-28 shrink-0">
+                <Dropdown
+                  value={role}
+                  onChange={(v) => setRole(v as Role)}
+                  options={ROLES.map(r => ({ value: r, label: r }))}
+                  className={`inline-flex w-full items-center justify-between gap-2 rounded-full px-3 py-2 text-xs field-text ${GLASS_PILL}`}
+                />
+              </div>
             </div>
             <div className="flex gap-2">
               <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" className={`flex-1 min-w-0 ${FIELD}`} />

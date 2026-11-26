@@ -91,7 +91,7 @@ export function SprintSettingsModal({ sprints, onClose, onSave }: SprintSettings
           </button>
         </div>
 
-        <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+        <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto scroll-slim">
           {sprints.length === 0 ? (
             <div className="py-10 text-center text-xs text-slate-400">No sprints configured yet.</div>
           ) : (
