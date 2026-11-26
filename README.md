@@ -9,7 +9,7 @@ sprintflow-fullstack/
 ├── backend/
 │   ├── app.py              # FastAPI REST endpoints + CORS
 │   ├── db.py               # SQLite schema, auto-seeding, CRUD queries
-│   ├── requirements.txt    # Python dependencies
+│   ├── pyproject.toml       # uv-managed deps (fastapi, uvicorn, pydantic) + dev group
 │   └── sprintflow.db       # Auto-created on first backend run
 └── frontend/
     ├── index.html
@@ -27,11 +27,11 @@ sprintflow-fullstack/
 ### 1. Start the Python + SQLite Backend
 ```bash
 cd backend
-python3 -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app:app --reload --port 8000
+uv sync                              # runtime only — creates .venv in place
+# uv sync --group dev                # with test tooling (pytest + httpx)
+.venv/bin/uvicorn app:app --reload --port 8000
 ```
+> No uv? Fallback: `python3 -m venv .venv && .venv/bin/pip install fastapi==0.115.6 "uvicorn[standard]==0.34.0" pydantic==2.10.4 pytest==9.2.0 httpx==0.28.1`
 - SQLite database `backend/sprintflow.db` is created and seeded automatically on first launch.
 - Interactive API docs (Swagger UI): `http://127.0.0.1:8000/docs`
 
