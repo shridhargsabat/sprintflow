@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api")
 
 @router.get("/sprints")
 def get_sprints(
-    _user: Dict[str, Any] = Depends(auth.require_permissions("sprints.view")),
+    _user: Dict[str, Any] = Depends(auth.get_current_user),
 ) -> List[Dict[str, Any]]:
     return db.list_sprints()
 

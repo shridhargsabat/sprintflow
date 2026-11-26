@@ -18,6 +18,7 @@ import {
   Users,
 } from 'lucide-react';
 import { GLASS_MENU, GLASS_PANEL, GLASS_PILL } from '../constants';
+import { getInitials } from '../utils/format';
 import { GlassTooltip } from './GlassTooltip';
 import { useAuth } from '../auth/AuthContext';
 import { usePermissions } from '../auth/usePermissions';
@@ -125,6 +126,20 @@ export default function Header({
           </nav>
 
           <div className="flex items-center gap-2 shrink-0">
+            {user && (
+              <GlassTooltip label={`${user.email} · ${user.role}`} position="bottom">
+                <button
+                  type="button"
+                  onClick={() => (menuOpen ? onCloseMenu() : onOpenMenu())}
+                  className={`hidden md:inline-flex items-center gap-2 pl-1 pr-3 py-1 rounded-full text-xs font-medium ${GLASS_PILL}`}
+                >
+                  <span className="w-7 h-7 rounded-full bg-gradient-to-br from-sky-400 to-indigo-500 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                    {getInitials(user.name)}
+                  </span>
+                  <span className="max-w-24 truncate">{user.name}</span>
+                </button>
+              </GlassTooltip>
+            )}
             <GlassTooltip label="Manage team" position="bottom" className="hidden sm:inline-flex">
               <button
                 type="button"

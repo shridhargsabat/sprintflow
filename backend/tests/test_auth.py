@@ -124,11 +124,13 @@ def test_tasks_read_requires_auth(anon_client):
     assert anon_client.get("/api/tasks").status_code == 401
 
 
-def test_viewer_can_read_tasks_but_not_team(anon_client, role_users):
+def test_viewer_can_read_tasks_team_and_sprints(anon_client, role_users):
+    # Reads are open to every authenticated role; RBAC gates mutations.
     headers = _auth_headers(anon_client, "viewer@sprintflow.local", "Viewer123!")
     assert anon_client.get("/api/tasks", headers=headers).status_code == 200
     assert anon_client.get("/api/sprints", headers=headers).status_code == 200
-    assert anon_client.get("/api/team", headers=headers).status_code == 403
+    assert anon_client.get("/api/team", headers=headers).status_code == 200
+    assert anon_client.get("/api/dashboard/summary", headers=headers).status_code == 200
 
 
 # ---------- RBAC spot checks: sprints / team / data ----------

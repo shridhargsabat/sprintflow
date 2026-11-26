@@ -19,7 +19,7 @@ def get_tasks(
     priority: Optional[str] = Query(default=None),
     assigneeId: Optional[str] = Query(default=None),
     search: Optional[str] = Query(default=None),
-    _user: Dict[str, Any] = Depends(auth.require_permissions("tasks.view")),
+    _user: Dict[str, Any] = Depends(auth.get_current_user),
 ) -> List[Dict[str, Any]]:
     return db.list_tasks(
         sprint=sprint,

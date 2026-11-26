@@ -20,7 +20,7 @@ def health() -> Dict[str, str]:
 @router.get("/dashboard/summary")
 def dashboard_summary(
     sprint: str = Query(default="Sprint 14"),
-    _user: Dict[str, Any] = Depends(auth.require_permissions("tasks.view")),
+    _user: Dict[str, Any] = Depends(auth.get_current_user),
 ) -> Dict[str, Any]:
     tasks = db.list_tasks(sprint=sprint)
     all_backlog = db.list_tasks(status="backlog")

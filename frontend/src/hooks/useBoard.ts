@@ -59,8 +59,13 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
       setTeam(teamData);
       setTasks(tasksData);
       setSprints(sprintsData);
-    } catch {
-      setApiError('Unable to reach the Python SQLite backend. Start uvicorn on port 8000 and retry.');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '';
+      setApiError(
+        msg.includes('Missing permissions') || msg.includes('Forbidden')
+          ? 'Your role cannot access some data. Contact an admin.'
+          : 'Unable to reach the Python SQLite backend. Start uvicorn on port 8000 and retry.'
+      );
     } finally {
       setLoading(false);
     }

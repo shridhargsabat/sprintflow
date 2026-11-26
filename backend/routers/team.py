@@ -25,7 +25,7 @@ AVATAR_COLORS = [
 
 @router.get("/team")
 def get_team(
-    _user: Dict[str, Any] = Depends(auth.require_permissions("team.view")),
+    _user: Dict[str, Any] = Depends(auth.get_current_user),
 ) -> List[Dict[str, Any]]:
     return db.list_team()
 
