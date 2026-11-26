@@ -176,6 +176,6 @@ body {
    aberration stacked over frost. Requires <LiquidGlassFilter /> mounted once
    at the app root. -webkit line is the fallback where url() refs fail. */
 .lg-refract {
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
-  backdrop-filter: url(#sf-liquid-glass-refract) blur(22px) saturate(190%);
+  -webkit-backdrop-filter: blur(36px) saturate(200%);
+  backdrop-filter: url(#sf-liquid-glass-refract) blur(36px) saturate(200%);
 }

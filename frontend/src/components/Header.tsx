@@ -16,6 +16,7 @@ import {
   Users,
 } from 'lucide-react';
 import { GLASS_PANEL, GLASS_PILL } from '../constants';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import type { ViewId } from '../types';
 
 export interface HeaderProps {
@@ -49,14 +50,15 @@ export default function Header({
   onImportJson,
   fileInputRef,
 }: HeaderProps) {
+  useEscapeKey(onCloseMenu, menuOpen);
   return (
     <>
       {/* Ambient Mesh Wallpaper */}
-      <div className="fixed inset-0 -z-10 pointer-events-none overflow-hidden bg-[#eef3fb] dark:bg-[#050814] transition-colors duration-500">
-        <div className="lg-orb-a absolute -top-32 -left-24 w-[520px] h-[520px] rounded-full bg-sky-300/45 dark:bg-blue-600/25 blur-[110px]" />
-        <div className="lg-orb-b absolute top-16 right-[-80px] w-[480px] h-[480px] rounded-full bg-violet-300/40 dark:bg-indigo-600/25 blur-[120px]" />
-        <div className="lg-orb-c absolute bottom-[-120px] left-1/3 w-[540px] h-[420px] rounded-full bg-teal-200/45 dark:bg-cyan-500/15 blur-[120px]" />
-        <div className="lg-orb-d absolute top-1/2 -left-20 w-[340px] h-[340px] rounded-full bg-rose-200/35 dark:bg-fuchsia-600/15 blur-[110px]" />
+      <div className="fixed inset-0 -z-10 pointer-events-none overflow-hidden bg-[#f3f5fa] dark:bg-[#050814] transition-colors duration-500">
+        <div className="lg-orb-a absolute -top-32 -left-24 w-[520px] h-[520px] rounded-full bg-sky-300/60 dark:bg-blue-600/25 blur-[110px]" />
+        <div className="lg-orb-b absolute top-16 right-[-80px] w-[480px] h-[480px] rounded-full bg-violet-300/60 dark:bg-indigo-600/25 blur-[120px]" />
+        <div className="lg-orb-c absolute bottom-[-120px] left-1/3 w-[540px] h-[420px] rounded-full bg-rose-200/70 dark:bg-cyan-500/15 blur-[120px]" />
+        <div className="lg-orb-d absolute top-1/2 -left-20 w-[340px] h-[340px] rounded-full bg-indigo-200/40 dark:bg-fuchsia-600/15 blur-[110px]" />
       </div>
 
       {/* Floating Header */}
@@ -132,7 +134,7 @@ export default function Header({
                 <MoreVertical className="w-4 h-4" />
               </button>
               {menuOpen && (
-                <div className={`lg-dropdown absolute right-0 mt-2.5 w-52 rounded-3xl py-2 z-40 ${GLASS_PANEL}`}>
+                <div className={`lg-dropdown lg-refract absolute right-0 mt-2.5 w-52 rounded-3xl py-2 z-40 ${GLASS_PANEL}`}>
                   <button type="button" onClick={() => { onCloseMenu(); onOpenTeam(); }} className="sm:hidden w-full px-4 py-2 text-left text-xs font-medium hover:bg-white/60 dark:hover:bg-white/10 flex items-center gap-2.5">
                     <Users className="w-3.5 h-3.5" /> Manage Team
                   </button>
