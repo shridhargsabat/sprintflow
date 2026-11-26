@@ -1,0 +1,9 @@
+node_modules/
+.venv/
+.env
+sprintflow.db
+*.db
+backend/sprintflow.db
+dist/
+build/
+*.log
