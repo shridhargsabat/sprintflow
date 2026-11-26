@@ -146,3 +146,28 @@ body {
   width: 0;
   height: 0;
 }
+
+/* Premium field text: caret, tracking, weight, placeholder, selection, tabular nums */
+.field-text {
+  caret-color: #3b82f6;
+  letter-spacing: 0.01em;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+.field-text::placeholder {
+  color: #94a3b8;
+  font-weight: 400;
+}
+.field-text::-webkit-input-placeholder {
+  color: #94a3b8;
+  font-weight: 400;
+}
+.field-text::-moz-placeholder {
+  color: #94a3b8;
+  font-weight: 400;
+}
+.field-text::selection {
+  background-color: rgb(59 130 246 / 0.2);
+}

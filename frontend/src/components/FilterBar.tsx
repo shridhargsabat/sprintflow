@@ -60,7 +60,7 @@ export default function FilterBar({
               value={searchQuery}
               onChange={e => onSearchQueryChange(e.target.value)}
               placeholder="Search tasks, IDs, tags..."
-              className={`w-full pl-9 pr-3.5 py-1.5 rounded-full text-xs placeholder-slate-500 dark:placeholder-slate-400 ${GLASS_PILL}`}
+              className={`w-full pl-9 pr-3.5 py-1.5 rounded-full text-xs field-text placeholder-slate-500 dark:placeholder-slate-400 ${GLASS_PILL}`}
             />
           </div>
         </div>
