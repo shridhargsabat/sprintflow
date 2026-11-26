@@ -1,4 +1,5 @@
 import { Search } from 'lucide-react';
+import Dropdown from './Dropdown';
 import { GLASS_PANEL, GLASS_PILL } from '../constants';
 import { formatShortDate } from '../utils/format';
 import type { PriorityFilter, SprintConfig, TeamMember } from '../types';
@@ -32,22 +33,25 @@ export default function FilterBar({
   hasActiveFilters,
   onClearFilters,
 }: FilterBarProps) {
+  const sprintOptions = [
+    { value: 'all', label: 'All Sprints & Backlog' },
+    ...(sprints.length > 0
+      ? sprints.map(s => ({ value: s.id, label: `${s.name} (${formatShortDate(s.startDate)} – ${formatShortDate(s.endDate)})` }))
+      : [{ value: 'Sprint 14', label: 'Sprint 14' }, { value: 'Sprint 15', label: 'Sprint 15' }]),
+    { value: 'Backlog', label: 'Unassigned Backlog' }
+  ];
   return (
     <section className="max-w-[1440px] mx-auto px-4 sm:px-6 pt-4">
       <div className={`lg-enter lg-delay-1 rounded-[24px] px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 ${GLASS_PANEL}`}>
         <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[240px]">
-          <select value={sprintFilter} onChange={e => onSprintFilterChange(e.target.value)} className={`px-3.5 py-1.5 rounded-full text-xs font-semibold cursor-pointer ${GLASS_PILL}`}>
-            <option value="all" className="text-slate-900">All Sprints &amp; Backlog</option>
-            {sprints.length > 0 ? sprints.map(s => (
-              <option key={s.id} value={s.id} className="text-slate-900">{s.name} ({formatShortDate(s.startDate)} – {formatShortDate(s.endDate)})</option>
-            )) : (
-              <>
-                <option value="Sprint 14" className="text-slate-900">Sprint 14</option>
-                <option value="Sprint 15" className="text-slate-900">Sprint 15</option>
-              </>
-            )}
-            <option value="Backlog" className="text-slate-900">Unassigned Backlog</option>
-          </select>
+          <div className="shrink-0 min-w-44">
+            <Dropdown
+              value={sprintFilter}
+              onChange={onSprintFilterChange}
+              options={sprintOptions}
+              className={`inline-flex w-full items-center justify-between gap-2 rounded-full px-3.5 py-1.5 text-xs font-semibold cursor-pointer ${GLASS_PILL}`}
+            />
+          </div>
 
           <div className="relative flex-1 max-w-xs min-w-[160px]">
             <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -79,10 +83,14 @@ export default function FilterBar({
             ))}
           </div>
 
-          <select value={assigneeFilter} onChange={e => onAssigneeFilterChange(e.target.value)} className={`px-3.5 py-1.5 rounded-full text-xs font-medium cursor-pointer ${GLASS_PILL}`}>
-            <option value="all" className="text-slate-900">Who: Everyone</option>
-            {team.map(m => <option key={m.id} value={m.id} className="text-slate-900">{m.name}</option>)}
-          </select>
+          <div className="shrink-0 min-w-36">
+            <Dropdown
+              value={assigneeFilter}
+              onChange={onAssigneeFilterChange}
+              options={[{ value: 'all', label: 'Who: Everyone' }, ...team.map(m => ({ value: m.id, label: m.name }))]}
+              className={`inline-flex w-full items-center justify-between gap-2 rounded-full px-3.5 py-1.5 text-xs font-medium cursor-pointer ${GLASS_PILL}`}
+            />
+          </div>
 
           {hasActiveFilters && (
             <button type="button" onClick={onClearFilters} className="px-3 py-1.5 rounded-full text-xs font-semibold text-blue-600 dark:text-blue-300 hover:bg-blue-500/10">

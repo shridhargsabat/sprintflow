@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import Dropdown from '../components/Dropdown';
 import type { Task, TaskStatus, TeamMember } from '../types';
 import { GLASS_PANEL, GLASS_PILL, PRIORITY_META, STATUS_COLUMNS } from '../constants';
 import { getDueMeta, getInitials } from '../utils/format';
@@ -37,12 +38,20 @@ export default function BacklogView({ tasks, team, onOpenTask, onMoveTaskStatus,
         </div>
         <div className="flex items-center gap-2">
           <label htmlFor="backlog-sort" className="text-xs font-medium text-slate-600 dark:text-slate-400">Sort by:</label>
-          <select id="backlog-sort" value={backlogSort} onChange={e => setBacklogSort(e.target.value)} className={`px-3.5 py-1.5 rounded-full text-xs font-semibold ${GLASS_PILL}`}>
-            <option value="priority" className="text-slate-900">Priority (Highest first)</option>
-            <option value="due" className="text-slate-900">Due Date (Soonest first)</option>
-            <option value="status" className="text-slate-900">Status Workflow</option>
-            <option value="points" className="text-slate-900">Story Points</option>
-          </select>
+          <div className="shrink-0 min-w-52">
+            <Dropdown
+              id="backlog-sort"
+              value={backlogSort}
+              onChange={setBacklogSort}
+              options={[
+                { value: 'priority', label: 'Priority (Highest first)' },
+                { value: 'due', label: 'Due Date (Soonest first)' },
+                { value: 'status', label: 'Status Workflow' },
+                { value: 'points', label: 'Story Points' }
+              ]}
+              className={`inline-flex w-full items-center justify-between gap-2 rounded-full px-3.5 py-1.5 text-xs font-semibold ${GLASS_PILL}`}
+            />
+          </div>
         </div>
       </div>
 
@@ -90,9 +99,12 @@ export default function BacklogView({ tasks, team, onOpenTask, onMoveTaskStatus,
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${p.pill}`}>{p.label}</span>
                     </td>
                     <td className="py-3.5 px-3 whitespace-nowrap">
-                      <select value={t.status} onChange={e => onMoveTaskStatus(t.id, e.target.value as TaskStatus)} className={`px-2.5 py-1 rounded-full text-[11px] font-semibold ${col.badge} cursor-pointer`}>
-                        {STATUS_COLUMNS.map(s => <option key={s.id} value={s.id} className="text-slate-900">{s.label}</option>)}
-                      </select>
+                      <Dropdown
+                        value={t.status}
+                        onChange={(v) => onMoveTaskStatus(t.id, v as TaskStatus)}
+                        options={STATUS_COLUMNS.map(s => ({ value: s.id, label: s.label }))}
+                        className={`inline-flex w-full items-center justify-between gap-2 rounded-full px-2.5 py-1 text-[11px] font-semibold cursor-pointer ${col.badge}`}
+                      />
                     </td>
                     <td className="py-3.5 px-3 whitespace-nowrap">
                       <span className="font-semibold">{t.sprint}</span>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
+import Dropdown from './Dropdown';
 import { GLASS_PANEL, GLASS_PILL, STATUS_COLUMNS } from '../constants';
 import type { Task, TaskFormValues, TaskPriority, TaskStatus, TeamMember } from '../types';
 
@@ -66,9 +67,12 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold mb-1">Assignee (Who)</label>
-              <select value={assigneeId || ''} onChange={e => setAssigneeId(e.target.value)} className="w-full px-3 py-2 rounded-2xl text-xs bg-white/75 dark:bg-white/10 border border-white/80 dark:border-white/15">
-                {team.map(m => <option key={m.id} value={m.id} className="text-slate-900">{m.name} ({m.role || 'Team'})</option>)}
-              </select>
+              <Dropdown
+                value={assigneeId || ''}
+                onChange={setAssigneeId}
+                options={team.map(m => ({ value: m.id, label: `${m.name} (${m.role || 'Team'})` }))}
+                className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-white/75 dark:bg-white/10 border border-white/80 dark:border-white/15"
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold mb-1">Due Date (When) *</label>
@@ -78,44 +82,65 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
               <label className="block text-xs font-semibold mb-1">Status</label>
-              <select value={status} onChange={e => setStatus(e.target.value as TaskStatus)} className="w-full px-2.5 py-2 rounded-2xl text-xs bg-white/75 dark:bg-white/10 border border-white/80 dark:border-white/15">
-                {STATUS_COLUMNS.map(s => <option key={s.id} value={s.id} className="text-slate-900">{s.label}</option>)}
-              </select>
+              <Dropdown
+                value={status}
+                onChange={(v) => setStatus(v as TaskStatus)}
+                options={STATUS_COLUMNS.map(s => ({ value: s.id, label: s.label }))}
+                className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-2.5 py-2 text-xs bg-white/75 dark:bg-white/10 border border-white/80 dark:border-white/15"
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold mb-1">Priority</label>
-              <select value={priority} onChange={e => setPriority(e.target.value as TaskPriority)} className="w-full px-2.5 py-2 rounded-2xl text-xs bg-white/75 dark:bg-white/10 border border-white/80 dark:border-white/15">
-                <option value="critical" className="text-slate-900">Critical</option>
-                <option value="high" className="text-slate-900">High</option>
-                <option value="medium" className="text-slate-900">Medium</option>
-                <option value="low" className="text-slate-900">Low</option>
-              </select>
+              <Dropdown
+                value={priority}
+                onChange={(v) => setPriority(v as TaskPriority)}
+                options={[
+                  { value: 'critical', label: 'Critical' },
+                  { value: 'high', label: 'High' },
+                  { value: 'medium', label: 'Medium' },
+                  { value: 'low', label: 'Low' }
+                ]}
+                className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-2.5 py-2 text-xs bg-white/75 dark:bg-white/10 border border-white/80 dark:border-white/15"
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold mb-1">Sprint</label>
-              <select value={sprint} onChange={e => setSprint(e.target.value)} className="w-full px-2.5 py-2 rounded-2xl text-xs bg-white/75 dark:bg-white/10 border border-white/80 dark:border-white/15">
-                <option value="Sprint 14" className="text-slate-900">Sprint 14</option>
-                <option value="Sprint 15" className="text-slate-900">Sprint 15</option>
-                <option value="Backlog" className="text-slate-900">Backlog</option>
-              </select>
+              <Dropdown
+                value={sprint}
+                onChange={setSprint}
+                options={[
+                  { value: 'Sprint 14', label: 'Sprint 14' },
+                  { value: 'Sprint 15', label: 'Sprint 15' },
+                  { value: 'Backlog', label: 'Backlog' }
+                ]}
+                className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-2.5 py-2 text-xs bg-white/75 dark:bg-white/10 border border-white/80 dark:border-white/15"
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold mb-1">Story Pts</label>
-              <select value={points} onChange={e => setPoints(Number(e.target.value))} className="w-full px-2.5 py-2 rounded-2xl text-xs bg-white/75 dark:bg-white/10 border border-white/80 dark:border-white/15">
-                {[1, 2, 3, 5, 8, 13].map(pt => <option key={pt} value={pt} className="text-slate-900">{pt} {pt === 1 ? 'pt' : 'pts'}</option>)}
-              </select>
+              <Dropdown
+                value={String(points)}
+                onChange={(v) => setPoints(Number(v))}
+                options={[1, 2, 3, 5, 8, 13].map(pt => ({ value: String(pt), label: `${pt} ${pt === 1 ? 'pt' : 'pts'}` }))}
+                className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-2.5 py-2 text-xs bg-white/75 dark:bg-white/10 border border-white/80 dark:border-white/15"
+              />
             </div>
           </div>
           <div>
             <label className="block text-xs font-semibold mb-1">Workstream / Tag</label>
-            <select value={tag} onChange={e => setTag(e.target.value)} className="w-full px-3 py-2 rounded-2xl text-xs bg-white/75 dark:bg-white/10 border border-white/80 dark:border-white/15">
-              <option value="Frontend" className="text-slate-900">Frontend</option>
-              <option value="Backend" className="text-slate-900">Backend</option>
-              <option value="API" className="text-slate-900">API &amp; Security</option>
-              <option value="DevOps" className="text-slate-900">DevOps &amp; Infra</option>
-              <option value="QA" className="text-slate-900">QA &amp; Testing</option>
-              <option value="Design" className="text-slate-900">UI/UX Design</option>
-            </select>
+            <Dropdown
+              value={tag}
+              onChange={setTag}
+              options={[
+                { value: 'Frontend', label: 'Frontend' },
+                { value: 'Backend', label: 'Backend' },
+                { value: 'API', label: 'API & Security' },
+                { value: 'DevOps', label: 'DevOps & Infra' },
+                { value: 'QA', label: 'QA & Testing' },
+                { value: 'Design', label: 'UI/UX Design' }
+              ]}
+              className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-white/75 dark:bg-white/10 border border-white/80 dark:border-white/15"
+            />
           </div>
           <div className="pt-3 border-t border-slate-900/10 dark:border-white/10 flex items-center justify-between gap-2">
             {task ? (

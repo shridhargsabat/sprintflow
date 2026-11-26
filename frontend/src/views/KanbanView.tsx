@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
+import Dropdown from '../components/Dropdown';
 import type { Task, TaskStatus, TeamMember } from '../types';
 import { GLASS_PILL, PRIORITY_META, STATUS_COLUMNS } from '../constants';
 import { getDueMeta, getInitials } from '../utils/format';
@@ -105,9 +106,12 @@ export default function KanbanView({ tasks, team, onOpenTask, onMoveTaskStatus }
                         <span className={`text-[10px] shrink-0 ${due.cls}`}>{due.text}</span>
                       </div>
                       <div className="mt-2.5">
-                        <select value={t.status} onChange={e => onMoveTaskStatus(t.id, e.target.value as TaskStatus)} className="w-full text-[10px] font-medium px-2.5 py-1 rounded-full bg-white/60 dark:bg-white/10 border border-white/80 dark:border-white/15">
-                          {STATUS_COLUMNS.map(s => <option key={s.id} value={s.id} className="text-slate-900">Move to: {s.label}</option>)}
-                        </select>
+                        <Dropdown
+                          value={t.status}
+                          onChange={(v) => onMoveTaskStatus(t.id, v as TaskStatus)}
+                          options={STATUS_COLUMNS.map(s => ({ value: s.id, label: `Move to: ${s.label}` }))}
+                          className="inline-flex w-full items-center justify-between gap-2 rounded-full px-2.5 py-1 text-[10px] font-medium bg-white/60 dark:bg-white/10 border border-white/80 dark:border-white/15"
+                        />
                       </div>
                     </div>
                   );
