@@ -85,8 +85,27 @@ jobs:
           cd backend
           uv run pytest -q
 
+  # ── Images: prove both Dockerfiles build and the backend imports ──────────
+  # Regression gate for the 2026-11-26 outage (a new backend module missing
+  # from the Dockerfile COPY list passed pytest but boot-looped in prod,
+  # because pytest runs from source and docker build never imports).
+  image-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Build backend image
+        run: docker build -f backend/Dockerfile -t sprintflow-backend:ci .
+
+      - name: Backend image boots (import check)
+        run: docker run --rm sprintflow-backend:ci .venv/bin/python -c "import app; print('IMPORT-OK')"
+
+      - name: Build frontend image
+        run: docker build -f frontend/Dockerfile -t sprintflow-frontend:ci frontend
+
   # ── Deploy: SSH to the VPS, build+push GHCR images, compose up, smoke ────
-  # Only fires on a real push to main (PRs run the two check jobs above, not
+  # Only fires on a real push to main (PRs run the three check jobs above, not
   # deploy). No self-hosted runner: the build runs on the VPS over SSH, exactly
   # like the ITMS pipeline, with images pushed to GHCR.
   #
@@ -100,7 +119,7 @@ jobs:
   # so the VPS can pull on container restarts without credentials.
   deploy:
     runs-on: ubuntu-latest
-    needs: [frontend-check, backend-check]
+    needs: [frontend-check, backend-check, image-check]
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     steps:
       - name: Start SSH agent with deploy key
