@@ -24,11 +24,11 @@ export function TaskDetailsModal({ task, onClose, onEdit, onDelete, onPromote }:
 
   return (
     <div onClick={onClose} className="lg-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/35 backdrop-blur-md">
-      <div onClick={e => e.stopPropagation()} className={`lg-modal-panel w-full max-w-lg rounded-[32px] overflow-hidden ${GLASS_PANEL}`}>
+      <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="task-details-title" className={`lg-modal-panel w-full max-w-lg rounded-[32px] overflow-hidden ${GLASS_PANEL}`}>
         <div className="px-6 py-4 border-b border-slate-900/10 dark:border-white/10 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <span className="shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-400/30">{task.id}</span>
-            <h3 className="text-base font-semibold truncate">{task.title}</h3>
+            <h3 id="task-details-title" className="text-base font-semibold truncate">{task.title}</h3>
           </div>
           <GlassTooltip label="Close details" position="bottom">
             <button type="button" onClick={onClose} className="shrink-0 w-11 h-11 md:w-8 md:h-8 rounded-full hover:bg-white/60 dark:hover:bg-white/10 flex items-center justify-center" aria-label="Close details">
