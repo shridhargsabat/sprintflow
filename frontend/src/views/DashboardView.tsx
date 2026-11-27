@@ -25,6 +25,7 @@ import AssigneeCluster, { assigneeNames } from '../components/AssigneeCluster';
 import { GlassChartTooltip } from '../components/GlassChartTooltip';
 import { PRIORITY_META, GLASS_PANEL, GLASS_SUBCARD, GLASS_PILL, TODAY_ISO } from '../constants';
 import { getInitials, formatShortDate, getDueMeta, addWorkingDaysISO, workingDaysBetween } from '../utils/format';
+import { resolveSprintName } from '../utils/sprint';
 
 export interface DashboardViewProps {
   tasks: Task[];
@@ -122,10 +123,13 @@ export default function DashboardView({
       const badge = `${matched.name} · ${isFirst ? 'Active' : 'Planned'}`;
       const daysLeft = workingDaysBetween(TODAY_ISO, matched.endDate);
       const daysUntilStart = workingDaysBetween(TODAY_ISO, matched.startDate);
-      if (matched.name === 'Sprint 14' || sprintFilter === 'Sprint 14') {
+      // Themed titles key off list position (first = active, second = planned),
+      // never the sprint's renameable name — visuals stay identical after rename.
+      const position = sprints.findIndex(s => s.id === matched.id);
+      if (position <= 0) {
         return { badge, dates, title: 'Core Platform v2.4 Delivery', sub: `${daysLeft} working days remaining · Synced with SQLite backend` };
       }
-      if (matched.name === 'Sprint 15' || sprintFilter === 'Sprint 15') {
+      if (position === 1) {
         return { badge, dates, title: 'Scale & Reliability Hardening', sub: `Starts in ${daysUntilStart} working days · Backlog grooming & capacity planning` };
       }
       return { badge, dates, title: `${matched.name} Delivery`, sub: 'Sprint overview · Synced with SQLite backend' };
@@ -139,7 +143,13 @@ export default function DashboardView({
     if (sprintFilter === 'Backlog') {
       return { badge: 'Product Backlog', dates: 'Unscheduled Queue', title: 'Upcoming Engineering Backlog', sub: 'Prioritized work ready to pull into upcoming sprints' };
     }
-    return { badge: 'All Sprints · Portfolio', dates: 'Q4 2026 Roadmap', title: 'Full Project Delivery Overview', sub: 'Combined view of active sprint, planned sprint & backlog' };
+    if (sprintFilter === 'all') {
+      return { badge: 'All Sprints · Portfolio', dates: 'Q4 2026 Roadmap', title: 'Full Project Delivery Overview', sub: 'Combined view of active sprint, planned sprint & backlog' };
+    }
+    // Unmatched ref (sprints list not loaded yet, or a stale id): resolve the
+    // live name when possible instead of hardcoding a sprint identity.
+    const name = resolveSprintName(sprints, sprintFilter);
+    return { badge: `${name} · Sprint`, dates: '', title: `${name} Delivery`, sub: 'Sprint overview · Synced with SQLite backend' };
   }, [sprintFilter, sprints]);
 
   const ongoingTasks = useMemo(

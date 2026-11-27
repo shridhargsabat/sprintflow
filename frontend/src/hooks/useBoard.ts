@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { DEFAULT_POINTS_SCALE, STATUS_COLUMNS } from '../constants';
+import { resolveSprintName } from '../utils/sprint';
 import type { BoardImport, SprintConfig, SprintPatch, Task, TaskFormValues, TaskStatus, TeamMember, Toast, ToastType } from '../types';
 
 export interface UseBoardDeps {
@@ -124,7 +125,7 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
     try {
       const updated = await api.promoteTask(taskId);
       setTasks(prev => prev.map(t => (t.id === taskId ? updated : t)));
-      showToast(`Pulled ${taskId} into Sprint 14`, 'success');
+      showToast(`Pulled ${taskId} into ${resolveSprintName(sprints, updated.sprint)}`, 'success');
     } catch {
       showToast('Failed to promote task', 'error');
     }
