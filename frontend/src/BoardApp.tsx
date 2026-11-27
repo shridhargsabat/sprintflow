@@ -215,6 +215,7 @@ export default function BoardApp() {
           </div>
         )}
 
+        {activeView !== 'reports' && (
         <FilterBar
           sprintFilter={sprintFilter}
           onSprintFilterChange={setSprintFilter}
@@ -231,6 +232,7 @@ export default function BoardApp() {
           hasActiveFilters={hasActiveFilters}
           onClearFilters={clearFilters}
         />
+        )}
 
         <main className="max-w-[1440px] mx-auto px-4 sm:px-6 py-5 pb-10">
           {board.loading ? (
@@ -281,6 +283,7 @@ export default function BoardApp() {
                 <ReportsView
                   sprints={board.sprints}
                   defaultSprintId={activeSprint ? activeSprint.id : null}
+                  onOpenDetails={openDetailsById}
                 />
               )}
               </Suspense>
