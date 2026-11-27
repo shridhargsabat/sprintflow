@@ -138,6 +138,7 @@ def import_board(
         else:
             resolved_user_ids.append(user["id"])
     with db.get_conn() as conn:
+        conn.execute("DELETE FROM task_activity")
         conn.execute("DELETE FROM task_tags")
         conn.execute("DELETE FROM task_assignees")
         conn.execute("DELETE FROM tasks")

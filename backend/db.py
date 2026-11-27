@@ -225,6 +225,8 @@ def init_db(db_path: Optional[str] = None) -> None:
         # A deliberately deleted admin is never resurrected while other
         # users exist (M1); fresh-DB behavior is unchanged.
         seed_users(conn)
+        # Per-task activity trail (idempotent; additive for live DBs).
+        conn.executescript(TASK_ACTIVITY_DDL)
 
 
 def _migrate_task_assignees(conn: sqlite3.Connection) -> None:
@@ -320,6 +322,27 @@ TASKS_CORE_COLUMNS = [
     "id", "title", "description", "due_date", "status", "priority",
     "sprint", "points", "created_at", "updated_at",
 ]
+
+TASK_ACTIVITY_DDL = """
+    CREATE TABLE IF NOT EXISTS task_activity (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id TEXT NOT NULL,
+        actor_id INTEGER NULL,
+        actor_name TEXT NOT NULL DEFAULT '',
+        actor_email TEXT NOT NULL DEFAULT '',
+        action TEXT NOT NULL,
+        field TEXT NULL,
+        old_value TEXT NULL,
+        new_value TEXT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_task_activity_task
+        ON task_activity(task_id, id DESC);
+"""
+# NOTE: task_activity.task_id deliberately has NO foreign key to tasks.
+# A 'deleted' entry is logged after the task row is removed, and the trail
+# (including that entry) stays queryable afterwards — GET returns it instead
+# of 404ing, so clients stay fail-soft.
 
 
 def _rebuild_tasks_without_legacy_columns(conn: sqlite3.Connection) -> None:
@@ -653,6 +676,7 @@ def seed_users(conn: sqlite3.Connection) -> None:
 
 def reset_db(db_path: Optional[str] = None) -> None:
     with get_conn(db_path) as conn:
+        conn.execute("DELETE FROM task_activity")
         conn.execute("DELETE FROM task_tags")
         conn.execute("DELETE FROM task_assignees")
         conn.execute("DELETE FROM tasks")
@@ -1016,6 +1040,7 @@ def close_sprint(
     sprint_id: str,
     rollover_to: Optional[str] = None,
     db_path: Optional[str] = None,
+    actor: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     """Close a sprint.
 
@@ -1023,10 +1048,15 @@ def close_sprint(
     (must exist and not be closed, 400 otherwise) keeping their status, or
     drop to status='backlog' when no target is given. Returns
     {closed, moved, to}.
+
+    Activity: each moved task gets a post-commit 'rollover' entry (or a
+    status entry when dropping to backlog). Logging is guarded and never
+    breaks the close; actor is the JWT user dict (None -> 'System').
     """
     target = rollover_to.strip() if isinstance(rollover_to, str) else None
     if not target:
         target = None
+    moved: List[tuple] = []
     with get_conn(db_path) as conn:
         row = conn.execute("SELECT id FROM sprints WHERE id = ?", (sprint_id,)).fetchone()
         if row is None:
@@ -1044,6 +1074,9 @@ def close_sprint(
                     status_code=400,
                     detail=f"Cannot roll over to closed sprint: {target}",
                 )
+        unfinished = conn.execute(
+            "SELECT id, status FROM tasks WHERE sprint = ? AND status != 'done'", (sprint_id,)
+        ).fetchall()
         if target is not None:
             moved_ids = _move_unfinished_tasks(conn, sprint_id, target)
         else:
@@ -1059,13 +1092,47 @@ def close_sprint(
                 (sprint_id,),
             )
         conn.execute("UPDATE sprints SET status = 'closed' WHERE id = ?", (sprint_id,))
-        return {"closed": sprint_id, "moved": len(moved_ids), "to": target}
+        moved = [(r["id"], r["status"]) for r in unfinished]
+        result = {"closed": sprint_id, "moved": len(unfinished), "to": target}
+    # Post-commit trail entries (guarded inside log_activity_many).
+    if target is not None:
+        log_activity_many(
+            [
+                {
+                    "task_id": task_id,
+                    "actor": actor,
+                    "action": ACTIVITY_ACTION_ROLLOVER,
+                    "field": "sprint",
+                    "old_value": sprint_id,
+                    "new_value": target,
+                }
+                for task_id, _old_status in moved
+            ],
+            db_path=db_path,
+        )
+    else:
+        log_activity_many(
+            [
+                {
+                    "task_id": task_id,
+                    "actor": actor,
+                    "action": ACTIVITY_ACTION_UPDATED,
+                    "field": "status",
+                    "old_value": old_status,
+                    "new_value": "backlog",
+                }
+                for task_id, old_status in moved
+            ],
+            db_path=db_path,
+        )
+    return result
 
 
 def rollover_sprint(
     sprint_id: str,
     target: Optional[str],
     db_path: Optional[str] = None,
+    actor: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     """One-click rollover: move unfinished tasks to another sprint.
 
@@ -1097,7 +1164,22 @@ def rollover_sprint(
         if dest is None:
             raise HTTPException(status_code=404, detail=f"Sprint not found: {clean}")
         ids = _move_unfinished_tasks(conn, sprint_id, clean)
-        return {"moved": len(ids), "task_ids": ids, "from": sprint_id, "to": clean}
+    # Post-commit trail entries (guarded inside log_activity_many).
+    log_activity_many(
+        [
+            {
+                "task_id": task_id,
+                "actor": actor,
+                "action": ACTIVITY_ACTION_ROLLOVER,
+                "field": "sprint",
+                "old_value": sprint_id,
+                "new_value": clean,
+            }
+            for task_id in ids
+        ],
+        db_path=db_path,
+    )
+    return {"moved": len(ids), "task_ids": ids, "from": sprint_id, "to": clean}
 
 
 def list_team(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -1346,3 +1428,203 @@ def set_task_tags(
                 "INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?, ?)",
                 (task_id, row["id"]),
             )
+
+
+# ---------- per-task activity trail ----------
+
+# Actions stored in task_activity.action. 'updated' always carries a field;
+# 'rollover' carries field='sprint'; 'created'/'deleted' carry field=NULL.
+ACTIVITY_ACTION_CREATED = "created"
+ACTIVITY_ACTION_UPDATED = "updated"
+ACTIVITY_ACTION_ROLLOVER = "rollover"
+ACTIVITY_ACTION_DELETED = "deleted"
+
+# Task-dict fields diffed for the trail (PUT /tasks/{id}). Only fields whose
+# value actually changed produce rows — unchanged fields log nothing.
+ACTIVITY_TRACKED_FIELDS = (
+    "title", "description", "status", "priority", "sprint",
+    "points", "dueDate", "assignees", "tags",
+)
+
+
+def _actor_triplet(actor: Optional[Dict[str, Any]]) -> tuple:
+    """(actor_id, actor_name, actor_email) from a JWT user dict (or System)."""
+    if not actor:
+        return (None, "System", "")
+    return (
+        actor.get("id"),
+        str(actor.get("name") or ""),
+        str(actor.get("email") or ""),
+    )
+
+
+def _assignee_sort_key(entry: Dict[str, Any]) -> tuple:
+    return (str(entry.get("type") or ""), str(entry.get("id") or ""))
+
+
+def _assignee_names(assignees: Any) -> List[str]:
+    """Deterministic display-name snapshot for an assignees array."""
+    if not isinstance(assignees, list):
+        return []
+    names = [
+        str(a.get("name") or a.get("id") or "?")
+        for a in sorted(
+            (a for a in assignees if isinstance(a, dict)),
+            key=_assignee_sort_key,
+        )
+    ]
+    return names
+
+
+def _activity_store_value(field: str, value: Any) -> Optional[str]:
+    """Stored old/new string for a tracked field (JSON for list fields)."""
+    if field == "assignees":
+        return json.dumps(_assignee_names(value))
+    if field == "tags":
+        items = sorted(str(v) for v in value) if isinstance(value, list) else []
+        return json.dumps(items)
+    if value is None:
+        return None
+    return str(value)
+
+
+def _activity_compare_key(field: str, value: Any) -> Any:
+    """Equality key for diffing (identity-based for assignees/tags)."""
+    if field == "assignees" and isinstance(value, list):
+        return sorted(
+            (str(a.get("type") or ""), str(a.get("id") or ""))
+            for a in value
+            if isinstance(a, dict)
+        )
+    if field == "tags" and isinstance(value, list):
+        return sorted(str(v) for v in value)
+    if field == "points":
+        try:
+            return int(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return value
+    if isinstance(value, str):
+        return value.strip()
+    return value
+
+
+def diff_tasks(
+    before: Dict[str, Any], after: Dict[str, Any]
+) -> List[tuple]:
+    """Field diffs between two task dicts: [(field, old, new), ...].
+
+    Only ACTIVITY_TRACKED_FIELDS are compared and only changed fields are
+    returned; old/new are the stored string forms (JSON for list fields).
+    """
+    diffs: List[tuple] = []
+    for field in ACTIVITY_TRACKED_FIELDS:
+        old_raw = before.get(field)
+        new_raw = after.get(field)
+        if _activity_compare_key(field, old_raw) != _activity_compare_key(field, new_raw):
+            diffs.append(
+                (
+                    field,
+                    _activity_store_value(field, old_raw),
+                    _activity_store_value(field, new_raw),
+                )
+            )
+    return diffs
+
+
+def log_activity(
+    task_id: str,
+    *,
+    actor: Optional[Dict[str, Any]] = None,
+    action: str,
+    field: Optional[str] = None,
+    old_value: Optional[str] = None,
+    new_value: Optional[str] = None,
+    db_path: Optional[str] = None,
+) -> None:
+    """Log one activity entry for a task. The single reusable helper.
+
+    Opens its own connection and MUST be called only after the caller's
+    mutation has committed — logging never participates in (and therefore
+    can never roll back or break) the task mutation itself. Never raises:
+    any failure is swallowed with a warning so a logging outage degrades
+    to a missing trail entry, not a failed request. Actor comes from the
+    JWT user dict (id/name/email); None renders as 'System'.
+    """
+    log_activity_many(
+        [
+            {
+                "task_id": task_id,
+                "actor": actor,
+                "action": action,
+                "field": field,
+                "old_value": old_value,
+                "new_value": new_value,
+            }
+        ],
+        db_path=db_path,
+    )
+
+
+def log_activity_many(entries: List[Dict[str, Any]], db_path: Optional[str] = None) -> None:
+    """Batch variant of log_activity (one connection, same never-raise guard)."""
+    if not entries:
+        return
+    try:
+        with get_conn(db_path) as conn:
+            conn.executescript(TASK_ACTIVITY_DDL)
+            for entry in entries:
+                actor_id, actor_name, actor_email = _actor_triplet(entry.get("actor"))
+                conn.execute(
+                    """
+                    INSERT INTO task_activity
+                        (task_id, actor_id, actor_name, actor_email,
+                         action, field, old_value, new_value)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        entry.get("task_id"),
+                        actor_id,
+                        actor_name,
+                        actor_email,
+                        entry.get("action"),
+                        entry.get("field"),
+                        entry.get("old_value"),
+                        entry.get("new_value"),
+                    ),
+                )
+    except Exception:
+        logger.warning("task_activity logging failed; mutation result kept", exc_info=True)
+
+
+def list_task_activity(
+    task_id: str, db_path: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """A task's activity trail, newest first. Never 404s: legacy tasks and
+    unknown ids simply return [] (no fabricated backfill)."""
+    with get_conn(db_path) as conn:
+        conn.executescript(TASK_ACTIVITY_DDL)
+        rows = conn.execute(
+            """
+            SELECT id, task_id, actor_id, actor_name, actor_email,
+                   action, field, old_value, new_value, created_at
+            FROM task_activity
+            WHERE task_id = ?
+            ORDER BY id DESC
+            """,
+            (task_id,),
+        ).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "taskId": r["task_id"],
+                "actorId": r["actor_id"],
+                "actor": r["actor_name"],
+                "actorEmail": r["actor_email"],
+                "action": r["action"],
+                "field": r["field"],
+                "oldValue": r["old_value"],
+                "newValue": r["new_value"],
+                "createdAt": r["created_at"],
+            }
+            for r in rows
+        ]

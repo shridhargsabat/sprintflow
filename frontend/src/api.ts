@@ -1,4 +1,4 @@
-import type { BoardImport, SprintConfig, SprintPatch, SprintStatus, Task, TaskPayload, TaskStatus, TeamMember } from './types';
+import type { BoardImport, SprintConfig, SprintPatch, SprintStatus, Task, TaskActivityEntry, TaskPayload, TaskStatus, TeamMember } from './types';
 
 export type { SprintStatus };
 
@@ -224,6 +224,8 @@ export const api = {
     request<Task>(`/tasks/${encodeURIComponent(id)}/promote`, { method: 'POST' }),
   deleteTask: (id: string): Promise<{ deleted: string }> =>
     request<{ deleted: string }>(`/tasks/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  getTaskActivity: (id: string): Promise<TaskActivityEntry[]> =>
+    request<TaskActivityEntry[]>(`/tasks/${encodeURIComponent(id)}/activity`),
 
   getTeam: (): Promise<TeamMember[]> => request<TeamMember[]>('/team'),
   addMember: (payload: MemberPayload): Promise<TeamMember> =>

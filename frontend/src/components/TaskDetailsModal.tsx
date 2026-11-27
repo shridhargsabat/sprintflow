@@ -4,6 +4,7 @@ import { getDueMeta, getInitials } from '../utils/format';
 import type { Task, SprintConfig } from '../types';
 import GlassTooltip from './GlassTooltip';
 import AssigneeCluster, { assigneeColor } from './AssigneeCluster';
+import TaskActivityTimeline from './TaskActivityTimeline';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { resolveSprintName } from '../utils/sprint';
 
@@ -106,6 +107,8 @@ export function TaskDetailsModal({ task, sprints, onClose, onEdit, onDelete, onP
               <p className="text-sm italic text-slate-400 dark:text-slate-500">No description provided</p>
             )}
           </div>
+
+          <TaskActivityTimeline taskId={task.id} sprints={sprints} />
 
           <div className="pt-3 border-t border-slate-900/10 dark:border-white/10 flex flex-col-reverse md:flex-row md:items-center md:justify-between gap-2">
             <GlassTooltip label="Delete this task" className="flex md:inline-flex">
