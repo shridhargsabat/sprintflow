@@ -6,25 +6,41 @@
 [![Node](https://img.shields.io/badge/node-22-green.svg)](https://github.com/shridhargsabat/sprintflow/tree/main/frontend)
 [![Docker](https://img.shields.io/badge/docker-compose-blue.svg)](https://github.com/shridhargsabat/sprintflow/blob/main/docker-compose.yml)
 
-**Plan the sprint, drag the board, ship the release — a lightweight sprint manager in FastAPI + SQLite + React.**
+**Plan the sprint, drag the board, ship the release — a**
+**lightweight sprint manager in FastAPI + SQLite + React.**
 
-🌐 **Live demo:** [sprintflow.ai-automation-hub.tech](https://sprintflow.ai-automation-hub.tech) (seeded sample data)
+🌐 **Live app:**
+[sprintflow.ai-automation-hub.tech](https://sprintflow.ai-automation-hub.tech)
 
 [![Kanban drag-and-drop demo](docs/demo/hero-board.gif)](https://sprintflow.ai-automation-hub.tech)
 
 ## ✨ Features
 
-- 📊 **Dashboard** — per-sprint KPIs: velocity, WIP, completion, burndown-ready summary
-- 🗂️ **Drag-and-drop Kanban** — To Do → In Progress → Review → Done with one PATCH
-- 📋 **Backlog & team schedule** — groom backlog, promote tasks into the active sprint
-- 👥 **Team management** — full CRUD on members, assignments, capacity view
-- 🔐 **Auth + RBAC** — JWT login with admin / lead / member / viewer roles
-- 🔄 **Import / reset** — JSON import and one-click sample-data reset for demos
+- 📊 **Dashboard** — per-sprint KPIs: velocity, WIP, completion
+- 📉 **Burndown chart** — ideal vs. remaining story points
+- 🗂️ **Drag-and-drop Kanban** — To Do → In Progress → Review → Done
+- 📋 **Backlog & team schedule** — groom backlog, promote to sprint
+- 📈 **Reports** — per-sprint completed / moved / remaining work
+- 🔁 **Sprint close + rollover** — unfinished work moves forward
+- 🧾 **Activity trail** — per-task history of every change
+- 🧩 **Subtasks + related links** — break down and connect tasks
+- 🏷️ **Tags** — label tasks, filter the board by tag
+- 🔍 **Filters + search** — sprint, priority, assignee, tag, text
+- 🔢 **Points scale** — admin-configurable story-point options
+- 📅 **Working-day sprints** — lengths count Mon–Fri only
+- 🔗 **Deep links** — hash routes (`#/kanban`, `#/reports`, …)
+- 🌙 **Dark mode** — one-click toggle in the header
+- 👥 **Team management** — full CRUD on members and capacity
+- 🔐 **Auth + RBAC** — JWT login, admin / lead / member / viewer
+- 🔄 **Import / reset** — JSON import and one-click sample reset
 - 📖 **Auto API docs** — Swagger UI served by FastAPI at `/docs`
 
-| Dashboard | Kanban | Backlog |
-|---|---|---|
-| ![Dashboard KPIs](docs/demo/dashboard.png) | ![Kanban board](docs/demo/kanban.png) | ![Backlog and team](docs/demo/backlog.png) |
+| View | Screenshot |
+| ---- | ---------- |
+| Dashboard | ![Dashboard KPIs](docs/demo/dashboard.png) |
+| Kanban | ![Kanban board](docs/demo/kanban.png) |
+| Backlog | ![Backlog and team](docs/demo/backlog.png) |
+| Reports | ![Sprint reports](docs/demo/reports.png) |
 
 ## 🚀 5-Minute Quickstart
 
@@ -37,9 +53,15 @@ uv sync                              # runtime only — creates .venv in place
 .venv/bin/uvicorn app:app --reload --port 8000
 ```
 
-> No `uv`? Fallback: `python3 -m venv .venv && .venv/bin/pip install fastapi==0.115.6 "uvicorn[standard]==0.34.0" pydantic==2.10.4 "pyjwt>=2.15.1" "bcrypt>=5.0.0"`
+No `uv`? Fallback with pip:
 
-- SQLite `backend/sprintflow.db` is created and seeded automatically on first launch.
+```bash
+python3 -m venv .venv
+.venv/bin/pip install fastapi==0.133.0 "uvicorn[standard]==0.34.0" \
+  pydantic==2.10.4 "pyjwt>=2.15.1" "bcrypt>=5.0.0"
+```
+
+- SQLite `backend/sprintflow.db` is created and seeded on first launch.
 - Swagger UI: `http://127.0.0.1:8000/docs`
 
 ### 2. Frontend — React + Vite (port 5173)
@@ -52,7 +74,8 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. All `/api/*` requests proxy to the backend on port `8000`.
+Open `http://localhost:5173`. All `/api/*` requests proxy
+to the backend on port `8000`.
 
 ### 3. Docker (optional)
 
@@ -63,12 +86,13 @@ docker compose up -d --build
 ## 🛠️ Tech Stack
 
 | Layer | Tech |
-|---|---|
-| Backend | Python 3.11+ · FastAPI 0.115 · Uvicorn · Pydantic 2 · PyJWT + bcrypt |
+| ----- | ---- |
+| Backend | Python 3.11+ · FastAPI 0.133 · Uvicorn · Pydantic 2 |
+| Auth | PyJWT + bcrypt (JWT login, RBAC roles) |
 | Database | SQLite (auto-created + seeded, zero config) |
 | Frontend | React 18 · TypeScript · Vite 6 · Tailwind CSS 3 |
 | API client | Typed fetch wrapper in `frontend/src/api.ts`, `/api` proxy |
-| DevOps | `uv` for Python · npm for JS · Docker Compose · GitHub Actions CI → GHCR |
+| DevOps | `uv` + npm · Docker Compose · GitHub Actions → GHCR |
 
 ## 📁 Project Structure
 
@@ -79,7 +103,7 @@ sprintflow/
 │   ├── auth.py             # JWT + RBAC (SPRINTFLOW_JWT_SECRET)
 │   ├── db.py               # SQLite schema, auto-seeding, CRUD (SPRINTFLOW_DB_PATH)
 │   ├── models.py           # Pydantic payloads
-│   ├── routers/            # auth, tasks, team, users, board, sprints, tags
+│   ├── routers/  # auth, tasks, team, users, board, settings, sprints, tags
 │   ├── tests/              # pytest suite (httpx)
 │   └── pyproject.toml      # uv-managed deps + uv.lock
 ├── frontend/
@@ -89,8 +113,9 @@ sprintflow/
 │   ├── nginx.conf          # Prod: /api proxy + SPA fallback (port 8080)
 │   └── src/
 │       ├── api.ts          # Typed fetch client for FastAPI endpoints
-│       ├── App.tsx         # Dashboard, Kanban Board, Backlog Table
-│       ├── views/          # Route views
+│       ├── App.tsx         # Auth gate + lazy BoardApp shell
+│       ├── BoardApp.tsx    # Dashboard, Kanban, Backlog, Reports views
+│       ├── views/          # Dashboard, Kanban, Backlog, Reports views
 │       ├── components/     # UI components
 │       └── auth/           # Auth provider + guards
 ├── docker-compose.yml      # backend + frontend + traefik labels
@@ -100,24 +125,38 @@ sprintflow/
 ## 🔌 Key REST Endpoints
 
 - `POST /api/auth/login` · `GET /api/auth/me` — JWT session
-- `GET /api/tasks` · `POST /api/tasks` · `PUT /api/tasks/{id}` · `DELETE /api/tasks/{id}`
-- `PATCH /api/tasks/{id}/status` — move Kanban column
-- `POST /api/tasks/{id}/promote` — pull backlog task into active sprint
-- `GET /api/team` · `POST /api/team` · `PUT /api/team/{id}` · `DELETE /api/team/{id}`
-- `GET /api/dashboard/summary?sprint=Sprint%2014` — sprint KPI summary
-- `POST /api/import` · `POST /api/reset` — JSON import & sample-data reset
+- `GET /api/tasks` · `POST /api/tasks` · `PUT /api/tasks/{id}`
+- `DELETE /api/tasks/{id}` · `PATCH /api/tasks/{id}/status`
+- `POST /api/tasks/{id}/promote` — pull backlog task into sprint
+- `GET /api/tasks/{id}/activity` — per-task activity trail
+- `POST /api/tasks/{id}/links` · `DELETE /api/tasks/{id}/links/{n}`
+- `POST /api/tasks/{id}/children` — create a subtask
+- `GET /api/team` · `POST /api/team` · `PUT /api/team/{id}`
+- `DELETE /api/team/{id}` — team member CRUD
+- `GET /api/sprints` · `POST /api/sprints` · `PUT /api/sprints/{id}`
+- `POST /api/sprints/{id}/activate` · `POST /api/sprints/{id}/close`
+- `POST /api/sprints/{id}/rollover` — move unfinished work forward
+- `GET /api/sprints/{id}/report` — per-sprint report
+- `GET /api/tags` · `POST /api/tags` · `PUT /api/tags/{id}`
+- `DELETE /api/tags/{id}` — tag master CRUD
+- `GET /api/users/directory` — assignable users list
+- `GET /api/settings/points-scale` · `PUT /api/settings/points-scale`
+- `GET /api/dashboard/summary?sprint=Sprint%2014` — sprint KPIs
+- `POST /api/import` · `POST /api/reset` — JSON import & reset
 
 ## 🗺️ Roadmap
 
-- [x] Dashboard, Kanban, backlog, team CRUD, auth + RBAC, import/reset
-- [ ] Sprint burndown chart + velocity trends
-- [ ] Filters, search, labels on tasks
-- [ ] Dark mode
+- [x] Dashboard, Kanban, backlog, team CRUD, auth + RBAC
+- [x] Burndown chart, filters, search, tags, dark mode
+- [x] Reports view, sprint close + rollover, hash-route deep links
+- [ ] Up next is tracked on the [issue tracker][issues].
 
 ## 🤝 Contributing
 
-Issues and PRs welcome at [shridhargsabat/sprintflow](https://github.com/shridhargsabat/sprintflow). See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and style.
+Issues and PRs welcome on the [issue tracker][issues].
 
 ## 📄 License
 
 MIT — see [LICENSE](https://github.com/shridhargsabat/sprintflow/blob/main/LICENSE).
+
+[issues]: https://github.com/shridhargsabat/sprintflow/issues
