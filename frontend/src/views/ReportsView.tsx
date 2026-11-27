@@ -10,6 +10,8 @@ interface ReportsViewProps {
   sprints: SprintConfig[];
   /** Lifecycle-active sprint id (null until the board loads). */
   defaultSprintId: string | null;
+  /** Open the task details modal for a report row (by task id). */
+  onOpenDetails?: (taskId: string) => void;
 }
 
 const STATUS_SUFFIX: Record<string, string> = {
@@ -23,7 +25,7 @@ const STATUS_SUFFIX: Record<string, string> = {
  * Sprint picker lists every sprint — open AND closed — defaulting to the
  * active sprint; the report renders via the shared SprintReportBody.
  */
-export default function ReportsView({ sprints, defaultSprintId }: ReportsViewProps) {
+export default function ReportsView({ sprints, defaultSprintId, onOpenDetails }: ReportsViewProps) {
   const [selectedId, setSelectedId] = useState<string>(defaultSprintId ?? '');
   const [report, setReport] = useState<SprintReport | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -74,14 +76,18 @@ export default function ReportsView({ sprints, defaultSprintId }: ReportsViewPro
           <p className="text-xs text-slate-600 dark:text-slate-400">Completed, moved, and remaining work per sprint — including closed sprints</p>
         </div>
         {sprints.length > 0 && (
-          <div className="shrink-0 w-full sm:w-auto sm:min-w-72">
-            <Dropdown
-              id="reports-sprint-picker"
-              value={selectedId}
-              onChange={setSelectedId}
-              options={sprintOptions}
-              className={`inline-flex w-full min-h-[44px] md:min-h-0 items-center justify-between gap-2 rounded-full px-3.5 py-1.5 text-xs font-semibold ${GLASS_PILL}`}
-            />
+          <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+            <label htmlFor="reports-sprint-picker" className="text-xs font-medium text-slate-600 dark:text-slate-400 shrink-0">Sprint:</label>
+            <div className="flex-1 sm:flex-none sm:min-w-72">
+              <Dropdown
+                id="reports-sprint-picker"
+                value={selectedId}
+                onChange={setSelectedId}
+                options={sprintOptions}
+                placeholder="Select sprint for report"
+                className={`inline-flex w-full min-h-[44px] md:min-h-0 items-center justify-between gap-2 rounded-full px-3.5 py-1.5 text-xs font-semibold ${GLASS_PILL}`}
+              />
+            </div>
           </div>
         )}
       </div>
@@ -108,7 +114,7 @@ export default function ReportsView({ sprints, defaultSprintId }: ReportsViewPro
           <p className="py-10 text-center text-xs text-slate-400">Loading report…</p>
         </div>
       ) : (
-        <SprintReportBody report={report} sprints={sprints} />
+        <SprintReportBody report={report} sprints={sprints} onOpenDetails={onOpenDetails} />
       )}
     </div>
   );
