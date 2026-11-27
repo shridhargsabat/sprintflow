@@ -22,18 +22,24 @@ const LENGTH_PRESETS: Array<{ label: string; days: number }> = [
 function SprintRow({ sprint, onSave }: { sprint: SprintConfig; onSave: (id: string, patch: SprintPatch) => void }) {
   const [startDate, setStartDate] = useState<string>(sprint.startDate);
   const [lengthDays, setLengthDays] = useState<number>(sprint.lengthDays);
+  const [name, setName] = useState<string>(sprint.name);
 
-  const dirty = startDate !== sprint.startDate || lengthDays !== sprint.lengthDays;
+  const dirty = startDate !== sprint.startDate || lengthDays !== sprint.lengthDays || name.trim() !== sprint.name;
 
   return (
     <div className="rounded-2xl bg-white/60 dark:bg-white/[0.06] border border-white/80 dark:border-white/15 p-4 space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold truncate">{sprint.name}</p>
-          <p className="text-[11px] text-slate-600 dark:text-slate-400">
-            Currently {formatShortDate(sprint.startDate)} – {formatShortDate(sprint.endDate)} · {sprint.lengthDays} days
-          </p>
-        </div>
+      <div>
+        <label className="block text-xs font-semibold mb-1">Sprint Name</label>
+        <input
+          type="text"
+          value={name}
+          maxLength={60}
+          onChange={e => setName(e.target.value)}
+          className="w-full rounded-2xl px-3 py-2 text-base md:text-xs min-h-[44px] md:min-h-0 bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text"
+        />
+        <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">
+          Currently {formatShortDate(sprint.startDate)} – {formatShortDate(sprint.endDate)} · {sprint.lengthDays} days
+        </p>
       </div>
       <div>
         <label className="block text-xs font-semibold mb-1">Start Date</label>
@@ -65,8 +71,8 @@ function SprintRow({ sprint, onSave }: { sprint: SprintConfig; onSave: (id: stri
       <div className="flex items-center justify-end">
         <button
           type="button"
-          disabled={!dirty || !startDate}
-          onClick={() => onSave(sprint.id, { startDate, lengthDays })}
+          disabled={!dirty || !startDate || !name.trim()}
+          onClick={() => onSave(sprint.id, { startDate, lengthDays, name: name.trim() })}
           className="px-5 py-2 rounded-full text-xs font-semibold bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Save

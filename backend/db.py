@@ -735,6 +735,7 @@ def update_sprint(
     sprint_id: str,
     start_date: Optional[str] = None,
     length_days: Optional[int] = None,
+    name: Optional[str] = None,
     db_path: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     with get_conn(db_path) as conn:
@@ -745,6 +746,8 @@ def update_sprint(
             conn.execute("UPDATE sprints SET start_date = ? WHERE id = ?", (start_date, sprint_id))
         if length_days is not None:
             conn.execute("UPDATE sprints SET length_days = ? WHERE id = ?", (length_days, sprint_id))
+        if name is not None:
+            conn.execute("UPDATE sprints SET name = ? WHERE id = ?", (name, sprint_id))
         row = conn.execute("SELECT * FROM sprints WHERE id = ?", (sprint_id,)).fetchone()
         # L13: the row can vanish mid-update (reset race) — None-safe so the
         # router maps it to 404 instead of TypeErroring into a 500.

@@ -100,6 +100,7 @@ class ImportPayload(BaseModel):
 class SprintUpdate(BaseModel):
     startDate: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     lengthDays: Optional[int] = Field(default=None, ge=1, le=60)
+    name: Optional[str] = Field(default=None, min_length=1, max_length=60)
 
     @field_validator("startDate")
     @classmethod
@@ -108,3 +109,13 @@ class SprintUpdate(BaseModel):
             return value
         date.fromisoformat(value)  # raises ValueError -> 422 on impossible dates
         return value
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Sprint name must not be blank")
+        return stripped

@@ -88,3 +88,52 @@ def test_put_unknown_sprint_404(client):
 def test_put_rejects_bad_date_or_length_with_422(client, body):
     resp = client.put("/api/sprints/Sprint 14", json=body)
     assert resp.status_code == 422
+
+
+def test_put_rename_updates_name_keeps_id_and_persists(client):
+    resp = client.put("/api/sprints/Sprint 14", json={"name": "Sprint One"})
+    assert resp.status_code == 200
+    updated = resp.json()
+    assert updated["id"] == "Sprint 14"
+    assert updated["name"] == "Sprint One"
+    # Persisted: visible on subsequent GET.
+    assert _all_sprints(client)[0]["name"] == "Sprint One"
+
+
+def test_put_rename_trims_whitespace(client):
+    resp = client.put("/api/sprints/Sprint 14", json={"name": "  Sprint Uno  "})
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Sprint Uno"
+
+
+@pytest.mark.parametrize("body", [
+    {"name": ""},
+    {"name": "   "},
+    {"name": "x" * 61},
+])
+def test_put_rename_rejects_blank_or_too_long_with_422(client, body):
+    resp = client.put("/api/sprints/Sprint 14", json=body)
+    assert resp.status_code == 422
+
+
+@pytest.mark.parametrize("name", ["Sprint 15", "sprint 15", "SPRINT 15"])
+def test_put_rename_rejects_collision_with_other_sprint_409(client, name):
+    resp = client.put("/api/sprints/Sprint 14", json={"name": name})
+    assert resp.status_code == 409
+    # Loser unchanged.
+    assert _all_sprints(client)[0]["name"] == "Sprint 14"
+
+
+def test_put_rename_keeps_tasks_linked_by_id(client):
+    created = client.post(
+        "/api/tasks",
+        json={"title": "Rename link check", "dueDate": "2026-12-06", "sprint": "Sprint 14"},
+    )
+    assert created.status_code == 201
+    resp = client.put("/api/sprints/Sprint 14", json={"name": "Sprint One"})
+    assert resp.status_code == 200
+    # Task still references the stable sprint id; sprint resolves by id or new name.
+    tasks = client.get("/api/tasks").json()
+    assert tasks[0]["sprint"] == "Sprint 14"
+    names = {s["id"]: s["name"] for s in _all_sprints(client)}
+    assert names["Sprint 14"] == "Sprint One"
