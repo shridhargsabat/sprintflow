@@ -1,6 +1,6 @@
 export type TaskStatus = 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'done';
 export type TaskPriority = 'critical' | 'high' | 'medium' | 'low';
-export type ViewId = 'dashboard' | 'kanban' | 'backlog';
+export type ViewId = 'dashboard' | 'kanban' | 'backlog' | 'reports';
 export type PriorityFilter = 'all' | TaskPriority;
 export type ToastType = 'info' | 'success' | 'error';
 

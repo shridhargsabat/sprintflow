@@ -3,7 +3,6 @@ import { Plus, X } from 'lucide-react';
 import Calendar from './Calendar';
 import Dropdown from './Dropdown';
 import ConfirmDialog from './ConfirmDialog';
-import { SprintReportModal } from './SprintReportModal';
 import { GLASS_PANEL, GLASS_PILL } from '../constants';
 import { formatShortDate } from '../utils/format';
 import { suggestNextSprintName } from '../utils/sprint';
@@ -58,8 +57,7 @@ function SprintRow({
   onSave,
   onActivate,
   onRequestClose,
-  onRequestRollover,
-  onReport
+  onRequestRollover
 }: {
   sprint: SprintConfig;
   canManage: boolean;
@@ -69,7 +67,6 @@ function SprintRow({
   onActivate: (id: string) => void;
   onRequestClose: (sprint: SprintConfig) => void;
   onRequestRollover: (sprint: SprintConfig) => void;
-  onReport: (id: string) => void;
 }) {
   const [name, setName] = useState<string>(sprint.name);
   const [startDate, setStartDate] = useState<string>(sprint.startDate);
@@ -133,19 +130,9 @@ function SprintRow({
           </div>
         </>
       )}
-      {/* Report is read-only: always visible (viewers + closed sprints too). */}
+      {canManage && status !== 'closed' && (
       <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => onReport(sprint.id)}
-            data-testid={`sprint-report-${sprint.id}`}
-            className="px-4 py-2 rounded-full text-xs font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-500/10 border border-blue-400/25 min-h-[44px] md:min-h-0"
-          >
-            Report
-          </button>
-          {canManage && status !== 'closed' && (
-            <>
               {status !== 'active' && (
                 <button
                   type="button"
@@ -171,10 +158,7 @@ function SprintRow({
               >
                 Move unfinished to…
               </button>
-            </>
-          )}
         </div>
-        {canManage && status !== 'closed' && (
           <button
             type="button"
             disabled={!dirty || !startDate}
@@ -183,8 +167,8 @@ function SprintRow({
           >
             Save
           </button>
-        )}
       </div>
+      )}
     </div>
   );
 }
@@ -296,7 +280,6 @@ export function SprintSettingsModal({ sprints, tasks, onClose, onSave, onCreate,
   const [rollover, setRollover] = useState<string>('Backlog');
   const [pendingRollover, setPendingRollover] = useState<SprintConfig | null>(null);
   const [rolloverTarget, setRolloverTarget] = useState<string>('');
-  const [reportSprintId, setReportSprintId] = useState<string | null>(null);
 
   const openSprints = sprints.filter(s => statusOf(s) !== 'closed');
   const rolloverOptions =
@@ -403,7 +386,6 @@ export function SprintSettingsModal({ sprints, tasks, onClose, onSave, onCreate,
                 onActivate={onActivate}
                 onRequestClose={handleRequestClose}
                 onRequestRollover={handleRequestRollover}
-                onReport={setReportSprintId}
               />
             ))
           )}
@@ -414,14 +396,6 @@ export function SprintSettingsModal({ sprints, tasks, onClose, onSave, onCreate,
           </div>
         </div>
       </div>
-
-      {reportSprintId !== null && (
-        <SprintReportModal
-          sprintId={reportSprintId}
-          sprints={sprints}
-          onClose={() => setReportSprintId(null)}
-        />
-      )}
 
       <ConfirmDialog
         open={pendingRollover !== null}
