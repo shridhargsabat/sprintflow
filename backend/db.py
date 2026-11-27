@@ -939,13 +939,26 @@ def create_sprint(
     db_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Create a planned sprint; id is the slug of the name (409 on duplicate)."""
+    clean = name.strip()
     sprint_id = slugify_sprint_id(name)
     with get_conn(db_path) as conn:
+        # Mirror the PUT rename guard: no UNIQUE constraint on sprints.name,
+        # so reject names (or derived ids) colliding with another sprint's id
+        # or name case-insensitively — otherwise id-or-name lookups (board
+        # filter, burndown) go ambiguous. Slug ids ('sprint-16') never equal
+        # legacy ids ('Sprint 14'), so the PK alone can't catch 'Sprint 14'.
+        lowered = clean.lower()
+        slug_lower = sprint_id.lower()
+        for row in conn.execute("SELECT id, name FROM sprints").fetchall():
+            if row["id"].lower() in (lowered, slug_lower) or row["name"].lower() in (lowered, slug_lower):
+                raise HTTPException(
+                    status_code=409, detail=f"Sprint already exists: {clean}"
+                )
         try:
             conn.execute(
                 "INSERT INTO sprints (id, name, start_date, length_days, status) "
                 "VALUES (?, ?, ?, ?, 'planned')",
-                (sprint_id, name.strip(), start_date, length_days),
+                (sprint_id, clean, start_date, length_days),
             )
         except sqlite3.IntegrityError:
             raise HTTPException(
