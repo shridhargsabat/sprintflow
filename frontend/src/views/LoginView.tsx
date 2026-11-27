@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent, ReactElement } from 'react';
 import { AlertCircle, Eye, EyeOff, Info, Layers, Loader2 } from 'lucide-react';
 import { GLASS_PANEL } from '../constants';
 import { useAuth } from '../auth/AuthContext';
+import { api } from '../api';
 import { preloadBoardApp } from '../preloadBoardApp';
+
+const DEMO_EMAIL = 'demo@sprintflow.local';
+const DEMO_PASSWORD = 'Demo123!';
 
 function friendlyError(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
@@ -26,22 +30,47 @@ export default function LoginView(): ReactElement {
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [busy, setBusy] = useState<boolean>(false);
+  const [demoEnabled, setDemoEnabled] = useState<boolean>(false);
+  const [demoBusy, setDemoBusy] = useState<boolean>(false);
 
-  const onSubmit = async (e: FormEvent): Promise<void> => {
-    e.preventDefault();
-    if (busy) return;
+  // Demo affordance is server-gated: 404 (flag off) means "demo disabled".
+  useEffect(() => {
+    api.getDemoStatus().then(s => setDemoEnabled(s.enabled)).catch(() => setDemoEnabled(false));
+  }, []);
+
+  const doLogin = async (loginEmail: string, loginPassword: string): Promise<void> => {
     // MOB-LOW-C/C1: warm the lazy BoardApp chunk so it fetches concurrently
     // with the auth request instead of after it (no post-login waterfall).
     preloadBoardApp();
     setError('');
     clearReason();
+    await login(loginEmail.trim(), loginPassword);
+  };
+
+  const onSubmit = async (e: FormEvent): Promise<void> => {
+    e.preventDefault();
+    if (busy) return;
     setBusy(true);
     try {
-      await login(email.trim(), password);
+      await doLogin(email, password);
     } catch (err) {
       setError(friendlyError(err));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const onTryDemo = async (): Promise<void> => {
+    if (busy || demoBusy) return;
+    setDemoBusy(true);
+    setError('');
+    try {
+      await api.resetDemo();
+      await doLogin(DEMO_EMAIL, DEMO_PASSWORD);
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setDemoBusy(false);
     }
   };
 
@@ -129,6 +158,16 @@ export default function LoginView(): ReactElement {
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
+        {demoEnabled && (
+          <div className="mt-4 border-t border-slate-500/10 pt-4">
+            <button type="button" disabled={busy || demoBusy} onClick={onTryDemo}
+              className="lg-press w-full rounded-full text-sm font-semibold py-2.5 px-5 min-h-[44px] md:min-h-0 flex items-center justify-center gap-2 bg-white/60 dark:bg-white/10 border border-white/80 dark:border-white/15 backdrop-blur transition disabled:opacity-60 disabled:cursor-wait">
+              {demoBusy && <Loader2 className="w-4 h-4 animate-spin" />}
+              {demoBusy ? 'Preparing demo…' : 'Try the demo'}
+            </button>
+            <p className="mt-2 text-center text-[11px] text-slate-500 dark:text-slate-400">Fresh sample workspace · resets on every demo login · local evaluation only</p>
+          </div>
+        )}
       </div>
     </div>
   );

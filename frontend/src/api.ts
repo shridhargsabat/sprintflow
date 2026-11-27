@@ -273,6 +273,11 @@ export const api = {
     }),
   getMe: (): Promise<MeResponse> => request<MeResponse>('/auth/me', { skipAuthHandler: true }),
 
+  getDemoStatus: (): Promise<{ enabled: boolean; seeded: boolean }> =>
+    request<{ enabled: boolean; seeded: boolean }>('/demo/status'),
+  resetDemo: (): Promise<{ ok: boolean; tasks: number }> =>
+    request<{ ok: boolean; tasks: number }>('/demo/reset', { method: 'POST' }),
+
   listUsers: (): Promise<ManagedUser[]> => request<ManagedUser[]>('/auth/users'),
   createUser: (payload: CreateUserPayload): Promise<ManagedUser> =>
     request<ManagedUser>('/auth/users', { method: 'POST', body: JSON.stringify(payload) }),
