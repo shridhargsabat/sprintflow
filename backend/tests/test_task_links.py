@@ -143,3 +143,57 @@ def test_remove_task_link(client):
         assert db_lib.remove_task_link(conn, parent, child, "subtask") is False
         assert db_lib.links_for_task(conn, parent)["subtasks"] == []
         assert db_lib.links_for_task(conn, child)["parent"] is None
+
+
+# ---------- step 2: payload embedding ----------
+
+def _link_db(task_id, linked_id, kind):
+    # Step 2 runs before the HTTP link endpoints exist (step 3), so link
+    # at the db layer; the payload assertions below stay black-box.
+    with db_lib.get_conn() as conn:
+        db_lib.add_task_link(conn, task_id, linked_id, kind)
+
+
+def _tasks_by_id(client):
+    return {t["id"]: t for t in client.get("/api/tasks").json()}
+
+
+def test_task_payload_embeds_links(client):
+    parent = _create(client, title="Embed parent")
+    child = _create(client, title="Embed child", status="done", points=5)
+    related = _create(client, title="Embed related")
+    _link_db(parent["id"], child["id"], "subtask")
+    _link_db(parent["id"], related["id"], "related")
+
+    tasks = _tasks_by_id(client)
+    got_parent = tasks[parent["id"]]
+    assert got_parent["subtasks"] == [
+        {"id": child["id"], "title": child["title"], "status": "done", "points": 5}
+    ]
+    assert got_parent["related"] == [
+        {
+            "id": related["id"],
+            "title": related["title"],
+            "status": related["status"],
+            "points": related["points"],
+        }
+    ]
+    assert got_parent["parent"] is None
+    got_child = tasks[child["id"]]
+    assert got_child["parent"] == {
+        "id": parent["id"],
+        "title": parent["title"],
+        "status": parent["status"],
+        "points": parent["points"],
+    }
+    assert got_child["subtasks"] == []
+    got_related = tasks[related["id"]]
+    assert got_related["parent"] is None
+    assert [r["id"] for r in got_related["related"]] == [parent["id"]]
+
+
+def test_task_payload_links_empty_by_default(client):
+    task = _create(client, title="Link-free task")
+    assert task["parent"] is None
+    assert task["subtasks"] == []
+    assert task["related"] == []

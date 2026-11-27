@@ -777,8 +777,9 @@ def row_to_task(
     row: sqlite3.Row,
     assignees: Optional[List[Dict[str, Any]]] = None,
     tags: Optional[List[str]] = None,
+    links: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    return {
+    task = {
         "id": row["id"],
         "title": row["title"],
         "description": row["description"],
@@ -789,6 +790,27 @@ def row_to_task(
         "sprint": row["sprint"],
         "points": row["points"],
         "tags": list(tags) if tags else [],
+    }
+    task["parent"] = links["parent"] if links else None
+    task["subtasks"] = list(links["subtasks"]) if links else []
+    task["related"] = list(links["related"]) if links else []
+    return task
+
+
+def link_payload_for_task(conn: sqlite3.Connection, task_id: str) -> Dict[str, Any]:
+    """Embedded link summaries for one task: parent/subtasks/related.
+
+    NOTE (N+1): list_tasks calls this once per task (4 small indexed
+    queries each). Fine at board scale (hundreds of tasks); batch into
+    links_by_task if list latency ever matters.
+    """
+    links = links_for_task(conn, task_id)
+    ids = [i for i in [links["parent"], *links["subtasks"], *links["related"]] if i]
+    summaries = link_summaries(conn, ids)
+    return {
+        "parent": summaries.get(links["parent"]) if links["parent"] else None,
+        "subtasks": [summaries[i] for i in links["subtasks"] if i in summaries],
+        "related": [summaries[i] for i in links["related"] if i in summaries],
     }
 
 
@@ -801,6 +823,7 @@ def fetch_task(conn: sqlite3.Connection, task_id: str) -> Dict[str, Any]:
         row,
         assignees_for_task(conn, task_id),
         tags_for_task(conn, task_id),
+        link_payload_for_task(conn, task_id),
     )
 
 
@@ -1395,7 +1418,12 @@ def list_tasks(
         assignee_map = assignees_by_task(conn, task_ids)
         tag_map = tags_by_task(conn, task_ids)
         return [
-            row_to_task(r, assignee_map.get(r["id"], []), tag_map.get(r["id"], []))
+            row_to_task(
+                r,
+                assignee_map.get(r["id"], []),
+                tag_map.get(r["id"], []),
+                link_payload_for_task(conn, r["id"]),
+            )
             for r in rows
         ]
 
