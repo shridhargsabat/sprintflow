@@ -25,6 +25,7 @@ import AssigneeCluster, { assigneeNames } from '../components/AssigneeCluster';
 import { GlassChartTooltip } from '../components/GlassChartTooltip';
 import { PRIORITY_META, GLASS_PANEL, GLASS_SUBCARD, GLASS_PILL, TODAY_ISO } from '../constants';
 import { getInitials, formatShortDate, getDueMeta } from '../utils/format';
+import { resolveSprintName } from '../utils/sprint';
 
 function addDaysISO(startISO: string, offset: number): string {
   const [y, m, d] = startISO.split('-').map(Number);
@@ -130,24 +131,27 @@ export default function DashboardView({
       const todayMs = new Date(`${TODAY_ISO}T00:00:00`).getTime();
       const daysLeft = Math.max(0, Math.round((new Date(`${matched.endDate}T00:00:00`).getTime() - todayMs) / 86400000));
       const daysUntilStart = Math.max(0, Math.round((new Date(`${matched.startDate}T00:00:00`).getTime() - todayMs) / 86400000));
-      if (matched.name === 'Sprint 14' || sprintFilter === 'Sprint 14') {
+      // Themed titles key off list position (first = active, second = planned),
+      // never the sprint's renameable name — visuals stay identical after rename.
+      const position = sprints.findIndex(s => s.id === matched.id);
+      if (position <= 0) {
         return { badge, dates, title: 'Core Platform v2.4 Delivery', sub: `${daysLeft} days remaining · Synced with SQLite backend` };
       }
-      if (matched.name === 'Sprint 15' || sprintFilter === 'Sprint 15') {
+      if (position === 1) {
         return { badge, dates, title: 'Scale & Reliability Hardening', sub: `Starts in ${daysUntilStart} days · Backlog grooming & capacity planning` };
       }
       return { badge, dates, title: `${matched.name} Delivery`, sub: 'Sprint overview · Synced with SQLite backend' };
     }
-    if (sprintFilter === 'Sprint 14') {
-      return { badge: 'Sprint 14 · Active', dates: 'Nov 23 – Dec 6, 2026', title: 'Core Platform v2.4 Delivery', sub: '10 days remaining · Synced with SQLite backend' };
-    }
-    if (sprintFilter === 'Sprint 15') {
-      return { badge: 'Sprint 15 · Planned', dates: 'Dec 7 – Dec 20, 2026', title: 'Scale & Reliability Hardening', sub: 'Starts in 11 days · Backlog grooming & capacity planning' };
-    }
     if (sprintFilter === 'Backlog') {
       return { badge: 'Product Backlog', dates: 'Unscheduled Queue', title: 'Upcoming Engineering Backlog', sub: 'Prioritized work ready to pull into upcoming sprints' };
     }
-    return { badge: 'All Sprints · Portfolio', dates: 'Q4 2026 Roadmap', title: 'Full Project Delivery Overview', sub: 'Combined view of active sprint, planned sprint & backlog' };
+    if (sprintFilter === 'all') {
+      return { badge: 'All Sprints · Portfolio', dates: 'Q4 2026 Roadmap', title: 'Full Project Delivery Overview', sub: 'Combined view of active sprint, planned sprint & backlog' };
+    }
+    // Unmatched ref (sprints list not loaded yet, or a stale id): resolve the
+    // live name when possible instead of hardcoding a sprint identity.
+    const name = resolveSprintName(sprints, sprintFilter);
+    return { badge: `${name} · Sprint`, dates: '', title: `${name} Delivery`, sub: 'Sprint overview · Synced with SQLite backend' };
   }, [sprintFilter, sprints]);
 
   const ongoingTasks = useMemo(

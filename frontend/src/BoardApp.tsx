@@ -35,29 +35,37 @@ export default function BoardApp() {
   const [newMemberName, setNewMemberName] = useState<string>('');
   const [newMemberRole, setNewMemberRole] = useState<string>('');
 
-  const clearFilters = (): void => {
-    setSprintFilter('Sprint 14');
-    setPriorityFilter('all');
-    setAssigneeFilter('all');
-    setSearchQuery('');
-  };
-
   const board = useBoard({
     setTaskModal,
-    clearFilters,
+    clearFilters: () => clearFilters(),
     newMemberName,
     newMemberRole,
     setNewMemberName,
     setNewMemberRole
   });
 
+  // Default sprint filter derived from the LIVE sprints list (first sprint's
+  // stable id); the 'Sprint 14' literal below is only the pre-load/initial id.
+  const defaultSprintFilter = board.sprints.length > 0 ? board.sprints[0].id : 'Sprint 14';
+
+  const clearFilters = (): void => {
+    setSprintFilter(defaultSprintFilter);
+    setPriorityFilter('all');
+    setAssigneeFilter('all');
+    setSearchQuery('');
+  };
+
   const filteredTasks = useMemo(() => {
     return board.tasks.filter(t => {
       if (sprintFilter !== 'all') {
         if (sprintFilter === 'Backlog') {
           if (t.sprint !== 'Backlog' && t.status !== 'backlog') return false;
-        } else if (t.sprint !== sprintFilter) {
-          return false;
+        } else {
+          // Match by id OR name: tasks store stable ids, but legacy values
+          // may hold a pre-rename name — both must keep matching the filter.
+          const cfg = board.sprints.find(s => s.id === sprintFilter || s.name === sprintFilter);
+          const accepted = cfg ? [cfg.id, cfg.name] : [sprintFilter];
+          if (!accepted.includes(t.sprint)) return false;
         }
       }
       if (priorityFilter !== 'all' && t.priority !== priorityFilter) return false;
@@ -78,14 +86,14 @@ export default function BoardApp() {
       }
       return true;
     });
-  }, [board.tasks, sprintFilter, priorityFilter, assigneeFilter, searchQuery]);
+  }, [board.tasks, board.sprints, sprintFilter, priorityFilter, assigneeFilter, searchQuery]);
 
   const allBacklogTasks = useMemo(
     () => board.tasks.filter(t => t.status === 'backlog').sort((a, b) => PRIORITY_META[b.priority].weight - PRIORITY_META[a.priority].weight),
     [board.tasks]
   );
 
-  const hasActiveFilters = priorityFilter !== 'all' || assigneeFilter !== 'all' || searchQuery.trim() !== '' || sprintFilter !== 'Sprint 14';
+  const hasActiveFilters = priorityFilter !== 'all' || assigneeFilter !== 'all' || searchQuery.trim() !== '' || sprintFilter !== defaultSprintFilter;
 
   const openTaskModal = (task: Task | null, defaultStatus: TaskStatus): void => {
     setTaskModal({ open: true, task, defaultStatus });
@@ -206,7 +214,8 @@ export default function BoardApp() {
           <TaskModal
             task={taskModal.task}
             defaultStatus={taskModal.defaultStatus}
-            defaultSprint={sprintFilter === 'all' ? 'Sprint 14' : sprintFilter}
+            defaultSprint={sprintFilter === 'all' ? defaultSprintFilter : sprintFilter}
+            sprints={board.sprints}
             team={board.team}
             onClose={() => setTaskModal({ open: false, task: null, defaultStatus: 'todo' })}
             onSave={board.saveTask}

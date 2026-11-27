@@ -5,6 +5,7 @@ import { GlassTooltip } from './GlassTooltip';
 import { api, type UserDirectoryEntry } from '../api';
 import { GLASS_PANEL, GLASS_PILL } from '../constants';
 import { formatShortDate } from '../utils/format';
+import { resolveSprintName } from '../utils/sprint';
 import type { PriorityFilter, SprintConfig, TeamMember } from '../types';
 
 export interface FilterBarProps {
@@ -36,13 +37,18 @@ export default function FilterBar({
   hasActiveFilters,
   onClearFilters,
 }: FilterBarProps) {
+  // Sprint options always come from the LIVE sprints list (ids as values, so a
+  // Sprint Settings rename keeps every stored task linked). When the list is
+  // empty (backend unreachable), the current selection is kept as its own
+  // option instead of hardcoded names.
   const sprintOptions = [
     { value: 'all', label: 'All Sprints & Backlog' },
-    ...(sprints.length > 0
-      ? sprints.map(s => ({ value: s.id, label: `${s.name} (${formatShortDate(s.startDate)} – ${formatShortDate(s.endDate)})` }))
-      : [{ value: 'Sprint 14', label: 'Sprint 14' }, { value: 'Sprint 15', label: 'Sprint 15' }]),
+    ...sprints.map(s => ({ value: s.id, label: `${s.name} (${formatShortDate(s.startDate)} – ${formatShortDate(s.endDate)})` })),
     { value: 'Backlog', label: 'Unassigned Backlog' }
   ];
+  if (sprintFilter !== 'all' && sprintFilter !== 'Backlog' && !sprintOptions.some(o => o.value === sprintFilter)) {
+    sprintOptions.splice(1, 0, { value: sprintFilter, label: resolveSprintName(sprints, sprintFilter) });
+  }
   // Dropdown exposes no open-state callback, so observe its trigger button's
   // aria-expanded attribute: hides the "Filter by assignee" tooltip bubble
   // while the Who menu is open (covers click toggle, option select, Escape,
