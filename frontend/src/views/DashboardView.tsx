@@ -96,7 +96,7 @@ export default function DashboardView({
   }, [tasks]);
 
   const burndownData = useMemo(() => {
-    const total = Math.max(kpis.totalPts, 10);
+    const total = kpis.totalPts;
     const remaining = Math.max(0, kpis.totalPts - kpis.donePts);
     const activeSprint = sprints.find(s => s.id === sprintFilter || s.name === sprintFilter) ?? sprints[0] ?? null;
     let labels = ['Nov 23', 'Nov 25', 'Nov 27', 'Nov 29', 'Dec 1', 'Dec 3', 'Dec 6'];
@@ -268,6 +268,11 @@ export default function DashboardView({
           </GlassTooltip>
         </div>
         <div className="h-48 w-full mt-2">
+          {kpis.totalPts === 0 ? (
+            <div className="h-full w-full flex items-center justify-center">
+              <p className="text-xs text-slate-500 dark:text-slate-400 text-center px-6">No story points in this sprint yet.<br />Add tasks with points to track burndown.</p>
+            </div>
+          ) : (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={burndownData} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
               <defs>
@@ -287,6 +292,7 @@ export default function DashboardView({
               <Area type="monotone" dataKey="remaining" stroke="#0a84ff" fill="url(#burnGradLive)" strokeWidth={2.5} dot={{ r: 3.5, fill: '#0a84ff' }} connectNulls={false} name="Remaining Pts" />
             </AreaChart>
           </ResponsiveContainer>
+          )}
         </div>
       </div>
 
