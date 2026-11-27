@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import Dropdown from '../components/Dropdown';
 import { SprintReportBody } from '../components/SprintReportBody';
+import { ErrorBanner } from '../components/ErrorBanner';
+import { EmptyState } from '../components/EmptyState';
+import { LoadingState } from '../components/LoadingState';
 import { api } from '../api';
 import { GLASS_PANEL, GLASS_PILL } from '../constants';
 import { formatShortDate } from '../utils/format';
@@ -89,7 +92,6 @@ export default function ReportsView({ sprints, defaultSprintId, onOpenDetails }:
                 onChange={setSelectedId}
                 options={sprintOptions}
                 placeholder="Select sprint for report"
-                className={`inline-flex w-full min-h-[44px] md:min-h-0 items-center justify-between gap-2 rounded-full px-3.5 py-1.5 text-xs font-semibold ${GLASS_PILL}`}
               />
             </div>
           </div>
@@ -98,13 +100,11 @@ export default function ReportsView({ sprints, defaultSprintId, onOpenDetails }:
 
       {sprints.length === 0 ? (
         <div className={`lg-enter lg-delay-2 rounded-[32px] overflow-hidden p-6 ${GLASS_PANEL}`}>
-          <p className="py-10 text-center text-xs text-slate-400">No sprints yet — create one in Sprint Settings to see its report here.</p>
+          <EmptyState>No sprints yet — create one in Sprint Settings to see its report here.</EmptyState>
         </div>
       ) : error !== null && report === null ? (
         <div className={`lg-enter lg-delay-2 rounded-[32px] overflow-hidden p-6 space-y-3 ${GLASS_PANEL}`}>
-          <p className="px-3.5 py-2 rounded-2xl text-xs font-medium bg-rose-500/15 text-rose-700 dark:text-rose-200 border border-rose-400/30">
-            {error}
-          </p>
+          <ErrorBanner as="p">{error}</ErrorBanner>
           <button
             type="button"
             onClick={() => setReloadKey(k => k + 1)}
@@ -115,7 +115,7 @@ export default function ReportsView({ sprints, defaultSprintId, onOpenDetails }:
         </div>
       ) : report === null ? (
         <div role="status" aria-live="polite" className={`lg-enter lg-delay-2 rounded-[32px] overflow-hidden p-6 ${GLASS_PANEL}`}>
-          <p className="py-10 text-center text-xs text-slate-400">Loading report…</p>
+          <LoadingState>Loading report…</LoadingState>
         </div>
       ) : (
         <div className="relative">

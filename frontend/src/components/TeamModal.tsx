@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { Pencil, Search, Trash2, X } from 'lucide-react';
-import { GLASS_PANEL, GLASS_PILL, GLASS_SUBCARD } from '../constants';
+import { Pencil, Search, Trash2 } from 'lucide-react';
+import { GLASS_PILL, GLASS_SUBCARD } from '../constants';
 import { getInitials } from '../utils/format';
 import type { Task, TeamMember } from '../types';
 import { api } from '../api';
@@ -10,6 +10,7 @@ import type { BulkMemberEntry } from '../hooks/useBoard';
 import type { BulkAddMembersResult } from '../hooks/useBoard';
 import Dropdown from './Dropdown';
 import { ConfirmDialog } from './ConfirmDialog';
+import { Modal, MODAL_HEADER_CLASS } from './Modal';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { usePermissions } from '../auth/usePermissions';
 
@@ -259,20 +260,32 @@ export function TeamModal({ team, tasks, newMemberName, newMemberRole, onNameCha
     : `${displayedTeam.length} ${displayedTeam.length === 1 ? 'member' : 'members'}`;
 
   return (
-    <div onClick={onClose} className="lg-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/35 backdrop-blur-md">
-      <div onClick={e => e.stopPropagation()} className={`lg-modal-panel w-full max-w-xl rounded-[32px] overflow-hidden flex flex-col max-h-[90vh] ${GLASS_PANEL}`}>
-        <div className="px-6 py-4 border-b border-slate-900/10 dark:border-white/10 flex items-center justify-between shrink-0">
-          <div>
-            <h3 className="text-base font-semibold">Manage Team Members</h3>
-            <p className="text-[11px] text-slate-600 dark:text-slate-400">
-              {canManage ? 'Click the pencil to edit; deletes ask for confirmation' : 'Read-only view'}
-            </p>
-          </div>
-          <button type="button" onClick={onClose} className="w-11 h-11 md:w-8 md:h-8 rounded-full hover:bg-white/60 dark:hover:bg-white/10 flex items-center justify-center">
-            <X className="w-4 h-4" />
-          </button>
+    <Modal
+      onClose={onClose}
+      maxWidth="max-w-xl"
+      panelLayout="flex flex-col max-h-[90vh]"
+      headerClassName={`${MODAL_HEADER_CLASS} shrink-0`}
+      bodyMaxH={null}
+      title={
+        <div>
+          <h3 className="text-base font-semibold">Manage Team Members</h3>
+          <p className="text-[11px] text-slate-600 dark:text-slate-400">
+            {canManage ? 'Click the pencil to edit; deletes ask for confirmation' : 'Read-only view'}
+          </p>
         </div>
-        <div className="p-6 space-y-4 overflow-y-auto scroll-slim">
+      }
+      after={
+        <ConfirmDialog
+          open={pendingDelete !== null}
+          title={pendingDelete ? `Delete ${pendingDelete.name}?` : 'Delete member?'}
+          message={pendingDelete ? deleteMessage(pendingDelete) : ''}
+          confirmLabel="Delete"
+          danger
+          onConfirm={() => void confirmDelete()}
+          onCancel={() => setPendingDelete(null)}
+        />
+      }
+    >
           {!canManage && (
             <div className="rounded-2xl bg-amber-500/15 border border-amber-400/30 px-4 py-2.5 text-xs text-amber-800 dark:text-amber-200">
               Ask an admin to edit team members.
@@ -491,17 +504,6 @@ export function TeamModal({ team, tasks, newMemberName, newMemberRole, onNameCha
               </div>
             </>
           )}
-        </div>
-      </div>
-      <ConfirmDialog
-        open={pendingDelete !== null}
-        title={pendingDelete ? `Delete ${pendingDelete.name}?` : 'Delete member?'}
-        message={pendingDelete ? deleteMessage(pendingDelete) : ''}
-        confirmLabel="Delete"
-        danger
-        onConfirm={() => void confirmDelete()}
-        onCancel={() => setPendingDelete(null)}
-      />
-    </div>
+    </Modal>
   );
 }

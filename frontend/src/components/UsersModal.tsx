@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import type React from 'react';
-import { Pencil, ShieldCheck, Trash2, Unlink, X } from 'lucide-react';
-import { GLASS_PANEL, GLASS_PILL, GLASS_SUBCARD } from '../constants';
+import { Pencil, ShieldCheck, Trash2, Unlink } from 'lucide-react';
+import { GLASS_PILL, GLASS_SUBCARD } from '../constants';
 import { getInitials } from '../utils/format';
 import { api } from '../api';
 import type { ManagedUser, Role, UpdateUserPayload } from '../api';
 import type { TeamMember } from '../types';
 import Dropdown from './Dropdown';
 import ConfirmDialog from './ConfirmDialog';
+import { Modal, MODAL_HEADER_CLASS } from './Modal';
+import { ErrorBanner } from './ErrorBanner';
 import { useAuth } from '../auth/AuthContext';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 
@@ -157,25 +159,46 @@ export function UsersModal({ onClose }: { onClose: () => void }): React.JSX.Elem
   };
 
   return (
-    <div onClick={onClose} className="lg-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/35 backdrop-blur-md">
-      <div onClick={e => e.stopPropagation()} className={`lg-modal-panel w-full max-w-md rounded-[32px] overflow-hidden flex flex-col md:block max-h-[90vh] md:max-h-none ${GLASS_PANEL}`}>
-        <div className="px-6 py-4 border-b border-slate-900/10 dark:border-white/10 flex items-center justify-between shrink-0">
-          <div>
-            <h3 className="text-base font-semibold flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-blue-500" /> Manage Users
-            </h3>
-            <p className="text-[11px] text-slate-600 dark:text-slate-400">Login accounts &amp; roles (admin only)</p>
-          </div>
-          <button type="button" onClick={onClose} className="w-11 h-11 md:w-8 md:h-8 rounded-full hover:bg-white/60 dark:hover:bg-white/10 flex items-center justify-center">
-            <X className="w-4 h-4" />
-          </button>
+    <Modal
+      onClose={onClose}
+      maxWidth="max-w-md"
+      panelLayout="flex flex-col md:block max-h-[90vh] md:max-h-none"
+      headerClassName={`${MODAL_HEADER_CLASS} shrink-0`}
+      bodyClassName="p-6 space-y-4 md:overflow-visible min-h-0"
+      bodyMaxH={null}
+      title={
+        <div>
+          <h3 className="text-base font-semibold flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-blue-500" /> Manage Users
+          </h3>
+          <p className="text-[11px] text-slate-600 dark:text-slate-400">Login accounts &amp; roles (admin only)</p>
         </div>
-        <div className="p-6 space-y-4 overflow-y-auto scroll-slim md:overflow-visible min-h-0">
-          {error && (
-            <div className="px-3.5 py-2 rounded-2xl text-xs font-medium bg-rose-500/15 text-rose-700 dark:text-rose-200 border border-rose-400/30">
-              {error}
-            </div>
-          )}
+      }
+      after={
+        <>
+          <ConfirmDialog
+            open={pendingDelete !== null}
+            title="Delete user"
+            message={pendingDelete ? `Delete login ${pendingDelete.name} ${pendingDelete.email}?` : ''}
+            confirmLabel="Delete"
+            danger
+            onConfirm={confirmDelete}
+            onCancel={() => setPendingDelete(null)}
+          />
+          <ConfirmDialog
+            open={pendingUnlink !== null}
+            title="Unlink member"
+            message="Unlink member from login?"
+            confirmLabel="Unlink"
+            onConfirm={confirmUnlink}
+            onCancel={() => setPendingUnlink(null)}
+          />
+        </>
+      }
+    >
+      {error && (
+        <ErrorBanner>{error}</ErrorBanner>
+      )}
           <div className="flex items-center gap-2">
             <input
               type="text"
@@ -302,26 +325,7 @@ export function UsersModal({ onClose }: { onClose: () => void }): React.JSX.Elem
             </button>
             </fieldset>
           </form>
-        </div>
-      </div>
-      <ConfirmDialog
-        open={pendingDelete !== null}
-        title="Delete user"
-        message={pendingDelete ? `Delete login ${pendingDelete.name} ${pendingDelete.email}?` : ''}
-        confirmLabel="Delete"
-        danger
-        onConfirm={confirmDelete}
-        onCancel={() => setPendingDelete(null)}
-      />
-      <ConfirmDialog
-        open={pendingUnlink !== null}
-        title="Unlink member"
-        message="Unlink member from login?"
-        confirmLabel="Unlink"
-        onConfirm={confirmUnlink}
-        onCancel={() => setPendingUnlink(null)}
-      />
-    </div>
+    </Modal>
   );
 }
 
