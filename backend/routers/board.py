@@ -1,6 +1,7 @@
 """Health, dashboard summary, and board data-sync endpoints."""
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -408,5 +409,10 @@ def _resolve_import_assignees(
 def reset_board(
     _user: Dict[str, Any] = Depends(auth.require_permissions("data.reset")),
 ) -> Dict[str, str]:
+    # Production guard: reset wipes board data back to samples. Enabled only
+    # when explicitly allowed (tests set this in conftest); production
+    # compose does NOT set it, so /api/reset 403s on live.
+    if os.environ.get("SPRINTFLOW_ALLOW_RESET") != "1":
+        raise HTTPException(status_code=403, detail="Board reset is disabled")
     db.reset_db()
     return {"status": "reset"}

@@ -718,3 +718,12 @@ def test_l15_user_update_blank_400_and_valid_ok(client):
     resp = client.put(f"/api/auth/users/{uid}", json={"name": "  L15 Renamed  "})
     assert resp.status_code == 200, resp.text
     assert resp.json()["name"] == "L15 Renamed"
+
+
+def test_reset_gated_without_env_flag(client, monkeypatch):
+    # Production compose does NOT set SPRINTFLOW_ALLOW_RESET (conftest sets it
+    # for the suite) — without the flag the wipe endpoint must refuse.
+    monkeypatch.delenv("SPRINTFLOW_ALLOW_RESET", raising=False)
+    resp = client.post("/api/reset")
+    assert resp.status_code == 403, resp.text
+    assert "disabled" in resp.text.lower()

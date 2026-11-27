@@ -216,9 +216,6 @@ export const api = {
 
   importBoard: (payload: BoardImport): Promise<{ team: number; tasks: number }> =>
     request<{ team: number; tasks: number }>('/import', { method: 'POST', body: JSON.stringify(payload) }),
-  resetBoard: (): Promise<{ status: string }> =>
-    request<{ status: string }>('/reset', { method: 'POST' }),
-
   getSprints: (): Promise<SprintConfig[]> => request<SprintConfig[]>('/sprints'),
   updateSprint: (id: string, patch: SprintPatch): Promise<SprintConfig> =>
     request<SprintConfig>(`/sprints/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(patch) }),

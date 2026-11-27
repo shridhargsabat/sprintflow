@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _fd, _TEST_DB_PATH = tempfile.mkstemp(prefix="sprintflow-test-", suffix=".db")
 os.close(_fd)
 os.environ["SPRINTFLOW_DB_PATH"] = _TEST_DB_PATH
+os.environ["SPRINTFLOW_ALLOW_RESET"] = "1"  # tests reset board state before every test
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

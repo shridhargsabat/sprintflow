@@ -128,7 +128,6 @@ function BoardApp() {
           onOpenTags={() => setTagsModalOpen(true)}
           onNewTask={() => openTaskModal(null, 'todo')}
           onExportJson={() => { board.handleExportJson(); setMenuOpen(false); }}
-          onResetDemo={() => { void board.handleResetDemo(); setMenuOpen(false); }}
           onImportJson={(e) => { board.handleImportJson(e); setMenuOpen(false); }}
           fileInputRef={board.fileInputRef}
         />
