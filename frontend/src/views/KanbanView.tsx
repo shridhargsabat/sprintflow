@@ -52,7 +52,7 @@ export default function KanbanView({ tasks, onOpenTask, onOpenDetails, onMoveTas
                 setDraggedTaskId(null);
                 if (id) onMoveTaskStatus(id, col.id);
               }}
-              style={{ animationDelay: `${colIdx * 60}ms` }} className={`lg-enter rounded-[28px] p-3.5 flex flex-col gap-3 min-h-[280px] transition-all duration-300 backdrop-blur-2xl backdrop-saturate-150 ${
+              style={{ animationDelay: `${colIdx * 60}ms` }} className={`lg-enter rounded-[28px] p-3.5 flex flex-col gap-3 min-h-0 md:min-h-[280px] transition-all duration-300 backdrop-blur-2xl backdrop-saturate-150 ${
                 dragOverCol === col.id
                   ? 'bg-blue-500/15 border-2 border-blue-500/60'
                   : 'bg-white/40 dark:bg-white/[0.04] border border-white/65 dark:border-white/[0.10]'
@@ -80,7 +80,7 @@ export default function KanbanView({ tasks, onOpenTask, onOpenDetails, onMoveTas
 
               <div className="space-y-2.5 flex-1">
                 {colTasks.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-400/40 dark:border-white/15 py-8 px-3 text-center text-[11px] text-slate-500">Drop task here</div>
+                  <div className="rounded-2xl border border-dashed border-slate-400/40 dark:border-white/15 py-4 md:py-8 px-3 text-center text-[11px] text-slate-500">Drop task here</div>
                 ) : colTasks.map(t => {
                   const p = PRIORITY_META[t.priority];
                   const due = getDueMeta(t.dueDate, t.status);
