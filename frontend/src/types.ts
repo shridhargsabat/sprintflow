@@ -86,15 +86,19 @@ export interface BoardImport {
   tasks: Task[];
 }
 
+export type SprintStatus = 'planned' | 'active' | 'closed';
+
 export interface SprintConfig {
   id: string;
   name: string;
   startDate: string;
   lengthDays: number;
   endDate: string;
+  status: SprintStatus;
 }
 
 export interface SprintPatch {
+  name?: string;
   startDate?: string;
   lengthDays?: number;
 }

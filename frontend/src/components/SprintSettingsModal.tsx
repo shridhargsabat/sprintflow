@@ -1,15 +1,22 @@
 import { useState } from 'react';
-import { X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import Calendar from './Calendar';
+import Dropdown from './Dropdown';
+import ConfirmDialog from './ConfirmDialog';
 import { GLASS_PANEL, GLASS_PILL } from '../constants';
 import { formatShortDate } from '../utils/format';
-import type { SprintConfig, SprintPatch } from '../types';
+import type { SprintConfig, SprintPatch, SprintStatus } from '../types';
+import type { CreateSprintPayload } from '../api';
 import { useEscapeKey } from '../hooks/useEscapeKey';
+import { usePermissions } from '../auth/usePermissions';
 
 interface SprintSettingsModalProps {
   sprints: SprintConfig[];
   onClose: () => void;
   onSave: (id: string, patch: SprintPatch) => void;
+  onCreate: (payload: CreateSprintPayload) => void;
+  onActivate: (id: string) => void;
+  onCloseSprint: (id: string, rolloverTo?: string) => void;
 }
 
 const LENGTH_PRESETS: Array<{ label: string; days: number }> = [
@@ -19,11 +26,44 @@ const LENGTH_PRESETS: Array<{ label: string; days: number }> = [
   { label: '4 weeks', days: 28 }
 ];
 
-function SprintRow({ sprint, onSave }: { sprint: SprintConfig; onSave: (id: string, patch: SprintPatch) => void }) {
+const STATUS_BADGE: Record<SprintStatus, string> = {
+  active: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-400/30',
+  planned: 'bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-400/30',
+  closed: 'bg-slate-900/10 dark:bg-white/10 text-slate-500 dark:text-slate-400 border border-slate-400/20'
+};
+
+const STATUS_LABEL: Record<SprintStatus, string> = {
+  active: 'Active',
+  planned: 'Planned',
+  closed: 'Closed'
+};
+
+const CALENDAR_FIELD = 'inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text';
+const TEXT_FIELD = 'w-full px-3 py-2 rounded-2xl text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text placeholder-slate-500 dark:placeholder-slate-400';
+
+function statusOf(sprint: SprintConfig): SprintStatus {
+  return sprint.status ?? 'planned';
+}
+
+function SprintRow({
+  sprint,
+  canManage,
+  onSave,
+  onActivate,
+  onRequestClose
+}: {
+  sprint: SprintConfig;
+  canManage: boolean;
+  onSave: (id: string, patch: SprintPatch) => void;
+  onActivate: (id: string) => void;
+  onRequestClose: (sprint: SprintConfig) => void;
+}) {
+  const [name, setName] = useState<string>(sprint.name);
   const [startDate, setStartDate] = useState<string>(sprint.startDate);
   const [lengthDays, setLengthDays] = useState<number>(sprint.lengthDays);
+  const status = statusOf(sprint);
 
-  const dirty = startDate !== sprint.startDate || lengthDays !== sprint.lengthDays;
+  const dirty = name.trim() !== sprint.name || startDate !== sprint.startDate || lengthDays !== sprint.lengthDays;
 
   return (
     <div className="rounded-2xl bg-white/60 dark:bg-white/[0.06] border border-white/80 dark:border-white/15 p-4 space-y-3">
@@ -34,50 +74,196 @@ function SprintRow({ sprint, onSave }: { sprint: SprintConfig; onSave: (id: stri
             Currently {formatShortDate(sprint.startDate)} – {formatShortDate(sprint.endDate)} · {sprint.lengthDays} days
           </p>
         </div>
+        <span className={`shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${STATUS_BADGE[status]}`}>
+          {STATUS_LABEL[status]}
+        </span>
       </div>
-      <div>
-        <label className="block text-xs font-semibold mb-1">Start Date</label>
-        <Calendar
-          value={startDate}
-          onChange={setStartDate}
-          className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text"
-        />
-      </div>
-      <div>
-        <label className="block text-xs font-semibold mb-1">Sprint Length</label>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {LENGTH_PRESETS.map(p => (
+      {status !== 'closed' && (
+        <>
+          <div>
+            <label className="block text-xs font-semibold mb-1">Sprint Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Sprint name"
+              className="w-full px-3 py-2 rounded-2xl text-xs field-text bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1">Start Date</label>
+            <Calendar
+              value={startDate}
+              onChange={setStartDate}
+              className={CALENDAR_FIELD}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1">Sprint Length</label>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {LENGTH_PRESETS.map(p => (
+                <button
+                  key={p.days}
+                  type="button"
+                  onClick={() => setLengthDays(p.days)}
+                  className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all ${
+                    lengthDays === p.days
+                      ? 'bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white shadow-sm'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-blue-500/10'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+      {canManage && status !== 'closed' && (
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <div className="flex items-center gap-2">
+            {status !== 'active' && (
+              <button
+                type="button"
+                onClick={() => onActivate(sprint.id)}
+                className="px-4 py-2 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-400/30 hover:bg-emerald-500/25"
+              >
+                Activate
+              </button>
+            )}
             <button
-              key={p.days}
               type="button"
-              onClick={() => setLengthDays(p.days)}
-              className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all ${
-                lengthDays === p.days
-                  ? 'bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white shadow-sm'
-                  : 'text-slate-600 dark:text-slate-300 hover:bg-blue-500/10'
-              }`}
+              onClick={() => onRequestClose(sprint)}
+              className="px-4 py-2 rounded-full text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-500/10 border border-slate-400/25"
             >
-              {p.label}
+              Close
             </button>
-          ))}
+          </div>
+          <button
+            type="button"
+            disabled={!dirty || !startDate}
+            onClick={() => onSave(sprint.id, { name: name.trim(), startDate, lengthDays })}
+            className="px-5 py-2 rounded-full text-xs font-semibold bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Save
+          </button>
         </div>
-      </div>
-      <div className="flex items-center justify-end">
-        <button
-          type="button"
-          disabled={!dirty || !startDate}
-          onClick={() => onSave(sprint.id, { startDate, lengthDays })}
-          className="px-5 py-2 rounded-full text-xs font-semibold bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          Save
-        </button>
-      </div>
+      )}
     </div>
   );
 }
 
-export function SprintSettingsModal({ sprints, onClose, onSave }: SprintSettingsModalProps) {
+function CreateSprintForm({ onCreate }: { onCreate: (payload: CreateSprintPayload) => void }) {
+  const [open, setOpen] = useState<boolean>(false);
+  const [name, setName] = useState<string>('');
+  const [startDate, setStartDate] = useState<string>('');
+  const [lengthDays, setLengthDays] = useState<number>(14);
+
+  const valid = name.trim() !== '' && startDate !== '';
+
+  const handleCreate = (): void => {
+    if (!valid) return;
+    onCreate({ name: name.trim(), startDate, lengthDays });
+    setName('');
+    setStartDate('');
+    setLengthDays(14);
+    setOpen(false);
+  };
+
+  return (
+    <div className="rounded-2xl bg-blue-500/[0.07] dark:bg-blue-500/10 border border-blue-400/25 p-4">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-2 text-sm font-semibold text-blue-700 dark:text-blue-300"
+      >
+        <span className="flex items-center gap-1.5">
+          <Plus className="w-4 h-4" /> New Sprint
+        </span>
+        <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{open ? 'Hide' : 'Show'}</span>
+      </button>
+      {open && (
+        <div className="mt-3 space-y-3">
+          <div>
+            <label className="block text-xs font-semibold mb-1">Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Sprint 16"
+              className={TEXT_FIELD}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1">Start Date</label>
+            <Calendar value={startDate} onChange={setStartDate} className={CALENDAR_FIELD} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1">Sprint Length</label>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {LENGTH_PRESETS.map(p => (
+                <button
+                  key={p.days}
+                  type="button"
+                  onClick={() => setLengthDays(p.days)}
+                  className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all ${
+                    lengthDays === p.days
+                      ? 'bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white shadow-sm'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-blue-500/10'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center justify-end">
+            <button
+              type="button"
+              disabled={!valid}
+              onClick={handleCreate}
+              className="px-5 py-2 rounded-full text-xs font-semibold bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Create Sprint
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function SprintSettingsModal({ sprints, onClose, onSave, onCreate, onActivate, onCloseSprint }: SprintSettingsModalProps) {
   useEscapeKey(onClose);
+  const { can } = usePermissions();
+  const canManage = can('sprints.manage');
+
+  const [pendingClose, setPendingClose] = useState<SprintConfig | null>(null);
+  const [rollover, setRollover] = useState<string>('Backlog');
+
+  const openSprints = sprints.filter(s => statusOf(s) !== 'closed');
+  const rolloverOptions =
+    pendingClose === null
+      ? []
+      : [
+          ...openSprints
+            .filter(s => s.id !== pendingClose.id)
+            .map(s => ({ value: s.id, label: `${s.name} (${STATUS_LABEL[statusOf(s)]})` })),
+          { value: 'Backlog', label: 'Move to Backlog' }
+        ];
+
+  const handleRequestClose = (sprint: SprintConfig): void => {
+    const firstOpen = openSprints.find(s => s.id !== sprint.id);
+    setRollover(firstOpen ? firstOpen.id : 'Backlog');
+    setPendingClose(sprint);
+  };
+
+  const handleConfirmClose = (): void => {
+    if (!pendingClose) return;
+    onCloseSprint(pendingClose.id, rollover === 'Backlog' ? undefined : rollover);
+    setPendingClose(null);
+  };
+
   return (
     <div onClick={onClose} className="lg-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/35 backdrop-blur-md">
       <div onClick={e => e.stopPropagation()} className={`lg-modal-panel w-full max-w-lg rounded-[32px] overflow-hidden ${GLASS_PANEL}`}>
@@ -92,10 +278,25 @@ export function SprintSettingsModal({ sprints, onClose, onSave }: SprintSettings
         </div>
 
         <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto scroll-slim">
+          {!canManage && (
+            <div className="rounded-2xl bg-amber-500/10 border border-amber-400/30 px-4 py-3 text-xs text-amber-800 dark:text-amber-200">
+              Sprint management requires admin or lead access. You have read-only access.
+            </div>
+          )}
+          {canManage && <CreateSprintForm onCreate={onCreate} />}
           {sprints.length === 0 ? (
             <div className="py-10 text-center text-xs text-slate-400">No sprints configured yet.</div>
           ) : (
-            sprints.map(s => <SprintRow key={s.id} sprint={s} onSave={onSave} />)
+            sprints.map(s => (
+              <SprintRow
+                key={s.id}
+                sprint={s}
+                canManage={canManage}
+                onSave={onSave}
+                onActivate={onActivate}
+                onRequestClose={handleRequestClose}
+              />
+            ))
           )}
           <div className="pt-3 border-t border-slate-900/10 dark:border-white/10 flex items-center justify-end gap-2">
             <button type="button" onClick={onClose} className={`px-4 py-2 rounded-full text-xs font-semibold ${GLASS_PILL}`}>
@@ -104,6 +305,30 @@ export function SprintSettingsModal({ sprints, onClose, onSave }: SprintSettings
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={pendingClose !== null}
+        title={pendingClose ? `Close ${pendingClose.name}?` : 'Close sprint?'}
+        message={
+          pendingClose
+            ? `Closing ${pendingClose.name} moves its open tasks to the selected destination. This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Close Sprint"
+        danger
+        onConfirm={handleConfirmClose}
+        onCancel={() => setPendingClose(null)}
+      >
+        <div>
+          <label className="block text-xs font-semibold mb-1">Move open tasks to</label>
+          <Dropdown
+            value={rollover}
+            onChange={setRollover}
+            options={rolloverOptions}
+            className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] outline-none field-text"
+          />
+        </div>
+      </ConfirmDialog>
     </div>
   );
 }

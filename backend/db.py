@@ -103,8 +103,13 @@ def init_db(db_path: Optional[str] = None) -> None:
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 start_date TEXT NOT NULL,
-                length_days INTEGER NOT NULL DEFAULT 14
+                length_days INTEGER NOT NULL DEFAULT 14,
+                status TEXT NOT NULL DEFAULT 'planned'
+                    CHECK(status IN ('planned', 'active', 'closed'))
             );
+            -- NOTE: uq_sprints_single_active is created by
+            -- _migrate_sprint_status (after the status ALTER), never here:
+            -- CREATE INDEX in this script would fail on pre-status tables.
 
             CREATE TABLE IF NOT EXISTS tags (
                 id TEXT PRIMARY KEY,
@@ -129,6 +134,9 @@ def init_db(db_path: Optional[str] = None) -> None:
             seed_data(conn)
         # Additive auto-migration for live DBs that predate the sprints table.
         seed_sprints(conn)
+        # Sprint lifecycle migration: sprints.status + single-active index +
+        # exactly-one-active data (idempotent, safe for live DBs).
+        _migrate_sprint_status(conn)
         # Tag master: additive + idempotent, safe for live DBs (new table).
         seed_tags(conn)
         # Additive auto-migration: link column for login-user <-> member.
@@ -423,6 +431,7 @@ def reset_db(db_path: Optional[str] = None) -> None:
         conn.execute("DELETE FROM sprints")
         conn.execute("DELETE FROM tags")
         seed_data(conn)
+        _migrate_sprint_status(conn)
 
 
 MAX_ASSIGNEES = 10
@@ -528,12 +537,17 @@ def sprint_end_date(start_date: str, length_days: int) -> str:
 
 def row_to_sprint(row: sqlite3.Row) -> Dict[str, Any]:
     length_days = int(row["length_days"])
+    try:
+        sprint_status = row["status"] or "planned"
+    except (IndexError, KeyError):
+        sprint_status = "planned"
     return {
         "id": row["id"],
         "name": row["name"],
         "startDate": row["start_date"],
         "lengthDays": length_days,
         "endDate": sprint_end_date(row["start_date"], length_days),
+        "status": sprint_status,
     }
 
 
@@ -547,18 +561,195 @@ def update_sprint(
     sprint_id: str,
     start_date: Optional[str] = None,
     length_days: Optional[int] = None,
+    name: Optional[str] = None,
     db_path: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     with get_conn(db_path) as conn:
         existing = conn.execute("SELECT id FROM sprints WHERE id = ?", (sprint_id,)).fetchone()
         if not existing:
             return None
+        if name is not None and name.strip() != "":
+            conn.execute("UPDATE sprints SET name = ? WHERE id = ?", (name.strip(), sprint_id))
         if start_date is not None:
             conn.execute("UPDATE sprints SET start_date = ? WHERE id = ?", (start_date, sprint_id))
         if length_days is not None:
             conn.execute("UPDATE sprints SET length_days = ? WHERE id = ?", (length_days, sprint_id))
         row = conn.execute("SELECT * FROM sprints WHERE id = ?", (sprint_id,)).fetchone()
         return row_to_sprint(row)
+
+
+SPRINT_STATUSES = ("planned", "active", "closed")
+
+SINGLE_ACTIVE_INDEX_DDL = (
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_sprints_single_active "
+    "ON sprints(status) WHERE status = 'active'"
+)
+
+
+def _pick_active_id(rows: List[sqlite3.Row]) -> str:
+    """First sprint (in start_date order) whose range contains today, else first."""
+    today = date.today().isoformat()
+    for r in rows:
+        try:
+            end = sprint_end_date(r["start_date"], int(r["length_days"]))
+        except (ValueError, TypeError):
+            continue
+        if r["start_date"] <= today <= end:
+            return r["id"]
+    return rows[0]["id"]
+
+
+def _ensure_single_active(conn: sqlite3.Connection) -> None:
+    """Data migration: converge on exactly one active sprint.
+
+    - Several actives (legacy) -> keep the container-of-today (else first),
+      demote the rest to 'planned'.
+    - No active -> promote the container-of-today (else first by start_date).
+    - Closed sprints are never resurrected; all-closed stays at zero actives.
+    """
+    rows = conn.execute(
+        "SELECT id, start_date, length_days, status FROM sprints ORDER BY start_date ASC"
+    ).fetchall()
+    if not rows:
+        return
+    actives = [r for r in rows if r["status"] == "active"]
+    if len(actives) > 1:
+        keep = _pick_active_id(actives)
+        conn.execute(
+            "UPDATE sprints SET status = 'planned' WHERE status = 'active' AND id != ?",
+            (keep,),
+        )
+        return
+    if len(actives) == 1:
+        return
+    candidates = [r for r in rows if r["status"] != "closed"]
+    if not candidates:
+        return
+    conn.execute(
+        "UPDATE sprints SET status = 'active' WHERE id = ?",
+        (_pick_active_id(candidates),),
+    )
+
+
+def _migrate_sprint_status(conn: sqlite3.Connection) -> None:
+    """Schema + data migration for the sprint lifecycle (idempotent).
+
+    Pre-status DBs get `sprints.status` via a PRAGMA-guarded ALTER; every DB
+    gets the single-active partial unique index and exactly-one-active data.
+    """
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(sprints)").fetchall()]
+    if "status" not in cols:
+        conn.execute(
+            "ALTER TABLE sprints ADD COLUMN status TEXT NOT NULL DEFAULT 'planned' "
+            "CHECK(status IN ('planned', 'active', 'closed'))"
+        )
+    _ensure_single_active(conn)
+    conn.execute(SINGLE_ACTIVE_INDEX_DDL)
+
+
+def slugify_sprint_id(name: str) -> str:
+    """Slugify a sprint name into a URL-safe sprint id (same rules as tags)."""
+    return re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-") or "sprint"
+
+
+def get_sprint(sprint_id: str, db_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    with get_conn(db_path) as conn:
+        row = conn.execute("SELECT * FROM sprints WHERE id = ?", (sprint_id,)).fetchone()
+        return row_to_sprint(row) if row is not None else None
+
+
+def create_sprint(
+    name: str,
+    start_date: str,
+    length_days: int = 14,
+    db_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Create a planned sprint; id is the slug of the name (409 on duplicate)."""
+    sprint_id = slugify_sprint_id(name)
+    with get_conn(db_path) as conn:
+        try:
+            conn.execute(
+                "INSERT INTO sprints (id, name, start_date, length_days, status) "
+                "VALUES (?, ?, ?, ?, 'planned')",
+                (sprint_id, name.strip(), start_date, length_days),
+            )
+        except sqlite3.IntegrityError:
+            raise HTTPException(
+                status_code=409, detail=f"Sprint id already exists: {sprint_id}"
+            )
+        row = conn.execute("SELECT * FROM sprints WHERE id = ?", (sprint_id,)).fetchone()
+        return row_to_sprint(row)
+
+
+def activate_sprint(
+    sprint_id: str, db_path: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """Activate a sprint, demoting any other active to 'planned'. 400 if closed."""
+    with get_conn(db_path) as conn:
+        row = conn.execute("SELECT * FROM sprints WHERE id = ?", (sprint_id,)).fetchone()
+        if row is None:
+            return None
+        if row["status"] == "closed":
+            raise HTTPException(status_code=400, detail="Cannot activate a closed sprint")
+        if row["status"] != "active":
+            conn.execute(
+                "UPDATE sprints SET status = 'planned' WHERE status = 'active' AND id != ?",
+                (sprint_id,),
+            )
+            conn.execute("UPDATE sprints SET status = 'active' WHERE id = ?", (sprint_id,))
+            row = conn.execute(
+                "SELECT * FROM sprints WHERE id = ?", (sprint_id,)
+            ).fetchone()
+        return row_to_sprint(row)
+
+
+def close_sprint(
+    sprint_id: str,
+    rollover_to: Optional[str] = None,
+    db_path: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Close a sprint.
+
+    Unfinished tasks (status != 'done') move to the `rollover_to` sprint
+    (must exist and not be closed, 400 otherwise) keeping their status, or
+    drop to status='backlog' when no target is given. Returns
+    {closed, moved, to}.
+    """
+    target = rollover_to.strip() if isinstance(rollover_to, str) else None
+    if not target:
+        target = None
+    with get_conn(db_path) as conn:
+        row = conn.execute("SELECT id FROM sprints WHERE id = ?", (sprint_id,)).fetchone()
+        if row is None:
+            return None
+        if target is not None:
+            dest = conn.execute(
+                "SELECT status FROM sprints WHERE id = ?", (target,)
+            ).fetchone()
+            if dest is None:
+                raise HTTPException(
+                    status_code=400, detail=f"Unknown rollover sprint: {target}"
+                )
+            if target == sprint_id or dest["status"] == "closed":
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot roll over to closed sprint: {target}",
+                )
+        unfinished = conn.execute(
+            "SELECT id FROM tasks WHERE sprint = ? AND status != 'done'", (sprint_id,)
+        ).fetchall()
+        if target is not None:
+            conn.execute(
+                "UPDATE tasks SET sprint = ? WHERE sprint = ? AND status != 'done'",
+                (target, sprint_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE tasks SET status = 'backlog' WHERE sprint = ? AND status != 'done'",
+                (sprint_id,),
+            )
+        conn.execute("UPDATE sprints SET status = 'closed' WHERE id = ?", (sprint_id,))
+        return {"closed": sprint_id, "moved": len(unfinished), "to": target}
 
 
 def list_team(db_path: Optional[str] = None) -> List[Dict[str, Any]]:

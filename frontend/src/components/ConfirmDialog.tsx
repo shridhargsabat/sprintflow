@@ -9,6 +9,7 @@ export interface ConfirmDialogProps {
   message: string;
   confirmLabel?: string;
   danger?: boolean;
+  children?: React.ReactNode;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -19,6 +20,7 @@ export function ConfirmDialog({
   message,
   confirmLabel = 'Confirm',
   danger = false,
+  children,
   onConfirm,
   onCancel
 }: ConfirmDialogProps): React.JSX.Element | null {
@@ -45,6 +47,7 @@ export function ConfirmDialog({
         </div>
         <div className="p-6 space-y-4">
           <p className="text-xs text-slate-600 dark:text-slate-300">{message}</p>
+          {children}
           <div className="flex gap-2 justify-end">
             <button
               ref={cancelRef}

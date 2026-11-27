@@ -41,6 +41,7 @@ export interface DashboardViewProps {
   team: TeamMember[];
   sprintFilter: string;
   sprints: SprintConfig[];
+  activeSprintId: string | null;
   darkMode: boolean;
   onOpenDetails: (task: Task) => void;
   onOpenSprintSettings: () => void;
@@ -58,6 +59,7 @@ export default function DashboardView({
   team,
   sprintFilter,
   sprints,
+  activeSprintId,
   darkMode,
   onOpenDetails,
   onOpenSprintSettings,
@@ -98,7 +100,10 @@ export default function DashboardView({
   const burndownData = useMemo(() => {
     const total = Math.max(kpis.totalPts, 10);
     const remaining = Math.max(0, kpis.totalPts - kpis.donePts);
-    const activeSprint = sprints.find(s => s.id === sprintFilter || s.name === sprintFilter) ?? sprints[0] ?? null;
+    const activeSprint = sprints.find(s => s.id === sprintFilter || s.name === sprintFilter)
+      ?? (activeSprintId ? sprints.find(s => s.id === activeSprintId) : undefined)
+      ?? sprints[0]
+      ?? null;
     let labels = ['Nov 23', 'Nov 25', 'Nov 27', 'Nov 29', 'Dec 1', 'Dec 3', 'Dec 6'];
     if (activeSprint) {
       const len = Math.max(1, activeSprint.lengthDays);
@@ -113,7 +118,7 @@ export default function DashboardView({
       ideal: Math.round(total * (1 - i / (labels.length - 1))),
       remaining: i === 0 ? total : i === 1 ? Math.round(total - kpis.donePts * 0.65) : i === 2 ? remaining : null
     }));
-  }, [kpis.totalPts, kpis.donePts, sprints, sprintFilter]);
+  }, [kpis.totalPts, kpis.donePts, sprints, sprintFilter, activeSprintId]);
 
   const burndownOnTrack = useMemo(() => {
     const remaining = Math.max(0, kpis.totalPts - kpis.donePts);
@@ -125,8 +130,12 @@ export default function DashboardView({
     const matched = sprints.find(s => s.id === sprintFilter || s.name === sprintFilter);
     if (matched) {
       const dates = `${formatShortDate(matched.startDate)} – ${formatShortDate(matched.endDate)}, ${matched.endDate.slice(0, 4)}`;
-      const isFirst = sprints.length > 0 && sprints[0].id === matched.id;
-      const badge = `${matched.name} · ${isFirst ? 'Active' : 'Planned'}`;
+      const statusLabel = matched.status === 'active' || matched.id === activeSprintId
+        ? 'Active'
+        : matched.status === 'closed'
+          ? 'Closed'
+          : 'Planned';
+      const badge = `${matched.name} · ${statusLabel}`;
       const todayMs = new Date(`${TODAY_ISO}T00:00:00`).getTime();
       const daysLeft = Math.max(0, Math.round((new Date(`${matched.endDate}T00:00:00`).getTime() - todayMs) / 86400000));
       const daysUntilStart = Math.max(0, Math.round((new Date(`${matched.startDate}T00:00:00`).getTime() - todayMs) / 86400000));
@@ -148,7 +157,7 @@ export default function DashboardView({
       return { badge: 'Product Backlog', dates: 'Unscheduled Queue', title: 'Upcoming Engineering Backlog', sub: 'Prioritized work ready to pull into upcoming sprints' };
     }
     return { badge: 'All Sprints · Portfolio', dates: 'Q4 2026 Roadmap', title: 'Full Project Delivery Overview', sub: 'Combined view of active sprint, planned sprint & backlog' };
-  }, [sprintFilter, sprints]);
+  }, [sprintFilter, sprints, activeSprintId]);
 
   const ongoingTasks = useMemo(
     () => tasks

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { api } from '../api';
+import { api, type CloseSprintResult, type CreateSprintPayload } from '../api';
 import { STATUS_COLUMNS } from '../constants';
 import type { BoardImport, SprintConfig, SprintPatch, Task, TaskFormValues, TaskStatus, TeamMember, Toast, ToastType } from '../types';
 
@@ -42,6 +42,9 @@ export interface UseBoard {
   showToast: (message: string, type?: ToastType) => void;
   refreshAll: () => Promise<void>;
   updateSprint: (id: string, patch: SprintPatch) => Promise<void>;
+  createSprint: (payload: CreateSprintPayload) => Promise<void>;
+  activateSprint: (id: string) => Promise<void>;
+  closeSprint: (id: string, rolloverTo?: string) => Promise<CloseSprintResult | null>;
   moveTaskStatus: (taskId: string, newStatus: TaskStatus) => Promise<void>;
   promoteTask: (taskId: string) => Promise<void>;
   saveTask: (formValues: TaskFormValues) => Promise<void>;
@@ -110,7 +113,7 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
     try {
       const updated = await api.promoteTask(taskId);
       setTasks(prev => prev.map(t => (t.id === taskId ? updated : t)));
-      showToast(`Pulled ${taskId} into Sprint 14`, 'success');
+      showToast(`Pulled ${taskId} into ${updated.sprint}`, 'success');
     } catch {
       showToast('Failed to promote task', 'error');
     }
@@ -268,6 +271,44 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
     }
   };
 
+  const createSprint = async (payload: CreateSprintPayload): Promise<void> => {
+    try {
+      const created = await api.createSprint(payload);
+      await refreshAll();
+      showToast(`Created ${created.name}`, 'success');
+    } catch {
+      showToast('Failed to create sprint', 'error');
+    }
+  };
+
+  const activateSprint = async (id: string): Promise<void> => {
+    try {
+      const activated = await api.activateSprint(id);
+      await refreshAll();
+      showToast(`Activated ${activated.name}`, 'success');
+    } catch {
+      showToast('Failed to activate sprint', 'error');
+    }
+  };
+
+  const closeSprint = async (id: string, rolloverTo?: string): Promise<CloseSprintResult | null> => {
+    try {
+      const result = await api.closeSprint(id, rolloverTo);
+      await refreshAll();
+      const dest = result.to === 'Backlog' || result.to === 'backlog' ? 'Backlog' : result.to;
+      showToast(
+        result.moved > 0
+          ? `Closed ${result.closed} · moved ${result.moved} to ${dest}`
+          : `Closed ${result.closed}`,
+        'success'
+      );
+      return result;
+    } catch {
+      showToast('Failed to close sprint', 'error');
+      return null;
+    }
+  };
+
   return {
     team,
     tasks,
@@ -280,6 +321,9 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
     showToast,
     refreshAll,
     updateSprint,
+    createSprint,
+    activateSprint,
+    closeSprint,
     moveTaskStatus,
     promoteTask,
     saveTask,

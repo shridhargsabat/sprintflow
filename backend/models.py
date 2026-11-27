@@ -68,6 +68,7 @@ class ImportPayload(BaseModel):
 
 
 class SprintUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
     startDate: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     lengthDays: Optional[int] = Field(default=None, ge=1, le=60)
 
@@ -78,3 +79,29 @@ class SprintUpdate(BaseModel):
             return value
         date.fromisoformat(value)  # raises ValueError -> 422 on impossible dates
         return value
+
+
+SprintStatusType = Literal["planned", "active", "closed"]
+
+
+class SprintCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    startDate: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    lengthDays: int = Field(default=14, ge=1, le=60)
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, value: str) -> str:
+        # Strip only; blank-after-strip is rejected with HTTP 400 by the
+        # sprints router (a ValueError here would surface as 422 instead).
+        return value.strip()
+
+    @field_validator("startDate")
+    @classmethod
+    def _validate_calendar_date(cls, value: str) -> str:
+        date.fromisoformat(value)  # raises ValueError -> 422 on impossible dates
+        return value
+
+
+class SprintClosePayload(BaseModel):
+    rolloverTo: Optional[str] = None

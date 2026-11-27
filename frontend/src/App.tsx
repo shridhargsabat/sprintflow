@@ -1,4 +1,4 @@
-import { Suspense, lazy, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { PRIORITY_META } from './constants';
 import { useBoard } from './hooks/useBoard';
@@ -23,7 +23,7 @@ function BoardApp() {
   const [darkMode, setDarkMode] = useState<boolean>(false);
 
   const [activeView, setActiveView] = useState<ViewId>('dashboard');
-  const [sprintFilter, setSprintFilter] = useState<string>('Sprint 14');
+  const [sprintFilter, setSprintFilter] = useState<string>('');
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
   const [assigneeFilter, setAssigneeFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -39,7 +39,8 @@ function BoardApp() {
   const [newMemberRole, setNewMemberRole] = useState<string>('');
 
   const clearFilters = (): void => {
-    setSprintFilter('Sprint 14');
+    // '' resolves to the active sprint id via the effect below once sprints load.
+    setSprintFilter('');
     setPriorityFilter('all');
     setAssigneeFilter('all');
     setSearchQuery('');
@@ -53,6 +54,20 @@ function BoardApp() {
     setNewMemberName,
     setNewMemberRole
   });
+
+  const activeSprint = useMemo(
+    () =>
+      board.sprints.find(s => s.status === 'active') ??
+      board.sprints.find(s => s.status !== 'closed') ??
+      board.sprints[0] ??
+      null,
+    [board.sprints]
+  );
+  const defaultSprintId = activeSprint ? activeSprint.id : 'all';
+
+  useEffect(() => {
+    if (sprintFilter === '' && !board.loading) setSprintFilter(defaultSprintId);
+  }, [sprintFilter, defaultSprintId, board.loading]);
 
   const filteredTasks = useMemo(() => {
     return board.tasks.filter(t => {
@@ -88,7 +103,7 @@ function BoardApp() {
     [board.tasks]
   );
 
-  const hasActiveFilters = priorityFilter !== 'all' || assigneeFilter !== 'all' || searchQuery.trim() !== '' || sprintFilter !== 'Sprint 14';
+  const hasActiveFilters = priorityFilter !== 'all' || assigneeFilter !== 'all' || searchQuery.trim() !== '' || (sprintFilter !== '' && sprintFilter !== defaultSprintId);
 
   const openTaskModal = (task: Task | null, defaultStatus: TaskStatus): void => {
     setTaskModal({ open: true, task, defaultStatus });
@@ -171,6 +186,7 @@ function BoardApp() {
                   team={board.team}
                   sprintFilter={sprintFilter}
                   sprints={board.sprints}
+                  activeSprintId={activeSprint ? activeSprint.id : null}
                   darkMode={darkMode}
                   onOpenDetails={(task) => openDetails(task)}
                   onOpenSprintSettings={() => setSprintSettingsOpen(true)}
@@ -211,8 +227,9 @@ function BoardApp() {
           <TaskModal
             task={taskModal.task}
             defaultStatus={taskModal.defaultStatus}
-            defaultSprint={sprintFilter === 'all' ? 'Sprint 14' : sprintFilter}
+            defaultSprint={sprintFilter === 'all' || sprintFilter === '' ? defaultSprintId : sprintFilter}
             team={board.team}
+            sprints={board.sprints}
             onClose={() => setTaskModal({ open: false, task: null, defaultStatus: 'todo' })}
             onSave={board.saveTask}
             onDelete={board.deleteTask}
@@ -252,6 +269,9 @@ function BoardApp() {
             sprints={board.sprints}
             onClose={() => setSprintSettingsOpen(false)}
             onSave={(id, patch) => { void board.updateSprint(id, patch); }}
+            onCreate={(payload) => { void board.createSprint(payload); }}
+            onActivate={(id) => { void board.activateSprint(id); }}
+            onCloseSprint={(id, rolloverTo) => { void board.closeSprint(id, rolloverTo); }}
           />
         )}
 

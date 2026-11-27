@@ -39,7 +39,10 @@ export default function FilterBar({
   const sprintOptions = [
     { value: 'all', label: 'All Sprints & Backlog' },
     ...(sprints.length > 0
-      ? sprints.map(s => ({ value: s.id, label: `${s.name} (${formatShortDate(s.startDate)} – ${formatShortDate(s.endDate)})` }))
+      ? sprints.map(s => ({
+          value: s.id,
+          label: `${s.name} (${formatShortDate(s.startDate)} – ${formatShortDate(s.endDate)})${s.status === 'active' ? ' • Active' : ''}`
+        }))
       : [{ value: 'Sprint 14', label: 'Sprint 14' }, { value: 'Sprint 15', label: 'Sprint 15' }]),
     { value: 'Backlog', label: 'Unassigned Backlog' }
   ];

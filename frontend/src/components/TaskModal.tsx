@@ -6,19 +6,20 @@ import { useEscapeKey } from '../hooks/useEscapeKey';
 import { api, type Tag, type UserDirectoryEntry } from '../api';
 import { usePermissions } from '../auth/usePermissions';
 import { GLASS_PANEL, GLASS_PILL, STATUS_COLUMNS } from '../constants';
-import type { AssigneeRef, AssigneeType, Task, TaskFormValues, TaskPriority, TaskStatus, TeamMember } from '../types';
+import type { AssigneeRef, AssigneeType, SprintConfig, Task, TaskFormValues, TaskPriority, TaskStatus, TeamMember } from '../types';
 
 interface TaskModalProps {
   task: Task | null;
   defaultStatus: TaskStatus;
   defaultSprint: string;
   team: TeamMember[];
+  sprints: SprintConfig[];
   onClose: () => void;
   onSave: (values: TaskFormValues) => void;
   onDelete: (taskId: string) => void;
 }
 
-export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, onSave, onDelete }: TaskModalProps) {
+export function TaskModal({ task, defaultStatus, defaultSprint, team, sprints, onClose, onSave, onDelete }: TaskModalProps) {
   useEscapeKey(onClose);
   const { can } = usePermissions();
   const canManage = can('team.manage');
@@ -34,7 +35,7 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
   const [dueDate, setDueDate] = useState<string>(task ? task.dueDate : '2026-12-02');
   const [status, setStatus] = useState<TaskStatus>(task ? task.status : defaultStatus);
   const [priority, setPriority] = useState<TaskPriority>(task ? task.priority : 'medium');
-  const [sprint, setSprint] = useState<string>(task ? task.sprint : (defaultStatus === 'backlog' ? 'Sprint 15' : defaultSprint));
+  const [sprint, setSprint] = useState<string>(task ? task.sprint : (defaultStatus === 'backlog' ? 'Backlog' : defaultSprint));
   const [points, setPoints] = useState<number>(task ? Number(task.points || 3) : 3);
   const [tag, setTag] = useState<string>(task ? task.tag : 'Frontend');
   const [masterTags, setMasterTags] = useState<Tag[] | null>(null);
@@ -196,11 +197,15 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
               <Dropdown
                 value={sprint}
                 onChange={setSprint}
-                options={[
-                  { value: 'Sprint 14', label: 'Sprint 14' },
-                  { value: 'Sprint 15', label: 'Sprint 15' },
-                  { value: 'Backlog', label: 'Backlog' }
-                ]}
+                options={(() => {
+                  const open = sprints.filter(s => s.status !== 'closed');
+                  const opts = open.map(s => ({ value: s.id, label: `${s.name}${s.status === 'active' ? ' • Active' : ''}` }));
+                  if (sprint !== '' && !opts.some(o => o.value === sprint) && sprint !== 'Backlog') {
+                    opts.unshift({ value: sprint, label: `${sprint} (closed)` });
+                  }
+                  opts.push({ value: 'Backlog', label: 'Backlog' });
+                  return opts;
+                })()}
                 className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-2.5 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text"
               />
             </div>

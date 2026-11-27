@@ -1,4 +1,6 @@
-import type { BoardImport, SprintConfig, SprintPatch, Task, TaskPayload, TaskStatus, TeamMember } from './types';
+import type { BoardImport, SprintConfig, SprintPatch, SprintStatus, Task, TaskPayload, TaskStatus, TeamMember } from './types';
+
+export type { SprintStatus };
 
 const API_BASE: string = import.meta.env.VITE_API_URL || '/api';
 
@@ -114,6 +116,18 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   return res.json() as Promise<T>;
 }
 
+export interface CreateSprintPayload {
+  name: string;
+  startDate: string;
+  lengthDays?: number;
+}
+
+export interface CloseSprintResult {
+  closed: string;
+  moved: number;
+  to: string;
+}
+
 export interface MemberPayload {
   name: string;
   role?: string;
@@ -150,6 +164,15 @@ export const api = {
   getSprints: (): Promise<SprintConfig[]> => request<SprintConfig[]>('/sprints'),
   updateSprint: (id: string, patch: SprintPatch): Promise<SprintConfig> =>
     request<SprintConfig>(`/sprints/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  createSprint: (payload: CreateSprintPayload): Promise<SprintConfig> =>
+    request<SprintConfig>('/sprints', { method: 'POST', body: JSON.stringify(payload) }),
+  activateSprint: (id: string): Promise<SprintConfig> =>
+    request<SprintConfig>(`/sprints/${encodeURIComponent(id)}/activate`, { method: 'POST' }),
+  closeSprint: (id: string, rolloverTo?: string): Promise<CloseSprintResult> =>
+    request<CloseSprintResult>(`/sprints/${encodeURIComponent(id)}/close`, {
+      method: 'POST',
+      body: JSON.stringify(rolloverTo ? { rolloverTo } : {})
+    }),
 
   login: (email: string, password: string): Promise<LoginResponse> =>
     request<LoginResponse>('/auth/login', {
