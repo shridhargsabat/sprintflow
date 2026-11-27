@@ -81,7 +81,7 @@ export default function Dropdown(props: DropdownProps): React.JSX.Element {
   const optionRefs = useRef<Array<HTMLLIElement | null>>([]);
   const menuRef = useRef<HTMLElement | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number; listMaxH: number | null } | null>(null);
 
   const visibleOptions = useMemo(() => {
     if (!searchable || query.trim() === '') return options;
@@ -122,10 +122,38 @@ export default function Dropdown(props: DropdownProps): React.JSX.Element {
     const r = buttonRef.current?.getBoundingClientRect();
     if (!r) return;
     const width = Math.max(r.width, 144);
-    const estH = Math.min(options.length * 40 + 12, 248);
+    // Viewport-aware estimate: filtered (visible) rows + sticky group headers,
+    // capped by the responsive list max-h, plus the search block when
+    // searchable and a footer row when a create row or multi Done footer shows.
+    const isSmall = window.innerWidth < 768;
+    const rowH = isSmall ? 44 : 36;
+    const groupCount = new Set(visibleOptions.map((o) => o.group).filter(Boolean)).size;
+    const listH = visibleOptions.length === 0 ? 40 : visibleOptions.length * rowH + groupCount * 24;
+    // Must mirror the responsive ul caps below (38vh small, max-h-56/60 desktop).
+    const listCapPx = isSmall ? window.innerHeight * 0.38 : searchable ? 224 : 240;
+    const chrome = searchable ? 64 + (multi || canCreate ? 52 : 0) : 12;
+    const estH = Math.min(listH, listCapPx) + chrome;
     const below = r.bottom + 8;
-    const top = below + estH > window.innerHeight && r.top - 8 - estH > 0 ? r.top - 8 - estH : below;
-    setMenuPos({ top, left: align === 'right' ? r.right - width : r.left, width });
+    const spaceBelow = window.innerHeight - below - 8;
+    const spaceAbove = r.top - 8;
+    // Small screens reserve one extra row so the next field (e.g. Due Date
+    // below Assignee) stays reachable instead of being covered by the menu.
+    const belowNeed = estH + (isSmall ? 56 : 0);
+    const minAboveNeed = chrome + 120;
+    let top: number;
+    let listMaxH: number | null = null;
+    if (belowNeed <= spaceBelow) {
+      top = below;
+    } else if (spaceAbove >= minAboveNeed) {
+      // Flip above the trigger; shrink the list to fit when room is tight.
+      if (spaceAbove < estH) listMaxH = Math.max(96, spaceAbove - chrome);
+      top = r.top - 8 - (listMaxH != null ? listMaxH + chrome : estH);
+    } else {
+      // Neither side fits: stay below (roomier) but cap the list to the viewport.
+      if (spaceBelow > chrome + 96) listMaxH = spaceBelow - chrome;
+      top = below;
+    }
+    setMenuPos({ top, left: align === 'right' ? r.right - width : r.left, width, listMaxH });
   };
 
   const selectedValues: string[] = multi ? (value as string[]) : [value as string];
@@ -192,6 +220,11 @@ export default function Dropdown(props: DropdownProps): React.JSX.Element {
   useEffect(() => {
     if (open) setActiveIndex((i) => (i >= visibleOptions.length ? 0 : i));
   }, [visibleOptions.length, open]);
+
+  // Keep the flip-above decision accurate as the filter narrows the menu.
+  useEffect(() => {
+    if (open) updateMenuPos();
+  }, [visibleOptions.length, canCreate, open]);
 
   useEffect(() => {
     if (open && searchable) searchRef.current?.focus();
@@ -322,7 +355,7 @@ export default function Dropdown(props: DropdownProps): React.JSX.Element {
           aria-selected={isSelected}
           onClick={() => selectAt(i)}
           onMouseEnter={() => setActiveIndex(i)}
-          className={`flex cursor-pointer items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm outline-none transition-colors duration-100 ${
+          className={`flex min-h-[44px] md:min-h-0 cursor-pointer items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm outline-none transition-colors duration-100 ${
             isActive
               ? 'bg-blue-500/15 text-slate-900 dark:bg-white/15 dark:text-white'
               : 'text-slate-700 dark:text-slate-200'
@@ -429,7 +462,8 @@ export default function Dropdown(props: DropdownProps): React.JSX.Element {
               aria-activedescendant={visibleOptions[activeIndex] ? `${baseId}-opt-${activeIndex}` : undefined}
               tabIndex={-1}
               onKeyDown={onListKeyDown}
-              className="max-h-56 overflow-y-auto scroll-slim outline-none"
+              style={menuPos.listMaxH != null ? { maxHeight: menuPos.listMaxH } : undefined}
+              className="max-h-[38vh] md:max-h-56 overflow-y-auto scroll-slim outline-none"
             >
               {renderMenuItems()}
             </ul>
@@ -442,6 +476,16 @@ export default function Dropdown(props: DropdownProps): React.JSX.Element {
               >
                 <Plus className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">{creating ? 'Creating…' : createLabel(query.trim())}</span>
+              </button>
+            )}
+            {multi && (
+              <button
+                type="button"
+                onClick={() => close(true)}
+                className="mt-1 flex min-h-[44px] md:min-h-0 w-full items-center justify-center gap-2 rounded-xl bg-slate-900/[0.06] dark:bg-white/10 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 outline-none transition-colors hover:bg-slate-900/10 dark:hover:bg-white/15 focus-visible:ring-2 focus-visible:ring-blue-500/60"
+              >
+                <Check className="h-3.5 w-3.5 shrink-0" />
+                Done
               </button>
             )}
           </div>
@@ -457,8 +501,8 @@ export default function Dropdown(props: DropdownProps): React.JSX.Element {
             ref={(el) => {
               menuRef.current = el;
             }}
-            style={{ top: menuPos.top, left: menuPos.left, width: menuPos.width }}
-            className={`lg-dropdown ${GLASS_PANEL} fixed z-[100] max-h-60 overflow-y-auto scroll-slim rounded-2xl p-1.5 outline-none ${menuClassName ?? ''}`}
+            style={{ top: menuPos.top, left: menuPos.left, width: menuPos.width, ...(menuPos.listMaxH != null ? { maxHeight: menuPos.listMaxH } : {}) }}
+            className={`lg-dropdown ${GLASS_PANEL} fixed z-[100] max-h-[38vh] md:max-h-60 overflow-y-auto scroll-slim rounded-2xl p-1.5 outline-none ${menuClassName ?? ''}`}
           >
             {renderMenuItems()}
           </ul>
