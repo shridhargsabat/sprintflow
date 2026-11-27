@@ -53,7 +53,6 @@ export interface UseBoard {
   handleRemoveMember: (id: string) => Promise<void>;
   handleExportJson: () => void;
   handleImportJson: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  handleResetDemo: () => Promise<void>;
 }
 
 export function useBoard(deps: UseBoardDeps): UseBoard {
@@ -174,17 +173,6 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
     e.target.value = '';
   };
 
-  const handleResetDemo = async () => {
-    try {
-      await api.resetBoard();
-      deps.clearFilters();
-      await refreshAll();
-      showToast('Reset SQLite database to sample data', 'info');
-    } catch {
-      showToast('Failed to reset database', 'error');
-    }
-  };
-
   const handleUpdateMember = async (member: TeamMember): Promise<void> => {
     const snapshot = team;
     setTeam(prev => prev.map(m => (m.id === member.id ? { ...m, ...member } : m)));
@@ -297,7 +285,6 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
     handleBulkAddMembers,
     handleRemoveMember,
     handleExportJson,
-    handleImportJson,
-    handleResetDemo
+    handleImportJson
   };
 }

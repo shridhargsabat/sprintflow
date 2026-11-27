@@ -4,9 +4,6 @@ import { AlertCircle, Eye, EyeOff, Info, Layers, Loader2 } from 'lucide-react';
 import { GLASS_PANEL } from '../constants';
 import { useAuth } from '../auth/AuthContext';
 
-const DEMO_EMAIL = 'admin@sprintflow.local';
-const DEMO_PASSWORD = 'Admin123!';
-
 function friendlyError(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
   try {
@@ -23,17 +20,11 @@ function friendlyError(err: unknown): string {
 
 export default function LoginView(): ReactElement {
   const { login, reason, clearReason } = useAuth();
-  const [email, setEmail] = useState<string>(DEMO_EMAIL);
+  const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [busy, setBusy] = useState<boolean>(false);
-
-  const fillDemo = (): void => {
-    setEmail(DEMO_EMAIL);
-    setPassword(DEMO_PASSWORD);
-    setError('');
-  };
 
   const onSubmit = async (e: FormEvent): Promise<void> => {
     e.preventDefault();
@@ -134,20 +125,6 @@ export default function LoginView(): ReactElement {
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
-
-        <button
-          type="button"
-          onClick={fillDemo}
-          title="Click to fill demo credentials"
-          className="mt-5 w-full rounded-2xl bg-white/50 dark:bg-white/[0.07] border border-white/70 dark:border-white/15 px-4 py-3 text-left hover:bg-white/70 dark:hover:bg-white/[0.12] transition"
-        >
-          <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1">
-            Demo account — click to fill
-          </span>
-          <span className="block text-xs font-mono text-slate-700 dark:text-slate-200">
-            {DEMO_EMAIL} <span className="text-slate-400">/</span> {DEMO_PASSWORD}
-          </span>
-        </button>
       </div>
     </div>
   );
