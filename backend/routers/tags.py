@@ -104,12 +104,8 @@ def update_tag(
             raise HTTPException(
                 status_code=409, detail=f"Tag already exists: {new_name}"
             )
-        if new_name != existing["name"]:
-            conn.execute(
-                "UPDATE tasks SET tag = ? "
-                "WHERE tag = ? COLLATE NOCASE OR tag = ? COLLATE NOCASE",
-                (new_name, existing["name"], tag_id),
-            )
+        # Rename needs no task retagging: task_tags links key on the tag id,
+        # so the new name resolves automatically on every read.
         return _tag_with_count(conn, tag_id)
 
 
@@ -127,14 +123,14 @@ def delete_tag(
         usage = db.tag_usage_count(conn, existing["name"])
         if usage > 0:
             return JSONResponse(status_code=409, content={"tasks": usage})  # type: ignore[return-value]
-        # L8: the DELETE itself re-checks usage atomically — a task tagged
+        # L8: the DELETE itself re-checks usage atomically — a task linked
         # between the check above and this statement blocks the delete
         # instead of orphaning the tag. A 0-row delete means the tag either
         # vanished (404) or gained usage (409); recheck to report correctly.
         cur = conn.execute(
             "DELETE FROM tags WHERE id = ? "
-            "AND NOT EXISTS (SELECT 1 FROM tasks WHERE tag = ? COLLATE NOCASE)",
-            (tag_id, existing["name"]),
+            "AND NOT EXISTS (SELECT 1 FROM task_tags WHERE tag_id = ?)",
+            (tag_id, tag_id),
         )
         if cur.rowcount == 0:
             gone = conn.execute(

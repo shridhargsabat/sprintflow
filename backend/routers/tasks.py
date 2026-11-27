@@ -62,7 +62,7 @@ def create_task(
     _require_nonblank_title_sprint(payload)
     with db.get_conn() as conn:
         assignees = db.validate_assignees(conn, payload.assignees)
-        tag = db.validate_tag(conn, payload.tag)
+        tags = db.validate_tags(conn, payload.tags)
         # H1: next_task_id is SELECT-max+1, so concurrent creators can collide
         # on the same DEV-* id. Retry with a recomputed id; never leak a 500.
         for _ in range(CREATE_ID_MAX_ATTEMPTS):
@@ -71,8 +71,8 @@ def create_task(
                 conn.execute(
                     """
                     INSERT INTO tasks
-                        (id, title, description, due_date, status, priority, sprint, points, tag)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        (id, title, description, due_date, status, priority, sprint, points)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         task_id,
@@ -83,12 +83,12 @@ def create_task(
                         payload.priority,
                         payload.sprint,
                         payload.points,
-                        tag,
                     ),
                 )
             except sqlite3.IntegrityError:
                 continue
             db.set_task_assignees(conn, task_id, assignees)
+            db.set_task_tags(conn, task_id, tags)
             return db.fetch_task(conn, task_id)
         raise HTTPException(
             status_code=503,
@@ -111,12 +111,12 @@ def update_task(
         if not existing:
             raise HTTPException(status_code=404, detail="Task not found")
         assignees = db.validate_assignees(conn, payload.assignees)
-        tag = db.validate_tag(conn, payload.tag)
+        tags = db.validate_tags(conn, payload.tags)
         cur = conn.execute(
             """
             UPDATE tasks
             SET title = ?, description = ?, due_date = ?,
-                status = ?, priority = ?, sprint = ?, points = ?, tag = ?,
+                status = ?, priority = ?, sprint = ?, points = ?,
                 updated_at = datetime('now')
             WHERE id = ?
             """,
@@ -128,7 +128,6 @@ def update_task(
                 payload.priority,
                 payload.sprint,
                 payload.points,
-                tag,
                 task_id,
             ),
         )
@@ -137,6 +136,7 @@ def update_task(
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="Task not found")
         db.set_task_assignees(conn, task_id, assignees)
+        db.set_task_tags(conn, task_id, tags)
         return db.fetch_task(conn, task_id)
 
 

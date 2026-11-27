@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Dict, List, Literal, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field, field_validator
@@ -25,7 +25,10 @@ class TaskPayload(BaseModel):
     priority: PriorityType = "medium"
     sprint: str = Field(default="Sprint 14", max_length=100)
     points: int = Field(default=3, ge=1, le=50)
-    tag: str = Field(default="Frontend", max_length=60)
+    # Multi-tag: None (omitted) means the ["Frontend"] default; [] is a
+    # deliberately untagged task. Every entry must exist in the tag master
+    # (validated by db.validate_tags -> HTTP 400 when unknown).
+    tags: Optional[List[Annotated[str, Field(max_length=60)]]] = None
 
     @field_validator("title", "sprint")
     @classmethod
