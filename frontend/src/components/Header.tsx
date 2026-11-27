@@ -77,7 +77,7 @@ export default function Header({
 
       {/* Floating Header */}
       <div className="sticky top-0 z-30 pt-3 px-4 sm:px-6">
-        <header className={`lg-enter max-w-[1440px] mx-auto rounded-full px-4 sm:px-5 h-16 flex items-center justify-between gap-3 ${GLASS_PANEL}`}>
+        <header className={`lg-enter max-w-[1440px] mx-auto rounded-full px-3 sm:px-5 h-16 flex items-center justify-between gap-2 sm:gap-3 ${GLASS_PANEL}`}>
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-600 text-white flex items-center justify-center shadow-[0_6px_20px_-4px_rgba(37,99,235,0.55),inset_0_1px_1px_rgba(255,255,255,0.6)] shrink-0">
               <Layers className="w-5 h-5" />
@@ -85,7 +85,7 @@ export default function Header({
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-semibold tracking-tight truncate">SprintFlow</h1>
-                <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-400/30">
+                <span className="hidden md:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-400/30 whitespace-nowrap">
                   <Database className="w-3 h-3" /> SQLite Live
                 </span>
               </div>
@@ -95,7 +95,7 @@ export default function Header({
             </div>
           </div>
 
-          <nav aria-label="Main views" className="flex items-center bg-slate-900/[0.05] dark:bg-white/[0.06] p-1 rounded-full border border-white/60 dark:border-white/10">
+          <nav aria-label="Main views" className="hidden lg:flex items-center bg-slate-900/[0.05] dark:bg-white/[0.06] p-1 rounded-full border border-white/60 dark:border-white/10">
             {[
               { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
               { id: 'kanban', label: 'Kanban', icon: Kanban },
@@ -136,12 +136,12 @@ export default function Header({
                     type="button"
                     onClick={() => { onCloseMenu(); setUserMenuOpen(o => !o); }}
                     aria-label="User menu"
-                    className={`inline-flex items-center gap-2 pl-1 pr-3 py-1 rounded-full text-xs font-medium ${GLASS_PILL}`}
+                    className={`inline-flex items-center gap-2 pl-1 pr-1 lg:pr-3 py-1 rounded-full text-xs font-medium ${GLASS_PILL}`}
                   >
-                    <span className="w-7 h-7 rounded-full bg-gradient-to-br from-sky-400 to-indigo-500 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                    <span className="w-7 h-7 max-lg:w-9 max-lg:h-9 rounded-full bg-gradient-to-br from-sky-400 to-indigo-500 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
                       {getInitials(user.name)}
                     </span>
-                    <span className="max-w-24 truncate">{user.name}</span>
+                    <span className="hidden lg:inline max-w-24 truncate">{user.name}</span>
                   </button>
                 </GlassTooltip>
                 {userMenuOpen && (
@@ -174,11 +174,11 @@ export default function Header({
                 )}
               </div>
             )}
-            <GlassTooltip label="Manage team" position="bottom" className="hidden sm:inline-flex">
+            <GlassTooltip label="Manage team" position="bottom" className="hidden lg:inline-flex">
               <button
                 type="button"
                 onClick={() => onOpenTeam()}
-                className={`hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium ${GLASS_PILL}`}
+                className={`hidden lg:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium ${GLASS_PILL}`}
               >
                 <Users className="w-3.5 h-3.5" />
                 <span>Team</span>
@@ -191,14 +191,14 @@ export default function Header({
                   type="button"
                   onClick={() => { setUserMenuOpen(false); onOpenMenu(); }}
                   aria-label="Data options"
-                  className={`inline-flex items-center justify-center w-9 h-9 rounded-full ${GLASS_PILL}`}
+                  className={`inline-flex items-center justify-center w-9 h-9 max-lg:w-11 max-lg:h-11 rounded-full ${GLASS_PILL}`}
                 >
                   <MoreVertical className="w-4 h-4" />
                 </button>
               </GlassTooltip>
               {menuOpen && (
                 <div className={`lg-dropdown absolute right-0 mt-2.5 w-52 rounded-3xl py-2 z-40 ${GLASS_MENU}`}>
-                  <button type="button" onClick={() => { onCloseMenu(); onOpenTeam(); }} className="sm:hidden w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-slate-900/5 dark:hover:bg-white/10 flex items-center gap-2.5">
+                  <button type="button" onClick={() => { onCloseMenu(); onOpenTeam(); }} className="lg:hidden w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-slate-900/5 dark:hover:bg-white/10 flex items-center gap-2.5">
                     <Users className="w-3.5 h-3.5" /> Manage Team
                   </button>
                   <button type="button" onClick={onExportJson} className="w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-slate-900/5 dark:hover:bg-white/10 flex items-center gap-2.5">
@@ -225,7 +225,7 @@ export default function Header({
             </div>
 
             <GlassTooltip label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'} position="bottom">
-              <button type="button" onClick={() => onToggleDark()} aria-label="Toggle dark mode" className={`inline-flex items-center justify-center w-9 h-9 rounded-full ${GLASS_PILL}`}>
+              <button type="button" onClick={() => onToggleDark()} aria-label="Toggle dark mode" className={`inline-flex items-center justify-center w-9 h-9 max-lg:w-11 max-lg:h-11 rounded-full ${GLASS_PILL}`}>
                 {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
               </button>
             </GlassTooltip>
@@ -233,14 +233,41 @@ export default function Header({
             <button
               type="button"
               onClick={() => onNewTask()}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs sm:text-sm font-semibold bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white shadow-[0_6px_20px_-4px_rgba(0,122,255,0.55),inset_0_1px_0_rgba(255,255,255,0.45)]"
+              aria-label="New task"
+              className="inline-flex items-center justify-center gap-1.5 px-4 max-sm:w-11 max-sm:px-0 py-2 max-lg:min-h-[44px] rounded-full text-xs sm:text-sm font-semibold bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white shadow-[0_6px_20px_-4px_rgba(0,122,255,0.55),inset_0_1px_0_rgba(255,255,255,0.45)]"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-4 h-4 shrink-0" />
               <span className="hidden sm:inline">New Task</span>
-              <span className="sm:hidden">Add</span>
             </button>
           </div>
         </header>
+
+        {/* View nav strip: below lg the in-bar nav collapses into this thumb-reachable row */}
+        <nav aria-label="Main views" className={`lg:hidden max-w-[1440px] mx-auto mt-2 rounded-full px-2 py-1.5 flex items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${GLASS_PANEL}`}>
+          {[
+            { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
+            { id: 'kanban', label: 'Kanban', icon: Kanban },
+            { id: 'backlog', label: 'Backlog', icon: ListChecks }
+          ].map(tab => {
+            const Icon = tab.icon;
+            const active = activeView === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => onSelectView(tab.id as ViewId)}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-4 min-h-[44px] rounded-full text-sm whitespace-nowrap transition-all duration-200 ${
+                  active
+                    ? 'font-semibold bg-white/90 dark:bg-white/20 text-blue-600 dark:text-white shadow-sm'
+                    : 'font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </nav>
       </div>
     </>
   );
