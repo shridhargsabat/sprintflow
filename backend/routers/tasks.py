@@ -54,6 +54,21 @@ def _require_nonblank_title_sprint(payload: TaskPayload) -> None:
         raise HTTPException(status_code=400, detail="Task sprint must not be blank")
 
 
+def _require_points_in_scale(conn: sqlite3.Connection, points: int) -> None:
+    """New/edited tasks must use the admin-configured points scale.
+
+    Pre-existing tasks keep any value they already hold (no rewrite);
+    only writes are gated, with a 400 (not 422 — the value is a valid
+    int, just not an offered option).
+    """
+    scale = db.get_points_scale(conn)
+    if points not in scale:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Points {points} is not in the configured scale {scale}",
+        )
+
+
 @router.post("/tasks", status_code=201)
 def create_task(
     payload: TaskPayload,
@@ -63,6 +78,7 @@ def create_task(
     with db.get_conn() as conn:
         assignees = db.validate_assignees(conn, payload.assignees)
         tags = db.validate_tags(conn, payload.tags)
+        _require_points_in_scale(conn, payload.points)
         # H1: next_task_id is SELECT-max+1, so concurrent creators can collide
         # on the same DEV-* id. Retry with a recomputed id; never leak a 500.
         for _ in range(CREATE_ID_MAX_ATTEMPTS):
@@ -112,6 +128,7 @@ def update_task(
             raise HTTPException(status_code=404, detail="Task not found")
         assignees = db.validate_assignees(conn, payload.assignees)
         tags = db.validate_tags(conn, payload.tags)
+        _require_points_in_scale(conn, payload.points)
         cur = conn.execute(
             """
             UPDATE tasks

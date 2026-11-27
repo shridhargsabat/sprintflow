@@ -8,6 +8,7 @@ import { TeamModal } from './components/TeamModal';
 import { UsersModal } from './components/UsersModal';
 import { TagsModal } from './components/TagsModal';
 import { SprintSettingsModal } from './components/SprintSettingsModal';
+import { PointsScaleModal } from './components/PointsScaleModal';
 import { Toasts } from './components/Toasts';
 import Header from './components/Header';
 import FilterBar from './components/FilterBar';
@@ -33,6 +34,7 @@ export default function BoardApp() {
   const [usersModalOpen, setUsersModalOpen] = useState<boolean>(false);
   const [tagsModalOpen, setTagsModalOpen] = useState<boolean>(false);
   const [sprintSettingsOpen, setSprintSettingsOpen] = useState<boolean>(false);
+  const [pointsScaleOpen, setPointsScaleOpen] = useState<boolean>(false);
   const [newMemberName, setNewMemberName] = useState<string>('');
   const [newMemberRole, setNewMemberRole] = useState<string>('');
 
@@ -138,6 +140,7 @@ export default function BoardApp() {
           onOpenTeam={() => setTeamModalOpen(true)}
           onOpenUsers={() => setUsersModalOpen(true)}
           onOpenTags={() => setTagsModalOpen(true)}
+          onOpenPointsScale={() => setPointsScaleOpen(true)}
           onNewTask={() => openTaskModal(null, 'todo')}
           onExportJson={() => { board.handleExportJson(); setMenuOpen(false); }}
           onImportJson={(e) => { board.handleImportJson(e); setMenuOpen(false); }}
@@ -226,6 +229,7 @@ export default function BoardApp() {
             defaultSprint={sprintFilter === 'all' ? defaultSprintFilter : sprintFilter}
             sprints={board.sprints}
             team={board.team}
+            pointsScale={board.pointsScale}
             onClose={() => setTaskModal({ open: false, task: null, defaultStatus: 'todo' })}
             onSave={board.saveTask}
             onDelete={board.deleteTask}
@@ -275,6 +279,14 @@ export default function BoardApp() {
 
         {tagsModalOpen && (
           <TagsModal onClose={() => setTagsModalOpen(false)} onChanged={board.refreshAll} />
+        )}
+
+        {pointsScaleOpen && (
+          <PointsScaleModal
+            scale={board.pointsScale}
+            onClose={() => setPointsScaleOpen(false)}
+            onSave={(scale) => { void board.updatePointsScale(scale).then(() => setPointsScaleOpen(false)).catch(() => {}); }}
+          />
         )}
 
         <Toasts toasts={board.toasts} />
