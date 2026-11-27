@@ -58,7 +58,7 @@ def test_dashboard_summary_math_for_another_sprint(client):
         other = "Sprint 99"
         client.post("/api/tasks", json={
             "title": "Other sprint probe", "dueDate": "2026-12-08",
-            "sprint": other, "status": "done", "points": 4,
+            "sprint": other, "status": "done", "points": 5,
         })
     got, expected = _summary_for(client, other)
     assert got == expected
@@ -68,7 +68,7 @@ def test_dashboard_summary_reflects_new_done_task(client):
     before = client.get("/api/dashboard/summary", params={"sprint": "Sprint 14"}).json()
     created = client.post("/api/tasks", json={
         "title": "Extra done work", "dueDate": "2026-12-08",
-        "sprint": "Sprint 14", "status": "done", "points": 4,
+        "sprint": "Sprint 14", "status": "done", "points": 5,
     }).json()
     after = client.get("/api/dashboard/summary", params={"sprint": "Sprint 14"}).json()
     assert after["totalTasks"] == before["totalTasks"] + 1

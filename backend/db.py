@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import os
 import re
 import sqlite3
@@ -50,6 +51,12 @@ DEFAULT_SPRINTS = [
     ("Sprint 14", "Sprint 14", "2026-11-23", 14),
     ("Sprint 15", "Sprint 15", "2026-12-07", 14),
 ]
+
+# Story-points scale: admin-configurable picker options. The default
+# preserves the historical fixed picker ([1,2,3,5,8,13]) so existing
+# boards behave identically until an admin changes the scale.
+DEFAULT_POINTS_SCALE = [1, 2, 3, 5, 8, 13]
+POINTS_SCALE_SETTING_KEY = "points_scale"
 
 
 @contextmanager
@@ -137,6 +144,11 @@ def init_db(db_path: Optional[str] = None) -> None:
                     CHECK(role IN ('admin', 'lead', 'member', 'viewer')),
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
+
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
             """
         )
 
@@ -160,6 +172,9 @@ def init_db(db_path: Optional[str] = None) -> None:
         # exactly-one-active data (idempotent, safe for live DBs). Runs after
         # seed_sprints so a fresh board converges on exactly one active.
         _migrate_sprint_status(conn)
+        # Points scale: seed the default picker options once; an admin edit
+        # afterwards is never overwritten (INSERT OR IGNORE).
+        seed_points_scale(conn)
         # L10: case-insensitive tag-name uniqueness (dedupe legacy case-only
         # dupes first so the NOCASE index can never break startup).
         _enforce_tag_name_uniqueness(conn)
@@ -557,6 +572,50 @@ def seed_sprints(conn: sqlite3.Connection) -> None:
     )
 
 
+def seed_points_scale(conn: sqlite3.Connection) -> None:
+    """Seed the default points scale once (never overwrites an admin edit)."""
+    conn.execute(
+        "INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)",
+        (POINTS_SCALE_SETTING_KEY, json.dumps(DEFAULT_POINTS_SCALE)),
+    )
+
+
+def get_points_scale(conn: sqlite3.Connection) -> List[int]:
+    """Current points scale (ascending ints); default when unset/corrupt.
+
+    Corrupt rows (bad JSON, empty, non-int entries) fall back to the
+    default instead of ever raising — reads never 500.
+    """
+    row = conn.execute(
+        "SELECT value FROM app_settings WHERE key = ?", (POINTS_SCALE_SETTING_KEY,)
+    ).fetchone()
+    if row is None:
+        return list(DEFAULT_POINTS_SCALE)
+    try:
+        raw = json.loads(row["value"])
+    except (ValueError, TypeError):
+        return list(DEFAULT_POINTS_SCALE)
+    if not isinstance(raw, list) or not raw:
+        return list(DEFAULT_POINTS_SCALE)
+    scale: List[int] = []
+    for v in raw:
+        if isinstance(v, bool) or not isinstance(v, int):
+            return list(DEFAULT_POINTS_SCALE)
+        scale.append(v)
+    return scale
+
+
+def set_points_scale(conn: sqlite3.Connection, scale: List[int]) -> List[int]:
+    """Persist a validated scale (deduped + ascending); returns stored value."""
+    stored = sorted(set(scale))
+    conn.execute(
+        "INSERT INTO app_settings (key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (POINTS_SCALE_SETTING_KEY, json.dumps(stored)),
+    )
+    return stored
+
+
 # Seeded admin login (dev): admin@sprintflow.local / Admin123!
 SEED_ADMIN_EMAIL = "admin@sprintflow.local"
 SEED_ADMIN_NAME = "Admin"
@@ -602,6 +661,9 @@ def reset_db(db_path: Optional[str] = None) -> None:
         conn.execute("DELETE FROM tags")
         seed_data(conn)
         _migrate_sprint_status(conn)
+        # Reset restores the default scale (admin edits are board config).
+        conn.execute("DELETE FROM app_settings WHERE key = ?", (POINTS_SCALE_SETTING_KEY,))
+        seed_points_scale(conn)
 
 
 MAX_ASSIGNEES = 10

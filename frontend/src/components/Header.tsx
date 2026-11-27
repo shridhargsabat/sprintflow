@@ -4,6 +4,7 @@ import { useState } from 'react';
 import {
   Database,
   Download,
+  Hash,
   Kanban,
   Layers,
   LayoutGrid,
@@ -37,6 +38,7 @@ export interface HeaderProps {
   onOpenTeam: () => void;
   onOpenUsers: () => void;
   onOpenTags: () => void;
+  onOpenPointsScale: () => void;
   onNewTask: () => void;
   onExportJson: () => void;
   onImportJson: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -54,6 +56,7 @@ export default function Header({
   onOpenTeam,
   onOpenUsers,
   onOpenTags,
+  onOpenPointsScale,
   onNewTask,
   onExportJson,
   onImportJson,
@@ -164,6 +167,11 @@ export default function Header({
                         <ShieldCheck className="w-3.5 h-3.5" /> Manage Users
                       </button>
                     )}
+                    {isAdmin && (
+                      <button type="button" onClick={() => { setUserMenuOpen(false); onOpenPointsScale(); }} className="w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-slate-900/5 dark:hover:bg-white/10 flex items-center gap-2.5">
+                        <Hash className="w-3.5 h-3.5" /> Points Scale
+                      </button>
+                    )}
                     <button type="button" onClick={() => { setUserMenuOpen(false); onOpenTags(); }} className="w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-slate-900/5 dark:hover:bg-white/10 flex items-center gap-2.5">
                       <Tags className="w-3.5 h-3.5" /> Manage Tags
                     </button>
@@ -211,6 +219,11 @@ export default function Header({
                   {isAdmin && (
                     <button type="button" onClick={() => { onCloseMenu(); onOpenUsers(); }} className="md:hidden w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-slate-900/5 dark:hover:bg-white/10 flex items-center gap-2.5">
                       <ShieldCheck className="w-3.5 h-3.5" /> Manage Users
+                    </button>
+                  )}
+                  {isAdmin && (
+                    <button type="button" onClick={() => { onCloseMenu(); onOpenPointsScale(); }} className="md:hidden w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-slate-900/5 dark:hover:bg-white/10 flex items-center gap-2.5">
+                      <Hash className="w-3.5 h-3.5" /> Points Scale
                     </button>
                   )}
                   <button type="button" onClick={() => { onCloseMenu(); onOpenTags(); }} className="md:hidden w-full px-4 py-2 text-left text-xs font-medium dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.6)] hover:bg-slate-900/5 dark:hover:bg-white/10 flex items-center gap-2.5">

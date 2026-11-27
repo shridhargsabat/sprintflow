@@ -268,5 +268,10 @@ export const api = {
   updateTag: (id: string, payload: UpdateTagPayload): Promise<Tag> =>
     request<Tag>(`/tags/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) }),
   deleteTag: (id: string): Promise<{ deleted: string }> =>
-    request<{ deleted: string }>(`/tags/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    request<{ deleted: string }>(`/tags/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  getPointsScale: (): Promise<{ scale: number[] }> =>
+    request<{ scale: number[] }>('/settings/points-scale'),
+  updatePointsScale: (scale: number[]): Promise<{ scale: number[] }> =>
+    request<{ scale: number[] }>('/settings/points-scale', { method: 'PUT', body: JSON.stringify({ scale }) })
 };
