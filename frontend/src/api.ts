@@ -1,4 +1,4 @@
-import type { BoardImport, SprintConfig, SprintPatch, SprintStatus, Task, TaskActivityEntry, TaskPayload, TaskStatus, TeamMember } from './types';
+import type { BoardImport, SprintConfig, SprintPatch, SprintReport, SprintStatus, Task, TaskActivityEntry, TaskPayload, TaskStatus, TeamMember } from './types';
 
 export type { SprintStatus };
 
@@ -256,6 +256,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ target_sprint: targetSprint })
     }),
+  getSprintReport: (id: string): Promise<SprintReport> =>
+    request<SprintReport>(`/sprints/${encodeURIComponent(id)}/report`),
 
   login: (email: string, password: string): Promise<LoginResponse> =>
     request<LoginResponse>('/auth/login', {

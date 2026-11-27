@@ -3,6 +3,7 @@ import { Plus, X } from 'lucide-react';
 import Calendar from './Calendar';
 import Dropdown from './Dropdown';
 import ConfirmDialog from './ConfirmDialog';
+import { SprintReportModal } from './SprintReportModal';
 import { GLASS_PANEL, GLASS_PILL } from '../constants';
 import { formatShortDate } from '../utils/format';
 import { suggestNextSprintName } from '../utils/sprint';
@@ -57,7 +58,8 @@ function SprintRow({
   onSave,
   onActivate,
   onRequestClose,
-  onRequestRollover
+  onRequestRollover,
+  onReport
 }: {
   sprint: SprintConfig;
   canManage: boolean;
@@ -67,6 +69,7 @@ function SprintRow({
   onActivate: (id: string) => void;
   onRequestClose: (sprint: SprintConfig) => void;
   onRequestRollover: (sprint: SprintConfig) => void;
+  onReport: (id: string) => void;
 }) {
   const [name, setName] = useState<string>(sprint.name);
   const [startDate, setStartDate] = useState<string>(sprint.startDate);
@@ -130,35 +133,48 @@ function SprintRow({
           </div>
         </>
       )}
-      {canManage && status !== 'closed' && (
-        <div className="flex items-center justify-between gap-2 pt-1">
-          <div className="flex items-center gap-2">
-            {status !== 'active' && (
+      {/* Report is read-only: always visible (viewers + closed sprints too). */}
+      <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => onReport(sprint.id)}
+            data-testid={`sprint-report-${sprint.id}`}
+            className="px-4 py-2 rounded-full text-xs font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-500/10 border border-blue-400/25 min-h-[44px] md:min-h-0"
+          >
+            Report
+          </button>
+          {canManage && status !== 'closed' && (
+            <>
+              {status !== 'active' && (
+                <button
+                  type="button"
+                  onClick={() => onActivate(sprint.id)}
+                  className="px-4 py-2 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-400/30 hover:bg-emerald-500/25"
+                >
+                  Activate
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => onActivate(sprint.id)}
-                className="px-4 py-2 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-400/30 hover:bg-emerald-500/25"
+                onClick={() => onRequestClose(sprint)}
+                className="px-4 py-2 rounded-full text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-500/10 border border-slate-400/25"
               >
-                Activate
+                Close
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() => onRequestClose(sprint)}
-              className="px-4 py-2 rounded-full text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-500/10 border border-slate-400/25"
-            >
-              Close
-            </button>
-            <button
-              type="button"
-              disabled={!hasRolloverTarget}
-              onClick={() => onRequestRollover(sprint)}
-              title={`${unfinishedCount} unfinished ${unfinishedCount === 1 ? 'task' : 'tasks'}`}
-              className="px-4 py-2 rounded-full text-xs font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-500/10 border border-blue-400/25 min-h-[44px] md:min-h-0 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Move unfinished to…
-            </button>
-          </div>
+              <button
+                type="button"
+                disabled={!hasRolloverTarget}
+                onClick={() => onRequestRollover(sprint)}
+                title={`${unfinishedCount} unfinished ${unfinishedCount === 1 ? 'task' : 'tasks'}`}
+                className="px-4 py-2 rounded-full text-xs font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-500/10 border border-blue-400/25 min-h-[44px] md:min-h-0 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Move unfinished to…
+              </button>
+            </>
+          )}
+        </div>
+        {canManage && status !== 'closed' && (
           <button
             type="button"
             disabled={!dirty || !startDate}
@@ -167,8 +183,8 @@ function SprintRow({
           >
             Save
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -280,6 +296,7 @@ export function SprintSettingsModal({ sprints, tasks, onClose, onSave, onCreate,
   const [rollover, setRollover] = useState<string>('Backlog');
   const [pendingRollover, setPendingRollover] = useState<SprintConfig | null>(null);
   const [rolloverTarget, setRolloverTarget] = useState<string>('');
+  const [reportSprintId, setReportSprintId] = useState<string | null>(null);
 
   const openSprints = sprints.filter(s => statusOf(s) !== 'closed');
   const rolloverOptions =
@@ -386,6 +403,7 @@ export function SprintSettingsModal({ sprints, tasks, onClose, onSave, onCreate,
                 onActivate={onActivate}
                 onRequestClose={handleRequestClose}
                 onRequestRollover={handleRequestRollover}
+                onReport={setReportSprintId}
               />
             ))
           )}
@@ -396,6 +414,14 @@ export function SprintSettingsModal({ sprints, tasks, onClose, onSave, onCreate,
           </div>
         </div>
       </div>
+
+      {reportSprintId !== null && (
+        <SprintReportModal
+          sprintId={reportSprintId}
+          sprints={sprints}
+          onClose={() => setReportSprintId(null)}
+        />
+      )}
 
       <ConfirmDialog
         open={pendingRollover !== null}
