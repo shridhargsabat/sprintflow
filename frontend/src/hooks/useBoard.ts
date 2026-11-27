@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api, type CloseSprintResult, type CreateSprintPayload, type RolloverSprintResult } from '../api';
 import { DEFAULT_POINTS_SCALE, STATUS_COLUMNS } from '../constants';
 import { resolveSprintName } from '../utils/sprint';
-import type { BoardImport, SprintConfig, SprintPatch, Task, TaskFormValues, TaskStatus, TeamMember, Toast, ToastType } from '../types';
+import type { BoardImport, BoardLink, SprintConfig, SprintPatch, Task, TaskFormValues, TaskStatus, TeamMember, Toast, ToastType } from '../types';
 
 export interface UseBoardDeps {
   setTaskModal: (v: { open: boolean; task: Task | null; defaultStatus: TaskStatus }) => void;
@@ -164,7 +164,25 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
   };
 
   const handleExportJson = () => {
-    const blob = new Blob([JSON.stringify({ team, tasks }, null, 2)], { type: 'application/json' });
+    // Rebuild the {from, to, kind} link section from the embedded payloads:
+    // subtasks live on the parent; related pairs are deduped canonically.
+    const links: BoardLink[] = [];
+    const seen = new Set<string>();
+    for (const t of tasks) {
+      for (const s of t.subtasks ?? []) {
+        links.push({ from: t.id, to: s.id, kind: 'subtask' });
+      }
+      for (const r of (t.related ?? [])) {
+        const a = t.id < r.id ? t.id : r.id;
+        const b = t.id < r.id ? r.id : t.id;
+        const key = `${a}|${b}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          links.push({ from: a, to: b, kind: 'related' });
+        }
+      }
+    }
+    const blob = new Blob([JSON.stringify({ team, tasks, links }, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

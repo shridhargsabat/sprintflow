@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 import auth
 import db
-from models import StatusUpdatePayload, TaskPayload
+from models import StatusUpdatePayload, TaskLinkPayload, TaskPayload
 
 router = APIRouter(prefix="/api")
 
@@ -75,47 +75,11 @@ def create_task(
     user: Dict[str, Any] = Depends(auth.require_permissions("tasks.create")),
 ) -> Dict[str, Any]:
     _require_nonblank_title_sprint(payload)
-    created: Optional[Dict[str, Any]] = None
     with db.get_conn() as conn:
         assignees = db.validate_assignees(conn, payload.assignees)
         tags = db.validate_tags(conn, payload.tags)
         _require_points_in_scale(conn, payload.points)
-        # H1: next_task_id is SELECT-max+1, so concurrent creators can collide
-        # on the same DEV-* id. Retry with a recomputed id; never leak a 500.
-        for _ in range(CREATE_ID_MAX_ATTEMPTS):
-            task_id = db.next_task_id(conn)
-            try:
-                conn.execute(
-                    """
-                    INSERT INTO tasks
-                        (id, title, description, due_date, status, priority, sprint, points)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        task_id,
-                        payload.title.strip(),
-                        payload.description.strip(),
-                        payload.dueDate,
-                        payload.status,
-                        payload.priority,
-                        payload.sprint,
-                        payload.points,
-                    ),
-                )
-            except sqlite3.IntegrityError:
-                continue
-            db.set_task_assignees(conn, task_id, assignees)
-            db.set_task_tags(conn, task_id, tags)
-            created = db.fetch_task(conn, task_id)
-            break
-        if created is None:
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    "Could not allocate a unique task id after "
-                    f"{CREATE_ID_MAX_ATTEMPTS} attempts; please retry."
-                ),
-            )
+        created = _insert_task(conn, payload, assignees, tags)
     # Trail entry only after the insert committed (guarded; never breaks create).
     db.log_activity(
         created["id"],
@@ -123,6 +87,58 @@ def create_task(
         action=db.ACTIVITY_ACTION_CREATED,
         new_value=created["title"],
     )
+    return created
+
+
+def _insert_task(
+    conn: sqlite3.Connection,
+    payload: TaskPayload,
+    assignees: List[Any],
+    tags: List[str],
+    sprint_override: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Insert one task row (+assignees/tags) with id-collision retries (H1).
+
+    Shared by POST /tasks and POST /tasks/{id}/children; the child path
+    overrides the sprint with the parent's. Raises 404/503, never leaks 500.
+    """
+    created: Optional[Dict[str, Any]] = None
+    # H1: next_task_id is SELECT-max+1, so concurrent creators can collide
+    # on the same DEV-* id. Retry with a recomputed id; never leak a 500.
+    for _ in range(CREATE_ID_MAX_ATTEMPTS):
+        task_id = db.next_task_id(conn)
+        try:
+            conn.execute(
+                """
+                INSERT INTO tasks
+                    (id, title, description, due_date, status, priority, sprint, points)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    task_id,
+                    payload.title.strip(),
+                    payload.description.strip(),
+                    payload.dueDate,
+                    payload.status,
+                    payload.priority,
+                    sprint_override if sprint_override is not None else payload.sprint,
+                    payload.points,
+                ),
+            )
+        except sqlite3.IntegrityError:
+            continue
+        db.set_task_assignees(conn, task_id, assignees)
+        db.set_task_tags(conn, task_id, tags)
+        created = db.fetch_task(conn, task_id)
+        break
+    if created is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Could not allocate a unique task id after "
+                f"{CREATE_ID_MAX_ATTEMPTS} attempts; please retry."
+            ),
+        )
     return created
 
 
@@ -302,3 +318,83 @@ def get_task_activity(
 ) -> List[Dict[str, Any]]:
     # Never 404s: legacy tasks simply return [] (no fabricated backfill).
     return db.list_task_activity(task_id)
+
+
+@router.post("/tasks/{task_id}/links", status_code=201)
+def add_link(
+    task_id: str,
+    payload: TaskLinkPayload,
+    user: Dict[str, Any] = Depends(auth.require_permissions("tasks.edit")),
+) -> Dict[str, str]:
+    with db.get_conn() as conn:
+        link = db.add_task_link(conn, task_id, payload.linked_task_id, payload.kind)
+    # Trail entry on the addressed task, after commit (guarded).
+    db.log_activity(
+        task_id,
+        actor=user,
+        action=db.ACTIVITY_ACTION_LINK,
+        field=link["kind"],
+        new_value=link["linked_task_id"],
+    )
+    return link
+
+
+@router.delete("/tasks/{task_id}/links/{linked_id}")
+def delete_link(
+    task_id: str,
+    linked_id: str,
+    kind: str = Query(...),
+    user: Dict[str, Any] = Depends(auth.require_permissions("tasks.edit")),
+) -> Dict[str, bool]:
+    with db.get_conn() as conn:
+        removed = db.remove_task_link(conn, task_id, linked_id, kind)
+    # Idempotent: missing links (or tasks) are not errors — the desired
+    # end-state (no link) already holds. Log only actual removals.
+    if removed:
+        db.log_activity(
+            task_id,
+            actor=user,
+            action=db.ACTIVITY_ACTION_LINK,
+            field=kind,
+            old_value=linked_id,
+        )
+    return {"removed": removed}
+
+
+@router.post("/tasks/{task_id}/children", status_code=201)
+def create_child(
+    task_id: str,
+    payload: TaskPayload,
+    user: Dict[str, Any] = Depends(auth.require_permissions("tasks.edit")),
+) -> Dict[str, Any]:
+    _require_nonblank_title_sprint(payload)
+    with db.get_conn() as conn:
+        parent = conn.execute(
+            "SELECT sprint FROM tasks WHERE id = ?", (task_id,)
+        ).fetchone()
+        if parent is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        assignees = db.validate_assignees(conn, payload.assignees)
+        tags = db.validate_tags(conn, payload.tags)
+        _require_points_in_scale(conn, payload.points)
+        created = _insert_task(conn, payload, assignees, tags, sprint_override=parent["sprint"])
+        db.add_task_link(conn, task_id, created["id"], db.TASK_LINK_SUBTASK)
+    # Normal 'created' entry on the child PLUS a 'link' entry on the parent.
+    db.log_activity_many(
+        [
+            {
+                "task_id": created["id"],
+                "actor": user,
+                "action": db.ACTIVITY_ACTION_CREATED,
+                "new_value": created["title"],
+            },
+            {
+                "task_id": task_id,
+                "actor": user,
+                "action": db.ACTIVITY_ACTION_LINK,
+                "field": db.TASK_LINK_SUBTASK,
+                "new_value": created["id"],
+            },
+        ]
+    )
+    return created

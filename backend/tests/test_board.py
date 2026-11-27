@@ -119,6 +119,10 @@ def test_import_round_trip_and_reset_restores_seeds(client):
     for task in sorted(payload["tasks"], key=lambda t: t["id"]):
         expected = {k: v for k, v in task.items() if k != "assignees"}
         expected["assignees"] = [enriched_mx1] if task["id"] == "IMP-1" else []
+        # Task-links shape: link-free tasks carry empty link fields.
+        expected["parent"] = None
+        expected["subtasks"] = []
+        expected["related"] = []
         expected_tasks.append(expected)
     assert got_tasks == expected_tasks
 
@@ -184,7 +188,7 @@ def test_export_includes_userId_and_linkedUser(client):
 
     exported = client.get("/api/export")
     assert exported.status_code == 200
-    assert set(exported.json().keys()) == {"team", "tasks"}
+    assert set(exported.json().keys()) == {"team", "tasks", "links"}
     got = next(m for m in exported.json()["team"] if m["id"] == target["id"])
     assert got["userId"] == me["id"]
     assert got["linkedUser"] == {"name": me["name"], "email": me["email"]}

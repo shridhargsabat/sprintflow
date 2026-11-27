@@ -113,6 +113,16 @@ def init_db(db_path: Optional[str] = None) -> None:
             CREATE INDEX IF NOT EXISTS idx_task_tags_task ON task_tags(task_id);
             CREATE INDEX IF NOT EXISTS idx_task_tags_tag ON task_tags(tag_id);
 
+            CREATE TABLE IF NOT EXISTS task_links (
+                task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                linked_task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL CHECK(kind IN ('subtask','related')),
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE (task_id, linked_task_id, kind)
+            );
+            CREATE INDEX IF NOT EXISTS idx_task_links_task ON task_links(task_id);
+            CREATE INDEX IF NOT EXISTS idx_task_links_linked ON task_links(linked_task_id);
+
             CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
             CREATE INDEX IF NOT EXISTS idx_tasks_sprint ON tasks(sprint);
             CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority);
@@ -679,6 +689,7 @@ def reset_db(db_path: Optional[str] = None) -> None:
         conn.execute("DELETE FROM task_activity")
         conn.execute("DELETE FROM task_tags")
         conn.execute("DELETE FROM task_assignees")
+        conn.execute("DELETE FROM task_links")
         conn.execute("DELETE FROM tasks")
         conn.execute("DELETE FROM team_members")
         conn.execute("DELETE FROM sprints")
@@ -766,8 +777,9 @@ def row_to_task(
     row: sqlite3.Row,
     assignees: Optional[List[Dict[str, Any]]] = None,
     tags: Optional[List[str]] = None,
+    links: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    return {
+    task = {
         "id": row["id"],
         "title": row["title"],
         "description": row["description"],
@@ -778,6 +790,27 @@ def row_to_task(
         "sprint": row["sprint"],
         "points": row["points"],
         "tags": list(tags) if tags else [],
+    }
+    task["parent"] = links["parent"] if links else None
+    task["subtasks"] = list(links["subtasks"]) if links else []
+    task["related"] = list(links["related"]) if links else []
+    return task
+
+
+def link_payload_for_task(conn: sqlite3.Connection, task_id: str) -> Dict[str, Any]:
+    """Embedded link summaries for one task: parent/subtasks/related.
+
+    NOTE (N+1): list_tasks calls this once per task (4 small indexed
+    queries each). Fine at board scale (hundreds of tasks); batch into
+    links_by_task if list latency ever matters.
+    """
+    links = links_for_task(conn, task_id)
+    ids = [i for i in [links["parent"], *links["subtasks"], *links["related"]] if i]
+    summaries = link_summaries(conn, ids)
+    return {
+        "parent": summaries.get(links["parent"]) if links["parent"] else None,
+        "subtasks": [summaries[i] for i in links["subtasks"] if i in summaries],
+        "related": [summaries[i] for i in links["related"] if i in summaries],
     }
 
 
@@ -790,6 +823,7 @@ def fetch_task(conn: sqlite3.Connection, task_id: str) -> Dict[str, Any]:
         row,
         assignees_for_task(conn, task_id),
         tags_for_task(conn, task_id),
+        link_payload_for_task(conn, task_id),
     )
 
 
@@ -1384,7 +1418,12 @@ def list_tasks(
         assignee_map = assignees_by_task(conn, task_ids)
         tag_map = tags_by_task(conn, task_ids)
         return [
-            row_to_task(r, assignee_map.get(r["id"], []), tag_map.get(r["id"], []))
+            row_to_task(
+                r,
+                assignee_map.get(r["id"], []),
+                tag_map.get(r["id"], []),
+                link_payload_for_task(conn, r["id"]),
+            )
             for r in rows
         ]
 
@@ -1525,6 +1564,140 @@ def tags_for_task(conn: sqlite3.Connection, task_id: str) -> List[str]:
     return tags_by_task(conn, [task_id]).get(task_id, [])
 
 
+# ---------- task links: subtasks (directed) + related (undirected) ----------
+
+TASK_LINK_SUBTASK = "subtask"
+TASK_LINK_RELATED = "related"
+TASK_LINK_KINDS = (TASK_LINK_SUBTASK, TASK_LINK_RELATED)
+
+
+def _require_task(conn: sqlite3.Connection, task_id: str) -> None:
+    row = conn.execute("SELECT id FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+
+def _subtask_reaches(conn: sqlite3.Connection, start_id: str, target_id: str) -> bool:
+    """True if target is reachable from start following subtask edges (BFS)."""
+    seen, stack = set(), [start_id]
+    while stack:
+        cur = stack.pop()
+        if cur == target_id:
+            return True
+        if cur in seen:
+            continue
+        seen.add(cur)
+        for r in conn.execute(
+            "SELECT linked_task_id FROM task_links WHERE task_id = ? AND kind = 'subtask'",
+            (cur,),
+        ).fetchall():
+            stack.append(r["linked_task_id"])
+    return False
+
+
+def add_task_link(
+    conn: sqlite3.Connection, task_id: str, linked_id: str, kind: str
+) -> Dict[str, str]:
+    """Link two tasks. Idempotent: re-adding returns the existing link."""
+    if kind not in TASK_LINK_KINDS:
+        raise HTTPException(
+            status_code=422, detail="kind must be 'subtask' or 'related'"
+        )
+    if task_id == linked_id:
+        raise HTTPException(status_code=422, detail="A task cannot link to itself")
+    _require_task(conn, task_id)
+    _require_task(conn, linked_id)
+    if kind == TASK_LINK_SUBTASK and _subtask_reaches(conn, linked_id, task_id):
+        raise HTTPException(
+            status_code=422, detail="Subtask link would create a cycle"
+        )
+    if kind == TASK_LINK_RELATED and linked_id < task_id:
+        task_id, linked_id = linked_id, task_id  # canonical order: one row per pair
+    conn.execute(
+        "INSERT OR IGNORE INTO task_links (task_id, linked_task_id, kind) VALUES (?, ?, ?)",
+        (task_id, linked_id, kind),
+    )
+    return {"task_id": task_id, "linked_task_id": linked_id, "kind": kind}
+
+
+def remove_task_link(
+    conn: sqlite3.Connection, task_id: str, linked_id: str, kind: str
+) -> bool:
+    """Remove a link. Returns True when a row was deleted (idempotent)."""
+    if kind not in TASK_LINK_KINDS:
+        raise HTTPException(
+            status_code=422, detail="kind must be 'subtask' or 'related'"
+        )
+    if kind == TASK_LINK_RELATED and linked_id < task_id:
+        task_id, linked_id = linked_id, task_id
+    cur = conn.execute(
+        "DELETE FROM task_links WHERE task_id = ? AND linked_task_id = ? AND kind = ?",
+        (task_id, linked_id, kind),
+    )
+    return cur.rowcount > 0
+
+
+def links_for_task(conn: sqlite3.Connection, task_id: str) -> Dict[str, Any]:
+    """{'parent': id|None, 'subtasks': [ids...], 'related': [ids...]}."""
+    parent = conn.execute(
+        "SELECT task_id FROM task_links WHERE linked_task_id = ? AND kind = 'subtask' LIMIT 1",
+        (task_id,),
+    ).fetchone()
+    subtasks = [
+        r["linked_task_id"]
+        for r in conn.execute(
+            "SELECT linked_task_id FROM task_links WHERE task_id = ? AND kind = 'subtask' ORDER BY rowid",
+            (task_id,),
+        ).fetchall()
+    ]
+    related = [
+        r["id"]
+        for r in conn.execute(
+            """SELECT linked_task_id AS id FROM task_links WHERE task_id = ? AND kind = 'related'
+               UNION SELECT task_id AS id FROM task_links WHERE linked_task_id = ? AND kind = 'related'
+               ORDER BY id""",
+            (task_id, task_id),
+        ).fetchall()
+    ]
+    return {
+        "parent": parent["task_id"] if parent else None,
+        "subtasks": subtasks,
+        "related": related,
+    }
+
+
+def link_summaries(
+    conn: sqlite3.Connection, task_ids: List[str]
+) -> Dict[str, Dict[str, Any]]:
+    """{id: {id, title, status, points}} for existing ids (one query)."""
+    out: Dict[str, Dict[str, Any]] = {}
+    if not task_ids:
+        return out
+    placeholders = ",".join("?" for _ in task_ids)
+    for r in conn.execute(
+        f"SELECT id, title, status, points FROM tasks WHERE id IN ({placeholders})",
+        task_ids,
+    ).fetchall():
+        out[str(r["id"])] = {
+            "id": r["id"],
+            "title": r["title"],
+            "status": r["status"],
+            "points": r["points"],
+        }
+    return out
+
+
+def list_task_links(conn: sqlite3.Connection) -> List[Dict[str, str]]:
+    """Every link as {from, to, kind}, sorted (board-export shape)."""
+    return [
+        {"from": r["task_id"], "to": r["linked_task_id"], "kind": r["kind"]}
+        for r in conn.execute(
+            "SELECT task_id, linked_task_id, kind FROM task_links "
+            "ORDER BY task_id, linked_task_id, kind"
+        ).fetchall()
+    ]
+
+
 def set_task_tags(
     conn: sqlite3.Connection, task_id: str, canonical_names: List[str]
 ) -> None:
@@ -1553,6 +1726,7 @@ ACTIVITY_ACTION_CREATED = "created"
 ACTIVITY_ACTION_UPDATED = "updated"
 ACTIVITY_ACTION_ROLLOVER = "rollover"
 ACTIVITY_ACTION_DELETED = "deleted"
+ACTIVITY_ACTION_LINK = "link"
 
 # Task-dict fields diffed for the trail (PUT /tasks/{id}). Only fields whose
 # value actually changed produce rows — unchanged fields log nothing.

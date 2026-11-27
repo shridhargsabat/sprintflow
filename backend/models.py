@@ -43,6 +43,11 @@ class StatusUpdatePayload(BaseModel):
     status: StatusType
 
 
+class TaskLinkPayload(BaseModel):
+    linked_task_id: str
+    kind: str  # validated by db.add_task_link -> HTTP 422 when unknown
+
+
 class TagCreatePayload(BaseModel):
     name: str = Field(..., min_length=1, max_length=60)
     color: Optional[str] = Field(default=None, max_length=40)
@@ -95,6 +100,9 @@ class ImportPayload(BaseModel):
     # per-row errors instead of a bare 422/500.
     team: List[Any]
     tasks: List[Any]
+    # Optional link section (export shape {from, to, kind}); malformed or
+    # dangling link rows are skipped with warnings, never fatal.
+    links: List[Any] = []
 
 
 class SprintUpdate(BaseModel):

@@ -74,6 +74,12 @@ function entrySentence(entry: TaskActivityEntry, sprints: SprintConfig[]): strin
     const to = valueDisplay('sprint', entry.newValue, sprints);
     return `${actor} moved task from ${from} to ${to}`;
   }
+  if (entry.action === 'link') {
+    const what = entry.field === 'related' ? 'related task' : 'subtask';
+    if (entry.newValue && !entry.oldValue) return `${actor} linked ${what} ${entry.newValue}`;
+    if (entry.oldValue && !entry.newValue) return `${actor} unlinked ${what} ${entry.oldValue}`;
+    return `${actor} changed ${what} link`;
+  }
   const field = entry.field ?? '';
   const from = valueDisplay(field, entry.oldValue, sprints);
   const to = valueDisplay(field, entry.newValue, sprints);

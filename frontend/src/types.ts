@@ -40,6 +40,30 @@ export interface Task {
   sprint: string;
   points: number;
   tags: string[];
+  parent: TaskLinkSummary | null;
+  subtasks: TaskLinkSummary[];
+  related: TaskLinkSummary[];
+}
+
+export interface TaskLinkSummary {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  points: number;
+}
+
+export type TaskLinkKind = 'subtask' | 'related';
+
+export interface TaskLink {
+  task_id: string;
+  linked_task_id: string;
+  kind: TaskLinkKind;
+}
+
+export interface BoardLink {
+  from: string;
+  to: string;
+  kind: TaskLinkKind;
 }
 
 export interface TaskPayload {
@@ -84,6 +108,7 @@ export interface DashboardSummary {
 export interface BoardImport {
   team: TeamMember[];
   tasks: Task[];
+  links?: BoardLink[];
 }
 
 export type SprintStatus = 'planned' | 'active' | 'closed';
@@ -103,7 +128,7 @@ export interface SprintPatch {
   lengthDays?: number;
 }
 
-export type TaskActivityAction = 'created' | 'updated' | 'rollover' | 'deleted';
+export type TaskActivityAction = 'created' | 'updated' | 'rollover' | 'deleted' | 'link';
 
 export interface TaskActivityEntry {
   id: number;
