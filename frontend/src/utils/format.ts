@@ -79,3 +79,27 @@ export function getDueMeta(iso: string, status: TaskStatus): { text: string; cls
   if (diffDays <= 2) return { text: `${formatShortDate(iso)} (${diffDays}d)`, cls: 'text-amber-600 dark:text-amber-300 font-semibold' };
   return { text: formatShortDate(iso), cls: 'text-slate-600 dark:text-slate-400' };
 }
+
+/**
+ * Relative timestamp for the activity trail ('just now', '5m ago', ...).
+ * The backend stores UTC 'YYYY-MM-DD HH:MM:SS'; parse it as UTC so the
+ * delta is right in every timezone. Falls back to the raw string when
+ * unparseable. Older than 7 days renders an absolute short date.
+ */
+export function formatRelativeTime(stored: string): string {
+  const raw = String(stored || '').trim();
+  if (!raw) return '';
+  const iso = raw.includes('T') ? raw : raw.replace(' ', 'T') + 'Z';
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return raw;
+  const secs = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (secs < 60) return 'just now';
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days}d ago`;
+  return new Date(then).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}

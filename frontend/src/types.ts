@@ -102,3 +102,18 @@ export interface SprintPatch {
   startDate?: string;
   lengthDays?: number;
 }
+
+export type TaskActivityAction = 'created' | 'updated' | 'rollover' | 'deleted';
+
+export interface TaskActivityEntry {
+  id: number;
+  taskId: string;
+  actorId: number | null;
+  actor: string;
+  actorEmail: string;
+  action: TaskActivityAction;
+  field: string | null;
+  oldValue: string | null;
+  newValue: string | null;
+  createdAt: string;
+}

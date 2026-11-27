@@ -71,10 +71,10 @@ def activate_sprint(
 def close_sprint(
     sprint_id: str,
     payload: Optional[SprintClosePayload] = None,
-    _user: Dict[str, Any] = Depends(auth.require_permissions("sprints.manage")),
+    user: Dict[str, Any] = Depends(auth.require_permissions("sprints.manage")),
 ) -> Dict[str, Any]:
     result = db.close_sprint(
-        sprint_id, rollover_to=payload.rolloverTo if payload else None
+        sprint_id, rollover_to=payload.rolloverTo if payload else None, actor=user
     )
     if result is None:
         raise HTTPException(status_code=404, detail="Sprint not found")
