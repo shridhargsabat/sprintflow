@@ -100,6 +100,9 @@ class ImportPayload(BaseModel):
     # per-row errors instead of a bare 422/500.
     team: List[Any]
     tasks: List[Any]
+    # Optional link section (export shape {from, to, kind}); malformed or
+    # dangling link rows are skipped with warnings, never fatal.
+    links: List[Any] = []
 
 
 class SprintUpdate(BaseModel):

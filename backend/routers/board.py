@@ -16,6 +16,7 @@ router = APIRouter(prefix="/api")
 # M4 import guards: bound the work a single import can do.
 MAX_IMPORT_TEAM = 1000
 MAX_IMPORT_TASKS = 10000
+MAX_IMPORT_LINKS = 10000
 MAX_IMPORT_BODY_BYTES = 5 * 1024 * 1024
 
 
@@ -54,7 +55,9 @@ def dashboard_summary(
 def export_board(
     _user: Dict[str, Any] = Depends(auth.require_permissions("data.export")),
 ) -> Dict[str, Any]:
-    return {"team": db.list_team(), "tasks": db.list_tasks()}
+    with db.get_conn() as conn:
+        links = db.list_task_links(conn)
+    return {"team": db.list_team(), "tasks": db.list_tasks(), "links": links}
 
 
 @router.post("/import")
@@ -94,6 +97,11 @@ def import_board(
         raise HTTPException(
             status_code=400,
             detail=f"Too many tasks: {len(payload.tasks)} (max {MAX_IMPORT_TASKS})",
+        )
+    if len(payload.links or []) > MAX_IMPORT_LINKS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many links: {len(payload.links)} (max {MAX_IMPORT_LINKS})",
         )
     # M4: every row must satisfy the single-item endpoint rules. All errors
     # are collected and returned as one 400 BEFORE wiping anything, so a
@@ -141,6 +149,7 @@ def import_board(
         conn.execute("DELETE FROM task_activity")
         conn.execute("DELETE FROM task_tags")
         conn.execute("DELETE FROM task_assignees")
+        conn.execute("DELETE FROM task_links")
         conn.execute("DELETE FROM tasks")
         conn.execute("DELETE FROM team_members")
         # Tag master: auto-create any imported task tags missing from the
@@ -209,6 +218,10 @@ def import_board(
                         "VALUES (?, NULL, ?)",
                         (t["id"], ident),
                     )
+        # Links last: tasks first so endpoints exist; dangling/malformed
+        # rows are skipped with warnings, never fatal (import contract).
+        for link in payload.links or []:
+            _import_link_row(conn, link, warnings)
     return {"team": len(payload.team), "tasks": len(payload.tasks), "warnings": warnings}
 
 
@@ -217,6 +230,22 @@ def _format_validation_errors(prefix: str, exc: ValidationError) -> List[str]:
         f"{prefix}.{'.'.join(str(p) for p in err['loc'])}: {err['msg']}"
         for err in exc.errors()
     ]
+
+
+def _import_link_row(conn: Any, link: Any, warnings: List[str]) -> None:
+    """Restore one imported link; malformed/dangling rows warn + skip."""
+    if not isinstance(link, dict):
+        warnings.append(f"Link row {link!r} is not an object; skipped")
+        return
+    src, dst, kind = link.get("from"), link.get("to"), link.get("kind")
+    if not isinstance(src, str) or not isinstance(dst, str) or not isinstance(kind, str):
+        warnings.append(f"Link row {link!r} must have string from/to/kind; skipped")
+        return
+    try:
+        db.add_task_link(conn, src, dst, kind)
+    except HTTPException as exc:
+        # 404 (missing endpoint) / 422 (bad kind, self-link, cycle).
+        warnings.append(f"Link '{src}' -> '{dst}' ({kind!r}) skipped: {exc.detail}")
 
 
 def _validate_import_team_row(m: Any, index: int, seen_ids: set) -> List[str]:

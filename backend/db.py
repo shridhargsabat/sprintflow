@@ -1687,6 +1687,17 @@ def link_summaries(
     return out
 
 
+def list_task_links(conn: sqlite3.Connection) -> List[Dict[str, str]]:
+    """Every link as {from, to, kind}, sorted (board-export shape)."""
+    return [
+        {"from": r["task_id"], "to": r["linked_task_id"], "kind": r["kind"]}
+        for r in conn.execute(
+            "SELECT task_id, linked_task_id, kind FROM task_links "
+            "ORDER BY task_id, linked_task_id, kind"
+        ).fetchall()
+    ]
+
+
 def set_task_tags(
     conn: sqlite3.Connection, task_id: str, canonical_names: List[str]
 ) -> None:

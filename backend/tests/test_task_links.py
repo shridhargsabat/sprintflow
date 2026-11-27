@@ -332,3 +332,107 @@ def test_link_unlink_child_log_activity(client):
     trail = client.get(f"/api/tasks/{parent}/activity").json()
     assert (trail[0]["action"], trail[0]["field"]) == ("link", "subtask")
     assert (trail[0]["oldValue"], trail[0]["newValue"]) == (child, None)
+
+
+# ---------- step 4: delete + import/export ----------
+
+def test_delete_parent_cascades_links_children_survive(client):
+    parent, child, peer = _ids(client, "Gone parent", "Orphan child", "Peer")
+    assert _link_http(client, parent, child, "subtask").status_code == 201
+    assert _link_http(client, parent, peer, "related").status_code == 201
+    assert client.delete(f"/api/tasks/{parent}").status_code == 200
+    tasks = _tasks_by_id(client)
+    assert parent not in tasks
+    assert tasks[child]["parent"] is None  # child survives, link gone
+    assert tasks[child]["subtasks"] == []
+    assert tasks[peer]["related"] == []
+    with db_lib.get_conn() as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM task_links WHERE task_id = ? OR linked_task_id = ?",
+            (parent, parent),
+        ).fetchone()[0]
+    assert count == 0
+
+
+def test_export_includes_links(client):
+    parent, child, peer = _ids(client, "Exp parent", "Exp child", "Exp peer")
+    assert _link_http(client, parent, child, "subtask").status_code == 201
+    assert _link_http(client, parent, peer, "related").status_code == 201
+    exported = client.get("/api/export")
+    assert exported.status_code == 200
+    links = exported.json()["links"]
+    assert {"from": parent, "to": child, "kind": "subtask"} in links
+    assert links == sorted(links, key=lambda l: (l["from"], l["to"], l["kind"]))
+
+
+def test_export_links_empty_by_default(client):
+    exported = client.get("/api/export").json()
+    assert exported["links"] == []
+
+
+def _import_payload(tasks, links):
+    return {
+        "team": [],
+        "tasks": [
+            {
+                "id": tid, "title": f"Imported {tid}", "description": "",
+                "assignees": [], "dueDate": "2026-12-20", "status": "todo",
+                "priority": "medium", "sprint": "Sprint 14", "points": 3,
+                "tags": ["QA"],
+            }
+            for tid in tasks
+        ],
+        "links": links,
+    }
+
+
+def test_import_restores_links(client):
+    payload = _import_payload(
+        ["IMP-P", "IMP-C", "IMP-R"],
+        [
+            {"from": "IMP-P", "to": "IMP-C", "kind": "subtask"},
+            {"from": "IMP-P", "to": "IMP-R", "kind": "related"},
+        ],
+    )
+    resp = client.post("/api/import", json=payload)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["warnings"] == []
+    tasks = _tasks_by_id(client)
+    assert [s["id"] for s in tasks["IMP-P"]["subtasks"]] == ["IMP-C"]
+    assert tasks["IMP-C"]["parent"]["id"] == "IMP-P"
+    assert [r["id"] for r in tasks["IMP-P"]["related"]] == ["IMP-R"]
+    assert [r["id"] for r in tasks["IMP-R"]["related"]] == ["IMP-P"]
+
+
+def test_import_skips_links_with_missing_tasks(client):
+    payload = _import_payload(
+        ["IMP-K", "IMP-K2"],
+        [
+            {"from": "IMP-K", "to": "IMP-K2", "kind": "subtask"},
+            {"from": "IMP-K", "to": "IMP-NOPE", "kind": "subtask"},
+            {"from": "IMP-GHOST", "to": "IMP-K", "kind": "related"},
+            {"from": "IMP-K", "to": "IMP-K2", "kind": "blocks"},
+            {"from": "IMP-K", "to": "IMP-K", "kind": "subtask"},
+            "not-a-link-row",
+        ],
+    )
+    resp = client.post("/api/import", json=payload)
+    assert resp.status_code == 200, resp.text
+    assert len(resp.json()["warnings"]) == 5  # one per skipped row
+    tasks = _tasks_by_id(client)
+    assert tasks["IMP-K2"]["parent"]["id"] == "IMP-K"  # valid link kept
+
+
+def test_export_import_round_trip_preserves_links(client):
+    parent = _create(client, title="RT parent")
+    child = _create(client, title="RT child")
+    assert _link_http(client, parent["id"], child["id"], "subtask").status_code == 201
+    exported = client.get("/api/export").json()
+    resp = client.post(
+        "/api/import",
+        json={"team": exported["team"], "tasks": exported["tasks"],
+              "links": exported["links"]},
+    )
+    assert resp.status_code == 200, resp.text
+    tasks = _tasks_by_id(client)
+    assert tasks[child["id"]]["parent"]["id"] == parent["id"]

@@ -188,7 +188,7 @@ def test_export_includes_userId_and_linkedUser(client):
 
     exported = client.get("/api/export")
     assert exported.status_code == 200
-    assert set(exported.json().keys()) == {"team", "tasks"}
+    assert set(exported.json().keys()) == {"team", "tasks", "links"}
     got = next(m for m in exported.json()["team"] if m["id"] == target["id"])
     assert got["userId"] == me["id"]
     assert got["linkedUser"] == {"name": me["name"], "email": me["email"]}
