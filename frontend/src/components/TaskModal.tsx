@@ -6,19 +6,34 @@ import { useEscapeKey } from '../hooks/useEscapeKey';
 import { api, type Tag, type UserDirectoryEntry } from '../api';
 import { usePermissions } from '../auth/usePermissions';
 import { GLASS_PANEL, GLASS_PILL, STATUS_COLUMNS } from '../constants';
-import type { AssigneeRef, AssigneeType, Task, TaskFormValues, TaskPriority, TaskStatus, TeamMember } from '../types';
+import { resolveSprintName } from '../utils/sprint';
+import type { AssigneeRef, AssigneeType, SprintConfig, Task, TaskFormValues, TaskPriority, TaskStatus, TeamMember } from '../types';
 
 interface TaskModalProps {
   task: Task | null;
   defaultStatus: TaskStatus;
   defaultSprint: string;
+  sprints: SprintConfig[];
   team: TeamMember[];
   onClose: () => void;
   onSave: (values: TaskFormValues) => void;
   onDelete: (taskId: string) => void;
 }
 
-export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, onSave, onDelete }: TaskModalProps) {
+/**
+ * Normalize a stored sprint ref (stable id, or a legacy pre-rename name) to
+ * the option value the picker uses — always a sprint id, or 'Backlog'.
+ */
+function toSprintOptionValue(sprints: SprintConfig[], ref: string): string {
+  if (ref === 'Backlog') return 'Backlog';
+  const byId = sprints.find(s => s.id === ref);
+  if (byId) return byId.id;
+  const byName = sprints.find(s => s.name === ref);
+  if (byName) return byName.id;
+  return ref;
+}
+
+export function TaskModal({ task, defaultStatus, defaultSprint, sprints, team, onClose, onSave, onDelete }: TaskModalProps) {
   useEscapeKey(onClose);
   const { can } = usePermissions();
   const canManage = can('team.manage');
@@ -34,7 +49,17 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
   const [dueDate, setDueDate] = useState<string>(task ? task.dueDate : '2026-12-02');
   const [status, setStatus] = useState<TaskStatus>(task ? task.status : defaultStatus);
   const [priority, setPriority] = useState<TaskPriority>(task ? task.priority : 'medium');
-  const [sprint, setSprint] = useState<string>(task ? task.sprint : (defaultStatus === 'backlog' ? 'Sprint 15' : defaultSprint));
+  const [sprint, setSprint] = useState<string>(() => {
+    if (task) return toSprintOptionValue(sprints, task.sprint);
+    if (defaultStatus === 'backlog') return 'Backlog';
+    const normalized = toSprintOptionValue(sprints, defaultSprint);
+    // Live-list-derived default: a stale/unknown default falls back to the
+    // first live sprint id instead of a hardcoded name.
+    if (normalized !== 'Backlog' && !sprints.some(s => s.id === normalized)) {
+      return sprints.length > 0 ? sprints[0].id : normalized;
+    }
+    return normalized;
+  });
   const [points, setPoints] = useState<number>(task ? Number(task.points || 3) : 3);
   const [tags, setTags] = useState<string[]>(task ? [...(task.tags ?? [])] : ['Frontend']);
   const [masterTags, setMasterTags] = useState<Tag[] | null>(null);
@@ -85,6 +110,16 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
       return null;
     }
   };
+
+  const sprintOptions: DropdownOption[] = [
+    ...sprints.map(s => ({ value: s.id, label: s.name })),
+    { value: 'Backlog', label: 'Backlog' }
+  ];
+  // Keep a legacy/unknown stored value selectable so editing never loses it
+  // (mirrors the tag picker's fail-soft pattern above).
+  if (sprint !== '' && !sprintOptions.some(o => o.value === sprint)) {
+    sprintOptions.unshift({ value: sprint, label: resolveSprintName(sprints, sprint) });
+  }
 
   const assigneeOptions: DropdownOption[] = [
     ...[...team, ...extraMembers].map(m => ({
@@ -196,11 +231,7 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
               <Dropdown
                 value={sprint}
                 onChange={setSprint}
-                options={[
-                  { value: 'Sprint 14', label: 'Sprint 14' },
-                  { value: 'Sprint 15', label: 'Sprint 15' },
-                  { value: 'Backlog', label: 'Backlog' }
-                ]}
+                options={sprintOptions}
                 className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-2.5 py-2 text-base md:text-xs min-h-[44px] md:min-h-0 bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text"
               />
             </div>
