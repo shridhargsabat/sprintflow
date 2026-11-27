@@ -2,20 +2,22 @@ import { useMemo, useState } from 'react';
 import Dropdown from '../components/Dropdown';
 import GlassTooltip from '../components/GlassTooltip';
 import AssigneeCluster, { assigneeNames } from '../components/AssigneeCluster';
-import type { Task, TaskStatus, TeamMember } from '../types';
+import type { Task, TaskStatus, TeamMember, SprintConfig } from '../types';
 import { GLASS_PANEL, GLASS_PILL, PRIORITY_META, STATUS_COLUMNS } from '../constants';
 import { getDueMeta } from '../utils/format';
+import { resolveSprintName } from '../utils/sprint';
 
 interface BacklogViewProps {
   tasks: Task[];
   team: TeamMember[];
+  sprints: SprintConfig[];
   onOpenTask: (task: Task | null, defaultStatus: TaskStatus) => void;
   onOpenDetails: (task: Task) => void;
   onMoveTaskStatus: (taskId: string, status: TaskStatus) => void;
   onPromoteTask: (taskId: string) => void;
 }
 
-export default function BacklogView({ tasks, onOpenTask, onOpenDetails, onMoveTaskStatus, onPromoteTask }: BacklogViewProps) {
+export default function BacklogView({ tasks, sprints, onOpenTask, onOpenDetails, onMoveTaskStatus, onPromoteTask }: BacklogViewProps) {
   const [backlogSort, setBacklogSort] = useState<string>('priority');
 
   const sortedBacklog = useMemo(() => {
@@ -107,7 +109,7 @@ export default function BacklogView({ tasks, onOpenTask, onOpenDetails, onMoveTa
                       />
                     </td>
                     <td className="py-3.5 px-3 whitespace-nowrap">
-                      <span className="font-semibold">{t.sprint}</span>
+                      <span className="font-semibold">{resolveSprintName(sprints, t.sprint)}</span>
                       <GlassTooltip label="Story point estimate">
                         <span className="text-slate-500 dark:text-slate-400 ml-1">· {t.points} pts</span>
                       </GlassTooltip>
@@ -167,7 +169,7 @@ export default function BacklogView({ tasks, onOpenTask, onOpenDetails, onMoveTa
                     className={`inline-flex items-center justify-between gap-2 rounded-full px-2.5 py-1 text-[11px] font-semibold cursor-pointer ${col.badge}`}
                   />
                   <span className="text-xs whitespace-nowrap">
-                    <span className="font-semibold">{t.sprint}</span>
+                    <span className="font-semibold">{resolveSprintName(sprints, t.sprint)}</span>
                     <GlassTooltip label="Story point estimate">
                       <span className="text-slate-500 dark:text-slate-400 ml-1">· {t.points} pts</span>
                     </GlassTooltip>

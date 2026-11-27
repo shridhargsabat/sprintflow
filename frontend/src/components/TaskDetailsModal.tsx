@@ -1,20 +1,22 @@
 import { ArrowUpToLine, Calendar, Pencil, X } from 'lucide-react';
 import { GLASS_PANEL, GLASS_PILL, PRIORITY_META, STATUS_COLUMNS } from '../constants';
 import { getDueMeta, getInitials } from '../utils/format';
-import type { Task } from '../types';
+import type { Task, SprintConfig } from '../types';
 import GlassTooltip from './GlassTooltip';
 import AssigneeCluster, { assigneeColor } from './AssigneeCluster';
 import { useEscapeKey } from '../hooks/useEscapeKey';
+import { resolveSprintName } from '../utils/sprint';
 
 interface TaskDetailsModalProps {
   task: Task;
+  sprints: SprintConfig[];
   onClose: () => void;
   onEdit: () => void;
   onDelete: (taskId: string) => void;
   onPromote: (taskId: string) => void;
 }
 
-export function TaskDetailsModal({ task, onClose, onEdit, onDelete, onPromote }: TaskDetailsModalProps) {
+export function TaskDetailsModal({ task, sprints, onClose, onEdit, onDelete, onPromote }: TaskDetailsModalProps) {
   useEscapeKey(onClose);
   const statusMeta = STATUS_COLUMNS.find(s => s.id === task.status);
   const priorityMeta = PRIORITY_META[task.priority];
@@ -50,7 +52,7 @@ export function TaskDetailsModal({ task, onClose, onEdit, onDelete, onPromote }:
               {priorityMeta.label}
             </span>
             <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold text-slate-700 dark:text-slate-200 ${GLASS_PILL}`}>
-              {task.sprint}
+              {resolveSprintName(sprints, task.sprint)}
             </span>
             <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold text-slate-700 dark:text-slate-200 ${GLASS_PILL}`}>
               {task.points} {task.points === 1 ? 'pt' : 'pts'}
