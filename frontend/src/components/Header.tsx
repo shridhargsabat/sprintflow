@@ -77,7 +77,7 @@ export default function Header({
 
       {/* Floating Header */}
       <div className="sticky top-0 z-30 pt-3 px-4 sm:px-6">
-        <header className={`lg-enter max-w-[1440px] mx-auto rounded-full px-3 sm:px-5 h-16 flex items-center justify-between gap-2 sm:gap-3 ${GLASS_PANEL}`}>
+        <header className={`lg-enter relative z-10 max-w-[1440px] mx-auto rounded-full px-3 sm:px-5 h-16 flex items-center justify-between gap-2 sm:gap-3 ${GLASS_PANEL}`}>
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-600 text-white flex items-center justify-center shadow-[0_6px_20px_-4px_rgba(37,99,235,0.55),inset_0_1px_1px_rgba(255,255,255,0.6)] shrink-0">
               <Layers className="w-5 h-5" />
