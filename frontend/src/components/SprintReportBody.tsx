@@ -1,4 +1,4 @@
-import { GLASS_PANEL } from '../constants';
+import { GLASS_PANEL, GLASS_SUBCARD } from '../constants';
 import { formatShortDate } from '../utils/format';
 import { resolveSprintName } from '../utils/sprint';
 import type { SprintConfig, SprintReport, SprintReportMovedTask, SprintReportTask, SprintStatus } from '../types';
@@ -9,15 +9,32 @@ function pts(n: number): string {
   return `${n} ${n === 1 ? 'pt' : 'pts'}`;
 }
 
-function TaskRow({ task, detail }: { task: SprintReportTask | SprintReportMovedTask; detail?: string }) {
+function TaskRow({
+  task,
+  detail,
+  onOpenDetails
+}: {
+  task: SprintReportTask | SprintReportMovedTask;
+  detail?: string;
+  /** When set (Reports view), the row opens the task details modal. Omit for inert rows (legacy modal shell). */
+  onOpenDetails?: (taskId: string) => void;
+}) {
+  const clickable = onOpenDetails !== undefined;
   return (
-    <li className="flex items-center justify-between gap-2 rounded-xl bg-slate-900/[0.04] dark:bg-black/20 border border-white/60 dark:border-white/10 px-3 py-2">
+    <li
+      onClick={clickable ? () => onOpenDetails(task.id) : undefined}
+      onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenDetails(task.id); } } : undefined}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      title={task.title}
+      className={`group flex items-center justify-between gap-2 rounded-xl bg-slate-900/[0.04] dark:bg-black/20 border border-white/60 dark:border-white/10 px-3 py-2 min-h-[44px]${clickable ? ' cursor-pointer hover:bg-white/60 dark:hover:bg-white/[0.08] transition-colors' : ''}`}
+    >
       <div className="min-w-0">
-        <p className="text-xs font-semibold truncate">
+        <p className="text-xs font-semibold break-words sm:truncate">
           <span className="text-slate-500 dark:text-slate-400 font-medium">{task.id}</span>{' '}
-          <span className="truncate">{task.title}</span>
+          <span className={`break-words sm:truncate${clickable ? ' group-hover:text-blue-600 dark:group-hover:text-blue-300' : ''}`}>{task.title}</span>
         </p>
-        {detail && <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{detail}</p>}
+        {detail && <p className="text-[11px] text-slate-500 dark:text-slate-400 break-words sm:truncate">{detail}</p>}
       </div>
       <PointsBadge>
         {pts(task.points)}
@@ -32,6 +49,7 @@ function Section({
   count,
   points,
   empty,
+  delay,
   children
 }: {
   testId: string;
@@ -39,10 +57,11 @@ function Section({
   count: number;
   points: number;
   empty: string;
+  delay: string;
   children: React.ReactNode;
 }) {
   return (
-    <section data-testid={testId} className="rounded-2xl bg-white/60 dark:bg-white/[0.06] border border-white/80 dark:border-white/15 p-4 space-y-2">
+    <section data-testid={testId} className={`lg-enter ${delay} rounded-2xl p-4 space-y-2 ${GLASS_SUBCARD}`}>
       <div className="flex items-center justify-between gap-2">
         <h4 className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">{title}</h4>
         <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
@@ -64,13 +83,13 @@ function Section({
  * Reports view (and the legacy SprintReportModal shell). Pure presentational
  * component — fetching + loading/error states live with the caller.
  */
-export function SprintReportBody({ report, sprints }: { report: SprintReport; sprints: SprintConfig[] }) {
+export function SprintReportBody({ report, sprints, onOpenDetails }: { report: SprintReport; sprints: SprintConfig[]; onOpenDetails?: (taskId: string) => void }) {
   const status: SprintStatus = report.sprint.status ?? 'planned';
   const nameOf = (ref: string | null): string => (ref === null ? '—' : resolveSprintName(sprints, ref));
 
   return (
-    <div data-testid="sprint-report" className={`rounded-[32px] overflow-hidden p-6 space-y-4 ${GLASS_PANEL}`}>
-      <div className="flex items-center justify-between gap-2 flex-wrap">
+    <div data-testid="sprint-report" className={`lg-enter lg-delay-2 rounded-[32px] overflow-hidden p-6 space-y-4 ${GLASS_PANEL}`}>
+      <div className="lg-enter lg-delay-1 flex items-center justify-between gap-2 flex-wrap">
         <p className="text-[11px] text-slate-600 dark:text-slate-400">
           {formatShortDate(report.sprint.startDate)} – {formatShortDate(report.sprint.endDate)} · {report.sprint.lengthDays} working days ·{' '}
           {report.totals.tasks} {report.totals.tasks === 1 ? 'task' : 'tasks'} · {pts(report.totals.points)}
@@ -78,27 +97,27 @@ export function SprintReportBody({ report, sprints }: { report: SprintReport; sp
         <SprintStatusBadge status={status} />
       </div>
 
-      <Section testId="report-completed" title="Completed" count={report.completed.count} points={report.completed.points} empty="No completed tasks yet">
+      <Section testId="report-completed" title="Completed" count={report.completed.count} points={report.completed.points} empty="No completed tasks yet" delay="lg-delay-1">
         {report.completed.tasks.map(t => (
-          <TaskRow key={t.id} task={t} />
+          <TaskRow key={t.id} task={t} onOpenDetails={onOpenDetails} />
         ))}
       </Section>
 
-      <Section testId="report-moved-out" title="Moved out" count={report.movedOut.count} points={report.movedOut.points} empty="No tasks moved out">
+      <Section testId="report-moved-out" title="Moved out" count={report.movedOut.count} points={report.movedOut.points} empty="No tasks moved out" delay="lg-delay-2">
         {report.movedOut.tasks.map(t => (
-          <TaskRow key={t.id} task={t} detail={`Moved to ${nameOf(t.to)} · now in ${nameOf(t.sprint)}`} />
+          <TaskRow key={t.id} task={t} detail={`Moved to ${nameOf(t.to)} · now in ${nameOf(t.sprint)}`} onOpenDetails={onOpenDetails} />
         ))}
       </Section>
 
-      <Section testId="report-moved-in" title="Moved in" count={report.movedIn.count} points={report.movedIn.points} empty="No tasks moved in">
+      <Section testId="report-moved-in" title="Moved in" count={report.movedIn.count} points={report.movedIn.points} empty="No tasks moved in" delay="lg-delay-3">
         {report.movedIn.tasks.map(t => (
-          <TaskRow key={t.id} task={t} detail={`Moved from ${nameOf(t.from)}`} />
+          <TaskRow key={t.id} task={t} detail={`Moved from ${nameOf(t.from)}`} onOpenDetails={onOpenDetails} />
         ))}
       </Section>
 
-      <Section testId="report-remaining" title="Remaining unfinished" count={report.remainingUnfinished.count} points={report.remainingUnfinished.points} empty="No unfinished tasks remaining">
+      <Section testId="report-remaining" title="Remaining unfinished" count={report.remainingUnfinished.count} points={report.remainingUnfinished.points} empty="No unfinished tasks remaining" delay="lg-delay-4">
         {report.remainingUnfinished.tasks.map(t => (
-          <TaskRow key={t.id} task={t} detail={t.status.replace(/_/g, ' ')} />
+          <TaskRow key={t.id} task={t} detail={t.status.replace(/_/g, ' ')} onOpenDetails={onOpenDetails} />
         ))}
       </Section>
     </div>

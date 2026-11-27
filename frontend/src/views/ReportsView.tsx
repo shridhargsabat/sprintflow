@@ -13,6 +13,8 @@ interface ReportsViewProps {
   sprints: SprintConfig[];
   /** Lifecycle-active sprint id (null until the board loads). */
   defaultSprintId: string | null;
+  /** Open the task details modal for a report row (by task id). */
+  onOpenDetails?: (taskId: string) => void;
 }
 
 const STATUS_SUFFIX: Record<string, string> = {
@@ -26,10 +28,11 @@ const STATUS_SUFFIX: Record<string, string> = {
  * Sprint picker lists every sprint — open AND closed — defaulting to the
  * active sprint; the report renders via the shared SprintReportBody.
  */
-export default function ReportsView({ sprints, defaultSprintId }: ReportsViewProps) {
+export default function ReportsView({ sprints, defaultSprintId, onOpenDetails }: ReportsViewProps) {
   const [selectedId, setSelectedId] = useState<string>(defaultSprintId ?? '');
   const [report, setReport] = useState<SprintReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
   const [reloadKey, setReloadKey] = useState<number>(0);
 
   // Sprint options mirror the FilterBar pattern (live list, stable ids as
@@ -60,40 +63,47 @@ export default function ReportsView({ sprints, defaultSprintId }: ReportsViewPro
   useEffect(() => {
     if (selectedId === '') return;
     let cancelled = false;
-    setReport(null);
+    // Keep the stale report mounted while the next one loads — the UI shows
+    // a subtle overlay instead of wiping to a bare loading panel (no flash /
+    // layout shift on sprint switch).
+    setLoading(true);
     setError(null);
     api.getSprintReport(selectedId).then(
-      r => { if (!cancelled) setReport(r); },
-      (e: unknown) => { if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load report'); }
+      r => { if (!cancelled) { setReport(r); setLoading(false); } },
+      (e: unknown) => { if (!cancelled) { setError(e instanceof Error ? e.message : 'Failed to load report'); setLoading(false); } }
     );
     return () => { cancelled = true; };
   }, [selectedId, reloadKey]);
 
   return (
     <div data-testid="reports-view" className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="lg-enter lg-delay-1 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Sprint Reports</h2>
           <p className="text-xs text-slate-600 dark:text-slate-400">Completed, moved, and remaining work per sprint — including closed sprints</p>
         </div>
         {sprints.length > 0 && (
-          <div className="shrink-0 w-full sm:w-auto sm:min-w-72">
-            <Dropdown
-              id="reports-sprint-picker"
-              value={selectedId}
-              onChange={setSelectedId}
-              options={sprintOptions}
-            />
+          <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+            <label htmlFor="reports-sprint-picker" className="text-xs font-medium text-slate-600 dark:text-slate-400 shrink-0">Sprint:</label>
+            <div className="flex-1 sm:flex-none sm:min-w-72">
+              <Dropdown
+                id="reports-sprint-picker"
+                value={selectedId}
+                onChange={setSelectedId}
+                options={sprintOptions}
+                placeholder="Select sprint for report"
+              />
+            </div>
           </div>
         )}
       </div>
 
       {sprints.length === 0 ? (
-        <div className={`rounded-[32px] overflow-hidden p-6 ${GLASS_PANEL}`}>
+        <div className={`lg-enter lg-delay-2 rounded-[32px] overflow-hidden p-6 ${GLASS_PANEL}`}>
           <EmptyState>No sprints yet — create one in Sprint Settings to see its report here.</EmptyState>
         </div>
-      ) : error !== null ? (
-        <div className={`rounded-[32px] overflow-hidden p-6 space-y-3 ${GLASS_PANEL}`}>
+      ) : error !== null && report === null ? (
+        <div className={`lg-enter lg-delay-2 rounded-[32px] overflow-hidden p-6 space-y-3 ${GLASS_PANEL}`}>
           <ErrorBanner as="p">{error}</ErrorBanner>
           <button
             type="button"
@@ -104,11 +114,32 @@ export default function ReportsView({ sprints, defaultSprintId }: ReportsViewPro
           </button>
         </div>
       ) : report === null ? (
-        <div className={`rounded-[32px] overflow-hidden p-6 ${GLASS_PANEL}`}>
+        <div role="status" aria-live="polite" className={`lg-enter lg-delay-2 rounded-[32px] overflow-hidden p-6 ${GLASS_PANEL}`}>
           <LoadingState>Loading report…</LoadingState>
         </div>
       ) : (
-        <SprintReportBody report={report} sprints={sprints} />
+        <div className="relative">
+          {error !== null && (
+            <p role="alert" className="lg-enter mb-3 px-3.5 py-2 rounded-2xl text-xs font-medium bg-rose-500/15 text-rose-700 dark:text-rose-200 border border-rose-400/30">
+              {error} — showing the previous sprint's report.
+            </p>
+          )}
+          <div aria-busy={loading}>
+            <SprintReportBody key={report.sprint.id} report={report} sprints={sprints} onOpenDetails={onOpenDetails} />
+          </div>
+          {loading && (
+            <div
+              data-testid="reports-loading-overlay"
+              role="status"
+              aria-live="polite"
+              className="absolute inset-0 z-10 flex items-start justify-center pt-10 rounded-[32px] bg-white/35 dark:bg-slate-950/45 backdrop-blur-[1px]"
+            >
+              <p className={`px-4 py-2 rounded-full text-xs font-semibold ${GLASS_PILL}`}>
+                Loading report…
+              </p>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
