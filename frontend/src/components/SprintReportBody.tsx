@@ -1,4 +1,4 @@
-import { GLASS_PANEL } from '../constants';
+import { GLASS_PANEL, GLASS_SUBCARD } from '../constants';
 import { formatShortDate } from '../utils/format';
 import { resolveSprintName } from '../utils/sprint';
 import type { SprintConfig, SprintReport, SprintReportMovedTask, SprintReportTask, SprintStatus } from '../types';
@@ -42,6 +42,7 @@ function Section({
   count,
   points,
   empty,
+  delay,
   children
 }: {
   testId: string;
@@ -49,10 +50,11 @@ function Section({
   count: number;
   points: number;
   empty: string;
+  delay: string;
   children: React.ReactNode;
 }) {
   return (
-    <section data-testid={testId} className="rounded-2xl bg-white/60 dark:bg-white/[0.06] border border-white/80 dark:border-white/15 p-4 space-y-2">
+    <section data-testid={testId} className={`lg-enter ${delay} rounded-2xl p-4 space-y-2 ${GLASS_SUBCARD}`}>
       <div className="flex items-center justify-between gap-2">
         <h4 className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">{title}</h4>
         <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
@@ -79,8 +81,8 @@ export function SprintReportBody({ report, sprints }: { report: SprintReport; sp
   const nameOf = (ref: string | null): string => (ref === null ? '—' : resolveSprintName(sprints, ref));
 
   return (
-    <div data-testid="sprint-report" className={`rounded-[32px] overflow-hidden p-6 space-y-4 ${GLASS_PANEL}`}>
-      <div className="flex items-center justify-between gap-2 flex-wrap">
+    <div data-testid="sprint-report" className={`lg-enter lg-delay-2 rounded-[32px] overflow-hidden p-6 space-y-4 ${GLASS_PANEL}`}>
+      <div className="lg-enter lg-delay-1 flex items-center justify-between gap-2 flex-wrap">
         <p className="text-[11px] text-slate-600 dark:text-slate-400">
           {formatShortDate(report.sprint.startDate)} – {formatShortDate(report.sprint.endDate)} · {report.sprint.lengthDays} working days ·{' '}
           {report.totals.tasks} {report.totals.tasks === 1 ? 'task' : 'tasks'} · {pts(report.totals.points)}
@@ -90,25 +92,25 @@ export function SprintReportBody({ report, sprints }: { report: SprintReport; sp
         </span>
       </div>
 
-      <Section testId="report-completed" title="Completed" count={report.completed.count} points={report.completed.points} empty="No completed tasks yet">
+      <Section testId="report-completed" title="Completed" count={report.completed.count} points={report.completed.points} empty="No completed tasks yet" delay="lg-delay-1">
         {report.completed.tasks.map(t => (
           <TaskRow key={t.id} task={t} />
         ))}
       </Section>
 
-      <Section testId="report-moved-out" title="Moved out" count={report.movedOut.count} points={report.movedOut.points} empty="No tasks moved out">
+      <Section testId="report-moved-out" title="Moved out" count={report.movedOut.count} points={report.movedOut.points} empty="No tasks moved out" delay="lg-delay-2">
         {report.movedOut.tasks.map(t => (
           <TaskRow key={t.id} task={t} detail={`Moved to ${nameOf(t.to)} · now in ${nameOf(t.sprint)}`} />
         ))}
       </Section>
 
-      <Section testId="report-moved-in" title="Moved in" count={report.movedIn.count} points={report.movedIn.points} empty="No tasks moved in">
+      <Section testId="report-moved-in" title="Moved in" count={report.movedIn.count} points={report.movedIn.points} empty="No tasks moved in" delay="lg-delay-3">
         {report.movedIn.tasks.map(t => (
           <TaskRow key={t.id} task={t} detail={`Moved from ${nameOf(t.from)}`} />
         ))}
       </Section>
 
-      <Section testId="report-remaining" title="Remaining unfinished" count={report.remainingUnfinished.count} points={report.remainingUnfinished.points} empty="No unfinished tasks remaining">
+      <Section testId="report-remaining" title="Remaining unfinished" count={report.remainingUnfinished.count} points={report.remainingUnfinished.points} empty="No unfinished tasks remaining" delay="lg-delay-4">
         {report.remainingUnfinished.tasks.map(t => (
           <TaskRow key={t.id} task={t} detail={t.status.replace(/_/g, ' ')} />
         ))}
