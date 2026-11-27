@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
-import { X } from 'lucide-react';
-import { GLASS_PANEL, GLASS_PILL, DEFAULT_POINTS_SCALE } from '../constants';
+import { GLASS_PILL, DEFAULT_POINTS_SCALE } from '../constants';
 import { useEscapeKey } from '../hooks/useEscapeKey';
+import { Modal } from './Modal';
+import { EyebrowBadge } from './EyebrowBadge';
+import { ErrorBanner } from './ErrorBanner';
 
 interface PointsScaleModalProps {
   scale: number[];
@@ -36,20 +38,23 @@ export function PointsScaleModal({ scale, onClose, onSave }: PointsScaleModalPro
   const isDefault = !error && sorted.join(',') === DEFAULT_POINTS_SCALE.join(',');
 
   return (
-    <div onClick={onClose} className="lg-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/35 backdrop-blur-md">
-      <div onClick={e => e.stopPropagation()} className={`lg-modal-panel w-full max-w-lg rounded-[32px] overflow-hidden ${GLASS_PANEL}`}>
-        <div className="px-6 py-4 border-b border-slate-900/10 dark:border-white/10 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-400/30">POINTS</span>
-            <h3 className="text-base font-semibold">Story Points Scale</h3>
-          </div>
-          <button type="button" onClick={onClose} className="w-11 h-11 md:w-8 md:h-8 rounded-full hover:bg-white/60 dark:hover:bg-white/10 flex items-center justify-center">
-            <X className="w-4 h-4" />
+    <Modal
+      onClose={onClose}
+      title={
+        <div className="flex items-center gap-2">
+          <EyebrowBadge tone="violet" shrink={false}>POINTS</EyebrowBadge>
+          <h3 className="text-base font-semibold">Story Points Scale</h3>
+        </div>
+      }
+      footer={
+        <div className="pt-3 border-t border-slate-900/10 dark:border-white/10 flex items-center justify-end gap-2">
+          <button type="button" onClick={onClose} className={`px-4 py-2 rounded-full text-xs font-semibold min-h-[44px] md:min-h-0 ${GLASS_PILL}`}>
+            Close
           </button>
         </div>
-
-        <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto scroll-slim">
-          <div className="rounded-2xl bg-white/60 dark:bg-white/[0.06] border border-white/80 dark:border-white/15 p-4 space-y-3">
+      }
+    >
+      <div className="rounded-2xl bg-white/60 dark:bg-white/[0.06] border border-white/80 dark:border-white/15 p-4 space-y-3">
             <div>
               <label className="block text-xs font-semibold mb-1">Scale values (comma-separated)</label>
               <input
@@ -66,9 +71,7 @@ export function PointsScaleModal({ scale, onClose, onSave }: PointsScaleModalPro
               </p>
             </div>
             {error ? (
-              <div className="px-3.5 py-2 rounded-2xl text-xs font-medium bg-rose-500/15 text-rose-700 dark:text-rose-200 border border-rose-400/30">
-                {error}
-              </div>
+              <ErrorBanner>{error}</ErrorBanner>
             ) : (
               <div className="flex flex-wrap items-center gap-1.5" aria-label="Scale preview">
                 {sorted.map(v => (
@@ -100,13 +103,6 @@ export function PointsScaleModal({ scale, onClose, onSave }: PointsScaleModalPro
               </button>
             </div>
           </div>
-          <div className="pt-3 border-t border-slate-900/10 dark:border-white/10 flex items-center justify-end gap-2">
-            <button type="button" onClick={onClose} className={`px-4 py-2 rounded-full text-xs font-semibold min-h-[44px] md:min-h-0 ${GLASS_PILL}`}>
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

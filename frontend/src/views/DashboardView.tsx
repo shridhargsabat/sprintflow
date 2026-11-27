@@ -23,6 +23,7 @@ import type { PriorityFilter, SprintConfig, Task, TaskPriority, TaskStatus, Team
 import GlassTooltip from '../components/GlassTooltip';
 import AssigneeCluster, { assigneeNames } from '../components/AssigneeCluster';
 import { GlassChartTooltip } from '../components/GlassChartTooltip';
+import { EmptyState } from '../components/EmptyState';
 import { PRIORITY_META, GLASS_PANEL, GLASS_SUBCARD, GLASS_PILL, TODAY_ISO } from '../constants';
 import { getInitials, formatShortDate, getDueMeta, addWorkingDaysISO, workingDaysBetween } from '../utils/format';
 import { resolveSprintName } from '../utils/sprint';
@@ -373,7 +374,7 @@ export default function DashboardView({
         </div>
         <div className="space-y-2.5 overflow-y-auto scroll-slim max-h-[320px] pr-1">
           {ongoingTasks.length === 0 ? (
-            <div className="py-10 text-center text-xs text-slate-400">No ongoing tasks match current filters.</div>
+            <EmptyState as="div">No ongoing tasks match current filters.</EmptyState>
           ) : ongoingTasks.map(t => {
             const p = PRIORITY_META[t.priority];
             const due = getDueMeta(t.dueDate, t.status);
