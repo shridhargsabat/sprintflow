@@ -114,6 +114,9 @@ export default function BacklogView({ tasks, sprints, onOpenTask, onOpenDetails,
                       <GlassTooltip label="Story point estimate">
                         <span className="text-slate-500 dark:text-slate-400 ml-1">· {t.points} pts</span>
                       </GlassTooltip>
+                      {(t.subtasks ?? []).length > 0 && (
+                        <span className="text-slate-500 dark:text-slate-400 ml-1">· {(t.subtasks ?? []).length} subtasks ({(t.subtasks ?? []).filter(s => s.status === 'done').length} done)</span>
+                      )}
                     </td>
                     <td className="py-3.5 px-5 whitespace-nowrap text-right">
                       <div className="inline-flex items-center gap-1.5">
@@ -174,6 +177,9 @@ export default function BacklogView({ tasks, sprints, onOpenTask, onOpenDetails,
                     <GlassTooltip label="Story point estimate">
                       <span className="text-slate-500 dark:text-slate-400 ml-1">· {t.points} pts</span>
                     </GlassTooltip>
+                    {(t.subtasks ?? []).length > 0 && (
+                      <span className="text-slate-500 dark:text-slate-400 ml-1">· {(t.subtasks ?? []).length} subtasks ({(t.subtasks ?? []).filter(s => s.status === 'done').length} done)</span>
+                    )}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 pt-1">

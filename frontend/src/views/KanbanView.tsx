@@ -86,6 +86,8 @@ export default function KanbanView({ tasks, onOpenTask, onOpenDetails, onMoveTas
                   const p = PRIORITY_META[t.priority];
                   const due = getDueMeta(t.dueDate, t.status);
                   const names = assigneeNames(t.assignees);
+                  const subtasks = t.subtasks ?? [];
+                  const doneSubtasks = subtasks.filter(s => s.status === 'done').length;
                   return (
                     <div
                       key={t.id}
@@ -104,6 +106,9 @@ export default function KanbanView({ tasks, onOpenTask, onOpenDetails, onMoveTas
                       <div className="flex flex-wrap items-center gap-1.5 mb-3">
                         <TagPills tags={t.tags} />
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-900/[0.06] dark:bg-white/10">{t.points} pts</span>
+                        {subtasks.length > 0 && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-900/[0.06] dark:bg-white/10">{subtasks.length} subtasks ({doneSubtasks} done)</span>
+                        )}
                       </div>
                       <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-slate-900/[0.07] dark:border-white/10">
                         <div className="flex items-center gap-1.5 min-w-0">
