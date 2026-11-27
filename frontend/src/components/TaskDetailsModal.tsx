@@ -57,9 +57,11 @@ export function TaskDetailsModal({ task, sprints, onClose, onEdit, onDelete, onP
             <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold text-slate-700 dark:text-slate-200 ${GLASS_PILL}`}>
               {task.points} {task.points === 1 ? 'pt' : 'pts'}
             </span>
-            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold text-slate-700 dark:text-slate-200 ${GLASS_PILL}`}>
-              {task.tag}
-            </span>
+            {(task.tags ?? []).map(name => (
+              <span key={name} className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold text-slate-700 dark:text-slate-200 ${GLASS_PILL}`}>
+                {name}
+              </span>
+            ))}
           </div>
 
           <div className="px-4 py-3 rounded-2xl bg-white/45 dark:bg-white/[0.05] border border-white/65 dark:border-white/10">

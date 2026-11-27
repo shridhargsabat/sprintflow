@@ -23,6 +23,7 @@ export default function BoardApp() {
   const [sprintFilter, setSprintFilter] = useState<string>('Sprint 14');
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
   const [assigneeFilter, setAssigneeFilter] = useState<string>('all');
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
@@ -39,6 +40,7 @@ export default function BoardApp() {
     setSprintFilter('Sprint 14');
     setPriorityFilter('all');
     setAssigneeFilter('all');
+    setTagFilter([]);
     setSearchQuery('');
   };
 
@@ -70,22 +72,26 @@ export default function BoardApp() {
           return false;
         }
       }
+      if (tagFilter.length > 0) {
+        const names = t.tags ?? [];
+        if (!tagFilter.some(f => names.includes(f))) return false;
+      }
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
         const who = (t.assignees ?? []).map(a => `${a.name} ${a.email ?? ''}`).join(' ');
-        const hay = [t.id, t.title, t.description, t.tag, who, t.sprint].join(' ').toLowerCase();
+        const hay = [t.id, t.title, t.description, (t.tags ?? []).join(' '), who, t.sprint].join(' ').toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [board.tasks, sprintFilter, priorityFilter, assigneeFilter, searchQuery]);
+  }, [board.tasks, sprintFilter, priorityFilter, assigneeFilter, tagFilter, searchQuery]);
 
   const allBacklogTasks = useMemo(
     () => board.tasks.filter(t => t.status === 'backlog').sort((a, b) => PRIORITY_META[b.priority].weight - PRIORITY_META[a.priority].weight),
     [board.tasks]
   );
 
-  const hasActiveFilters = priorityFilter !== 'all' || assigneeFilter !== 'all' || searchQuery.trim() !== '' || sprintFilter !== 'Sprint 14';
+  const hasActiveFilters = priorityFilter !== 'all' || assigneeFilter !== 'all' || tagFilter.length > 0 || searchQuery.trim() !== '' || sprintFilter !== 'Sprint 14';
 
   const openTaskModal = (task: Task | null, defaultStatus: TaskStatus): void => {
     setTaskModal({ open: true, task, defaultStatus });
@@ -149,6 +155,8 @@ export default function BoardApp() {
           onPriorityFilterChange={setPriorityFilter}
           assigneeFilter={assigneeFilter}
           onAssigneeFilterChange={setAssigneeFilter}
+          tagFilter={tagFilter}
+          onTagFilterChange={setTagFilter}
           team={board.team}
           hasActiveFilters={hasActiveFilters}
           onClearFilters={clearFilters}
@@ -257,7 +265,7 @@ export default function BoardApp() {
         )}
 
         {tagsModalOpen && (
-          <TagsModal onClose={() => setTagsModalOpen(false)} />
+          <TagsModal onClose={() => setTagsModalOpen(false)} onChanged={board.refreshAll} />
         )}
 
         <Toasts toasts={board.toasts} />

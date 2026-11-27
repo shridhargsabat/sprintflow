@@ -9,7 +9,7 @@ import db as db_lib
 
 TASK_KEYS = {
     "id", "title", "description", "assignees",
-    "dueDate", "status", "priority", "sprint", "points", "tag",
+    "dueDate", "status", "priority", "sprint", "points", "tags",
 }
 MISSING_ID = "DEV-999999"
 UNKNOWN_USER_ID = 999999
@@ -26,7 +26,7 @@ def _payload(title="New test task", **overrides):
         "priority": "medium",
         "sprint": "Sprint 14",
         "points": 3,
-        "tag": "QA",
+        "tags": ["QA"],
     }
     data.update(overrides)
     return data
@@ -167,7 +167,7 @@ def test_list_filter_search(client):
     assert tasks[0]["id"] in {t["id"] for t in got}
 
     def _haystack(t):
-        return " ".join([t["id"], t["title"], t["description"], t["tag"]]).lower()
+        return " ".join([t["id"], t["title"], t["description"], " ".join(t["tags"])]).lower()
 
     assert all(word.lower() in _haystack(t) for t in got)
 
@@ -211,7 +211,7 @@ def test_create_task_applies_defaults(client):
     assert created["priority"] == "medium"
     assert created["sprint"] == "Sprint 14"
     assert created["points"] == 3
-    assert created["tag"] == "Frontend"
+    assert created["tags"] == ["Frontend"]
     assert created["description"] == ""
     assert created["assignees"] == []
 

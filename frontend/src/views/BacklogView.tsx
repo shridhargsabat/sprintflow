@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import Dropdown from '../components/Dropdown';
 import GlassTooltip from '../components/GlassTooltip';
 import AssigneeCluster, { assigneeNames } from '../components/AssigneeCluster';
+import TagPills from '../components/TagPills';
 import type { Task, TaskStatus, TeamMember, SprintConfig } from '../types';
 import { GLASS_PANEL, GLASS_PILL, PRIORITY_META, STATUS_COLUMNS } from '../constants';
 import { getDueMeta } from '../utils/format';
@@ -85,7 +86,7 @@ export default function BacklogView({ tasks, sprints, onOpenTask, onOpenDetails,
                       <div onClick={() => onOpenDetails(t)} className="cursor-pointer group">
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="text-[10px] font-bold text-slate-500">{t.id}</span>
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-900/[0.06] dark:bg-white/10">{t.tag}</span>
+                          <TagPills tags={t.tags} />
                         </div>
                         <p className="font-semibold group-hover:text-blue-600 dark:group-hover:text-blue-300 truncate">{t.title}</p>
                       </div>
@@ -150,7 +151,7 @@ export default function BacklogView({ tasks, sprints, onOpenTask, onOpenDetails,
               <article key={t.id} data-m2-card className="p-4 space-y-2.5">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
                   <span className="text-[10px] font-bold text-slate-500">{t.id}</span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-900/[0.06] dark:bg-white/10">{t.tag}</span>
+                  <TagPills tags={t.tags} />
                   <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${p.pill}`}>{p.label}</span>
                   <span className={`ml-auto text-[11px] font-medium whitespace-nowrap ${due.cls}`}>{due.text}</span>
                 </div>

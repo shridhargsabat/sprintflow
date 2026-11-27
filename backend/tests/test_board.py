@@ -93,11 +93,11 @@ def test_import_round_trip_and_reset_restores_seeds(client):
             {"id": "IMP-1", "title": "Imported task one", "description": "first",
              "assignees": [{"type": "member", "id": "mx1"}],
              "dueDate": "2026-12-20", "status": "todo",
-             "priority": "high", "sprint": "Sprint 99", "points": 5, "tag": "Backend"},
+             "priority": "high", "sprint": "Sprint 99", "points": 5, "tags": ["Backend"]},
             {"id": "IMP-2", "title": "Imported task two", "description": "",
              "assignees": [],
              "dueDate": "2026-12-21", "status": "done",
-             "priority": "low", "sprint": "Sprint 99", "points": 2, "tag": "QA"},
+             "priority": "low", "sprint": "Sprint 99", "points": 2, "tags": ["QA"]},
         ],
     }
     resp = client.post("/api/import", json=payload)
@@ -248,7 +248,7 @@ def test_lead_blocked_from_team_import_but_allowed_tasks_only(client, anon_clien
         "team": [],
         "tasks": [{"id": "LEAD-1", "title": "Lead task", "description": "",
                    "assignees": [], "dueDate": "2026-12-20", "status": "todo",
-                   "priority": "high", "sprint": "Sprint 99", "points": 3, "tag": "Backend"}],
+                   "priority": "high", "sprint": "Sprint 99", "points": 3, "tags": ["Backend"]}],
     }, headers=headers)
     assert allowed.status_code == 200
     assert allowed.json()["tasks"] == 1
@@ -306,7 +306,7 @@ def test_import_unknown_assignee_ids_skipped_with_warnings(client):
                  {"type": "user", "id": 999999},
              ],
              "dueDate": "2026-12-20", "status": "todo",
-             "priority": "medium", "sprint": "Sprint 99", "points": 3, "tag": "QA"},
+             "priority": "medium", "sprint": "Sprint 99", "points": 3, "tags": ["QA"]},
         ],
     }
     resp = client.post("/api/import", json=payload)

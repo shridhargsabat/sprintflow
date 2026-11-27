@@ -28,7 +28,7 @@ def _import_task(id="T-1", **overrides):
     row = {
         "id": id, "title": "t", "description": "", "assignees": [],
         "dueDate": "2026-12-20", "status": "todo", "priority": "medium",
-        "sprint": "Sprint 99", "points": 3, "tag": "Backend",
+        "sprint": "Sprint 99", "points": 3, "tags": ["Backend"],
     }
     row.update(overrides)
     return row
@@ -113,7 +113,7 @@ def test_m4_import_missing_title_400_with_row_error_and_data_intact(client):
     ("dueDate", "x"),
     ("description", "d" * 10001),
     ("sprint", "s" * 101),
-    ("tag", "t" * 61),
+    ("tags", ["t" * 61]),
     ("title", "t" * 201),
 ])
 def test_m4_import_malformed_task_values_400(client, field, value):
@@ -212,7 +212,7 @@ def test_m4_single_item_free_text_caps_are_422(client):
     base = {"title": "t", "dueDate": "2026-12-05"}
     assert client.post("/api/tasks", json={**base, "description": "d" * 10001}).status_code == 422
     assert client.post("/api/tasks", json={**base, "sprint": "s" * 101}).status_code == 422
-    assert client.post("/api/tasks", json={**base, "tag": "t" * 61}).status_code == 422
+    assert client.post("/api/tasks", json={**base, "tags": ["t" * 61]}).status_code == 422
     assert client.post("/api/team", json={"name": "n", "role": "r" * 101}).status_code == 422
     assert client.post("/api/team", json={"name": "n", "color": "c" * 41}).status_code == 422
     # Boundary values still pass.
@@ -296,7 +296,7 @@ def test_m5_import_task_assignee_bool_400_and_intact(client, flag):
 # `npm run build` (tsc). Every backend fix below has a regression test.
 
 def _task_text(t):
-    return f"{t['id']} {t['title']} {t['description']} {t['tag']}"
+    return f"{t['id']} {t['title']} {t['description']} {' '.join(t['tags'])}"
 
 
 def test_l1_search_escapes_like_wildcards(client):
@@ -398,13 +398,13 @@ def test_l8_delete_tag_guarded_paths(client):
     tag = client.post("/api/tags", json={"name": "L8 Doomed"}).json()
     assert client.delete("/api/tags/no-such-tag").status_code == 404
     task = client.post("/api/tasks", json={
-        "title": "L8 user", "dueDate": "2026-12-05", "tag": "L8 Doomed",
+        "title": "L8 user", "dueDate": "2026-12-05", "tags": ["L8 Doomed"],
     }).json()
     resp = client.delete(f"/api/tags/{tag['id']}")
     assert resp.status_code == 409, resp.text
     assert resp.json() == {"tasks": 1}
     assert client.put(f"/api/tasks/{task['id']}", json={
-        "title": "L8 user", "dueDate": "2026-12-05", "tag": "Backend",
+        "title": "L8 user", "dueDate": "2026-12-05", "tags": ["Backend"],
     }).status_code == 200
     resp = client.delete(f"/api/tags/{tag['id']}")
     assert resp.status_code == 200, resp.text
@@ -427,8 +427,8 @@ def test_l8_delete_blocked_when_usage_arrives_mid_delete(client, monkeypatch):
         def execute(self, sql, parameters=()):
             if isinstance(sql, str) and sql.strip().upper().startswith("DELETE FROM TAGS"):
                 self._real.execute(
-                    "UPDATE tasks SET tag = ? WHERE id = (SELECT id FROM tasks LIMIT 1)",
-                    (tag["name"],),
+                    "INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES ((SELECT id FROM tasks LIMIT 1), ?)",
+                    (tag["id"],),
                 )
             return self._real.execute(sql, parameters)
 
@@ -574,10 +574,13 @@ def test_l10_startup_folds_legacy_case_dupes(tmp_path):
         )
         conn.execute(
             """INSERT INTO tasks
-                   (id, title, description, due_date, status, priority, sprint, points, tag)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (id, title, description, due_date, status, priority, sprint, points)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             ("L10-T", "fold task", "", "2026-12-05", "todo", "medium",
-             "Sprint 14", 3, "l10 foldme"),
+             "Sprint 14", 3),
+        )
+        conn.execute(
+            "INSERT INTO task_tags (task_id, tag_id) VALUES ('L10-T', 'l10-loser')"
         )
     db_lib.init_db(p)  # migration folds the dupe pair
     with db_lib.get_conn(p) as conn:
@@ -585,8 +588,11 @@ def test_l10_startup_folds_legacy_case_dupes(tmp_path):
             "SELECT id, name FROM tags WHERE name = ? COLLATE NOCASE", ("L10 FoldMe",)
         ).fetchall()
         assert [(r["id"], r["name"]) for r in rows] == [("l10-winner", "L10 FoldMe")]
-        tag = conn.execute("SELECT tag FROM tasks WHERE id = 'L10-T'").fetchone()[0]
-        assert tag == "L10 FoldMe"
+        links = conn.execute(
+            "SELECT tag_id FROM task_tags WHERE task_id = 'L10-T'"
+        ).fetchall()
+        assert [r["tag_id"] for r in links] == ["l10-winner"]
+        assert db_lib.tags_for_task(conn, "L10-T") == ["L10 FoldMe"]
         idx = conn.execute(
             "SELECT 1 FROM sqlite_master WHERE name = 'uq_tags_name_nocase'"
         ).fetchone()
@@ -606,7 +612,7 @@ def test_l11_usage_counted_by_canonical_name_only(client):
             ("l11 shared", "L11 Unrelated", "bg-sky-600"),
         )
     assert client.post("/api/tasks", json={
-        "title": "L11 user", "dueDate": "2026-12-05", "tag": "L11 Shared",
+        "title": "L11 user", "dueDate": "2026-12-05", "tags": ["L11 Shared"],
     }).status_code == 201
     by_name = {t["name"]: t for t in client.get("/api/tags").json()}
     assert by_name["L11 Shared"]["taskCount"] == 1
@@ -615,15 +621,15 @@ def test_l11_usage_counted_by_canonical_name_only(client):
 
 def test_l11_slug_id_input_stored_as_canonical_name(client):
     created = client.post("/api/tasks", json={
-        "title": "L11 canon", "dueDate": "2026-12-05", "tag": "frontend",
+        "title": "L11 canon", "dueDate": "2026-12-05", "tags": ["frontend"],
     })
     assert created.status_code == 201, created.text
-    assert created.json()["tag"] == "Frontend"
+    assert created.json()["tags"] == ["Frontend"]
     updated = client.put(f"/api/tasks/{created.json()['id']}", json={
-        "title": "L11 canon", "dueDate": "2026-12-05", "tag": "backend",
+        "title": "L11 canon", "dueDate": "2026-12-05", "tags": ["backend"],
     })
     assert updated.status_code == 200, updated.text
-    assert updated.json()["tag"] == "Backend"
+    assert updated.json()["tags"] == ["Backend"]
 
 
 def test_l12_task_vanished_mid_update_404_not_500(client, monkeypatch):
