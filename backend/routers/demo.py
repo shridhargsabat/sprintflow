@@ -30,3 +30,17 @@ def demo_status():
         row = conn.execute("SELECT COUNT(*) AS c FROM tasks").fetchone()
     # "seeded" = at least one task row exists.
     return {"enabled": True, "seeded": row["c"] > 0}
+
+
+@router.post("/demo/reset")
+def demo_reset():
+    _require_demo()
+    # reset_db() unconditionally wipes board tables (tasks, links, tags,
+    # team, sprints, activity — never users) and reseeds samples via
+    # seed_data(), which has no internal flag check: samples appear here
+    # without SPRINTFLOW_SEED_SAMPLES. Same blast radius as /api/reset.
+    db.reset_db()
+    with db.get_conn() as conn:
+        db.seed_demo_user(conn)
+        n = conn.execute("SELECT COUNT(*) AS c FROM tasks").fetchone()["c"]
+    return {"ok": True, "tasks": n}
