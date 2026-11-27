@@ -127,13 +127,20 @@ def init_db(db_path: Optional[str] = None) -> None:
             """
         )
 
-        member_count = conn.execute("SELECT COUNT(*) FROM team_members").fetchone()[0]
-        if member_count == 0:
-            seed_data(conn)
+        # Production guard: sample team/tasks/tags seed ONLY when explicitly
+        # allowed (dev/tests set SPRINTFLOW_SEED_SAMPLES=1; prod compose does
+        # not). Without this, every backend boot resurrects demo data on an
+        # intentionally emptied board (member_count == 0 after a wipe).
+        if os.environ.get("SPRINTFLOW_SEED_SAMPLES") == "1":
+            member_count = conn.execute("SELECT COUNT(*) FROM team_members").fetchone()[0]
+            if member_count == 0:
+                seed_data(conn)
+            # Tag master: additive + idempotent, safe for seeded DBs.
+            seed_tags(conn)
         # Additive auto-migration for live DBs that predate the sprints table.
+        # Unconditional: sprint-targeting flows (promote, pull-to-sprint) need
+        # at least one sprint to exist on a fresh production board.
         seed_sprints(conn)
-        # Tag master: additive + idempotent, safe for live DBs (new table).
-        seed_tags(conn)
         # L10: case-insensitive tag-name uniqueness (dedupe legacy case-only
         # dupes first so the NOCASE index can never break startup).
         _enforce_tag_name_uniqueness(conn)

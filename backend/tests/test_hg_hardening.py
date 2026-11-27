@@ -727,3 +727,28 @@ def test_reset_gated_without_env_flag(client, monkeypatch):
     resp = client.post("/api/reset")
     assert resp.status_code == 403, resp.text
     assert "disabled" in resp.text.lower()
+
+
+def test_seed_samples_gated_without_env_flag(tmp_path, monkeypatch):
+    # Production boot (flag unset) on a fresh DB: admin + default sprints,
+    # zero sample tasks/members/tags — an emptied board stays empty.
+    monkeypatch.delenv("SPRINTFLOW_SEED_SAMPLES", raising=False)
+    p = str(tmp_path / "seed-gate.db")
+    db_lib.init_db(p)
+    with db_lib.get_conn(p) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM sprints").fetchone()[0] >= 1
+        assert conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM team_members").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM tags").fetchone()[0] == 0
+
+
+def test_seed_samples_present_with_env_flag(tmp_path, monkeypatch):
+    # Dev/test boot (flag set): full sample dataset, as before.
+    monkeypatch.setenv("SPRINTFLOW_SEED_SAMPLES", "1")
+    p = str(tmp_path / "seed-on.db")
+    db_lib.init_db(p)
+    with db_lib.get_conn(p) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0] == len(db_lib.DEFAULT_TASKS)
+        assert conn.execute("SELECT COUNT(*) FROM team_members").fetchone()[0] == len(db_lib.DEFAULT_TEAM)
+        assert conn.execute("SELECT COUNT(*) FROM tags").fetchone()[0] > 0
