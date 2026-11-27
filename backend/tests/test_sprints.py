@@ -220,6 +220,18 @@ def test_post_create_blank_name_400(client):
     assert resp.status_code == 400
 
 
+@pytest.mark.parametrize("name", ["Sprint 14", "sprint 14", "SPRINT 15", "sprint-16"])
+def test_post_create_name_colliding_with_existing_id_or_name_409(client, name):
+    # Slug ids ('sprint-16') never equal legacy ids ('Sprint 14'), so without
+    # the name guard POSTing a seed name would succeed with a confusing twin.
+    if name == "sprint-16":
+        assert client.post("/api/sprints", json=NEW_SPRINT).status_code == 201
+    resp = client.post("/api/sprints", json={"name": name, "startDate": "2026-12-21"})
+    assert resp.status_code == 409
+    # Loser leaves the sprint list untouched.
+    assert len(_all_sprints(client)) == (3 if name == "sprint-16" else 2)
+
+
 # ---------- lifecycle: create -> activate -> close ----------
 
 def test_lifecycle_create_activate_close_with_rollover(client):
