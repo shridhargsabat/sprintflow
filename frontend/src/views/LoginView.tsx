@@ -89,7 +89,7 @@ export default function LoginView(): ReactElement {
               value={email}
               onChange={e => setEmail(e.target.value)}
               placeholder="you@company.com"
-              className="field-text w-full rounded-2xl bg-white/70 dark:bg-white/10 border border-white/80 dark:border-white/15 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-sky-400/60 focus:ring-2 focus:ring-sky-400/30 transition"
+              className="field-text w-full rounded-2xl bg-white/70 dark:bg-white/10 border border-white/80 dark:border-white/15 px-4 py-2.5 text-base md:text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-sky-400/60 focus:ring-2 focus:ring-sky-400/30 transition"
             />
           </label>
 
@@ -103,13 +103,13 @@ export default function LoginView(): ReactElement {
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="field-text w-full rounded-2xl bg-white/70 dark:bg-white/10 border border-white/80 dark:border-white/15 px-4 py-2.5 pr-11 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-sky-400/60 focus:ring-2 focus:ring-sky-400/30 transition"
+                className="field-text w-full rounded-2xl bg-white/70 dark:bg-white/10 border border-white/80 dark:border-white/15 px-4 py-2.5 pr-11 text-base md:text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-sky-400/60 focus:ring-2 focus:ring-sky-400/30 transition"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(s => !s)}
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-500/10 transition"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-500/10 transition"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -119,7 +119,7 @@ export default function LoginView(): ReactElement {
           <button
             type="submit"
             disabled={busy}
-            className="lg-press mt-1 w-full rounded-full bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white text-sm font-semibold py-2.5 px-5 flex items-center justify-center gap-2 shadow-[0_10px_28px_-8px_rgba(10,132,255,0.6),inset_0_1px_1px_rgba(255,255,255,0.45)] disabled:opacity-60 disabled:cursor-wait"
+            className="lg-press mt-1 w-full rounded-full bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white text-sm font-semibold py-2.5 px-5 min-h-[44px] md:min-h-0 flex items-center justify-center gap-2 shadow-[0_10px_28px_-8px_rgba(10,132,255,0.6),inset_0_1px_1px_rgba(255,255,255,0.45)] disabled:opacity-60 disabled:cursor-wait"
           >
             {busy && <Loader2 className="w-4 h-4 animate-spin" />}
             {busy ? 'Signing in…' : 'Sign in'}
