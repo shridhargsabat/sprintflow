@@ -13,10 +13,10 @@ interface SprintSettingsModalProps {
 }
 
 const LENGTH_PRESETS: Array<{ label: string; days: number }> = [
-  { label: '1 week', days: 7 },
-  { label: '2 weeks', days: 14 },
-  { label: '3 weeks', days: 21 },
-  { label: '4 weeks', days: 28 }
+  { label: '1 week · 5d', days: 5 },
+  { label: '2 weeks · 10d', days: 10 },
+  { label: '3 weeks · 15d', days: 15 },
+  { label: '4 weeks · 20d', days: 20 }
 ];
 
 function SprintRow({ sprint, onSave }: { sprint: SprintConfig; onSave: (id: string, patch: SprintPatch) => void }) {
@@ -38,7 +38,7 @@ function SprintRow({ sprint, onSave }: { sprint: SprintConfig; onSave: (id: stri
           className="w-full rounded-2xl px-3 py-2 text-base md:text-xs min-h-[44px] md:min-h-0 bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text"
         />
         <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">
-          Currently {formatShortDate(sprint.startDate)} – {formatShortDate(sprint.endDate)} · {sprint.lengthDays} days
+          Currently {formatShortDate(sprint.startDate)} – {formatShortDate(sprint.endDate)} · {sprint.lengthDays} working days
         </p>
       </div>
       <div>
@@ -50,7 +50,7 @@ function SprintRow({ sprint, onSave }: { sprint: SprintConfig; onSave: (id: stri
         />
       </div>
       <div>
-        <label className="block text-xs font-semibold mb-1">Sprint Length</label>
+        <label className="block text-xs font-semibold mb-1">Sprint Length (working days, Mon–Fri)</label>
         <div className="flex flex-wrap items-center gap-1.5">
           {LENGTH_PRESETS.map(p => (
             <button
