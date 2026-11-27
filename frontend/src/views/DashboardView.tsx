@@ -24,17 +24,8 @@ import GlassTooltip from '../components/GlassTooltip';
 import AssigneeCluster, { assigneeNames } from '../components/AssigneeCluster';
 import { GlassChartTooltip } from '../components/GlassChartTooltip';
 import { PRIORITY_META, GLASS_PANEL, GLASS_SUBCARD, GLASS_PILL, TODAY_ISO } from '../constants';
-import { getInitials, formatShortDate, getDueMeta } from '../utils/format';
+import { getInitials, formatShortDate, getDueMeta, addWorkingDaysISO, workingDaysBetween } from '../utils/format';
 import { resolveSprintName } from '../utils/sprint';
-
-function addDaysISO(startISO: string, offset: number): string {
-  const [y, m, d] = startISO.split('-').map(Number);
-  if (!y || !m || !d) return startISO;
-  const dt = new Date(y, m - 1, d + offset);
-  const mm = String(dt.getMonth() + 1).padStart(2, '0');
-  const dd = String(dt.getDate()).padStart(2, '0');
-  return `${dt.getFullYear()}-${mm}-${dd}`;
-}
 
 export interface DashboardViewProps {
   tasks: Task[];
@@ -103,10 +94,12 @@ export default function DashboardView({
     let labels = ['Nov 23', 'Nov 25', 'Nov 27', 'Nov 29', 'Dec 1', 'Dec 3', 'Dec 6'];
     if (activeSprint) {
       const len = Math.max(1, activeSprint.lengthDays);
-      const tickCount = 7;
+      // Spread at most 7 ticks over the working days; fewer ticks than days
+      // would round offsets onto the same date (dupe labels on short sprints).
+      const tickCount = len <= 1 ? 2 : Math.min(7, len);
       labels = Array.from({ length: tickCount }, (_, i) => {
         const offset = Math.round((i * (len - 1)) / (tickCount - 1));
-        return formatShortDate(addDaysISO(activeSprint.startDate, offset));
+        return formatShortDate(addWorkingDaysISO(activeSprint.startDate, offset));
       });
     }
     return labels.map((day, i) => ({
@@ -128,19 +121,24 @@ export default function DashboardView({
       const dates = `${formatShortDate(matched.startDate)} – ${formatShortDate(matched.endDate)}, ${matched.endDate.slice(0, 4)}`;
       const isFirst = sprints.length > 0 && sprints[0].id === matched.id;
       const badge = `${matched.name} · ${isFirst ? 'Active' : 'Planned'}`;
-      const todayMs = new Date(`${TODAY_ISO}T00:00:00`).getTime();
-      const daysLeft = Math.max(0, Math.round((new Date(`${matched.endDate}T00:00:00`).getTime() - todayMs) / 86400000));
-      const daysUntilStart = Math.max(0, Math.round((new Date(`${matched.startDate}T00:00:00`).getTime() - todayMs) / 86400000));
+      const daysLeft = workingDaysBetween(TODAY_ISO, matched.endDate);
+      const daysUntilStart = workingDaysBetween(TODAY_ISO, matched.startDate);
       // Themed titles key off list position (first = active, second = planned),
       // never the sprint's renameable name — visuals stay identical after rename.
       const position = sprints.findIndex(s => s.id === matched.id);
       if (position <= 0) {
-        return { badge, dates, title: 'Core Platform v2.4 Delivery', sub: `${daysLeft} days remaining · Synced with SQLite backend` };
+        return { badge, dates, title: 'Core Platform v2.4 Delivery', sub: `${daysLeft} working days remaining · Synced with SQLite backend` };
       }
       if (position === 1) {
-        return { badge, dates, title: 'Scale & Reliability Hardening', sub: `Starts in ${daysUntilStart} days · Backlog grooming & capacity planning` };
+        return { badge, dates, title: 'Scale & Reliability Hardening', sub: `Starts in ${daysUntilStart} working days · Backlog grooming & capacity planning` };
       }
       return { badge, dates, title: `${matched.name} Delivery`, sub: 'Sprint overview · Synced with SQLite backend' };
+    }
+    if (sprintFilter === 'Sprint 14') {
+      return { badge: 'Sprint 14 · Active', dates: 'Nov 23 – Dec 10, 2026', title: 'Core Platform v2.4 Delivery', sub: '10 working days remaining · Synced with SQLite backend' };
+    }
+    if (sprintFilter === 'Sprint 15') {
+      return { badge: 'Sprint 15 · Planned', dates: 'Dec 11 – Dec 30, 2026', title: 'Scale & Reliability Hardening', sub: 'Starts in 11 working days · Backlog grooming & capacity planning' };
     }
     if (sprintFilter === 'Backlog') {
       return { badge: 'Product Backlog', dates: 'Unscheduled Queue', title: 'Upcoming Engineering Backlog', sub: 'Prioritized work ready to pull into upcoming sprints' };

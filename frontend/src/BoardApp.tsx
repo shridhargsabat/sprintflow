@@ -207,6 +207,7 @@ export default function BoardApp() {
                 <BacklogView
                   tasks={filteredTasks}
                   team={board.team}
+                  sprints={board.sprints}
                   onOpenTask={openTaskModal}
                   onOpenDetails={(task) => openDetails(task)}
                   onMoveTaskStatus={moveTask}
@@ -234,6 +235,7 @@ export default function BoardApp() {
         {detailsModal.open && detailsModal.task && (
           <TaskDetailsModal
             task={detailsModal.task}
+            sprints={board.sprints}
             onClose={closeDetails}
             onEdit={() => { const t = detailsModal.task; closeDetails(); if (t) openTaskModal(t, t.status); }}
             onDelete={(id) => { void board.deleteTask(id); closeDetails(); }}

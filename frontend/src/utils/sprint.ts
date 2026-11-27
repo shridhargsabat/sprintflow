@@ -1,15 +1,19 @@
 import type { SprintConfig } from '../types';
 
 /**
- * Resolve a stored sprint ref (stable id, or a legacy name) to the sprint's
- * CURRENT display name. Id match wins, then name match; unknown refs
- * (including the 'Backlog' pseudo-sprint) fall back to the raw ref so the
- * caller never renders a blank label.
+ * Resolve a task's stored sprint ref to the live sprint name.
+ *
+ * Tasks store the stable sprint id (e.g. 'Sprint 14'), so after a rename in
+ * Sprint Settings the raw ref goes stale. Match the ref against s.id first,
+ * then s.name (case-insensitive), and return the live s.name. Falls back to
+ * the raw ref when nothing matches (covers the 'Backlog' pseudo-sprint and
+ * unknown values).
  */
 export function resolveSprintName(sprints: SprintConfig[], ref: string): string {
-  const byId = sprints.find(s => s.id === ref);
+  const byId = sprints.find((s) => s.id === ref);
   if (byId) return byId.name;
-  const byName = sprints.find(s => s.name === ref);
+  const lower = ref.toLowerCase();
+  const byName = sprints.find((s) => s.name.toLowerCase() === lower);
   if (byName) return byName.name;
   return ref;
 }
