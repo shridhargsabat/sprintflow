@@ -151,6 +151,18 @@ class SprintClosePayload(BaseModel):
     rolloverTo: Optional[str] = None
 
 
+class SprintRolloverPayload(BaseModel):
+    """One-click rollover: move unfinished tasks to another sprint.
+
+    Accepts snake_case `target_sprint` (canonical) or camelCase
+    `targetSprint` (frontend convention); both populate the same field.
+    """
+
+    model_config = {"populate_by_name": True}
+
+    target_sprint: Optional[str] = Field(default=None, alias="targetSprint", max_length=100)
+
+
 class PointsScalePayload(BaseModel):
     """Admin-managed story-points scale. Every violation is a 422."""
 

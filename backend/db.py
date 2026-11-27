@@ -1026,6 +1026,55 @@ def close_sprint(
         return {"closed": sprint_id, "moved": len(unfinished), "to": target}
 
 
+def rollover_sprint(
+    sprint_id: str,
+    target: Optional[str],
+    db_path: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """One-click rollover: move unfinished tasks to another sprint.
+
+    Moves ONLY tasks currently in `sprint_id` with status != 'done' to the
+    target sprint, preserving every task's status/points/assignees/tags.
+    Neither sprint's status changes (unlike close). Returns
+    {moved, task_ids, from, to}.
+
+    Errors: unknown source/target sprint -> 404 (None for source, 404 for
+    target); missing/blank/same-as-source/non-sprint target -> 422.
+    """
+    clean = target.strip() if isinstance(target, str) else ""
+    if not clean:
+        raise HTTPException(status_code=422, detail="target_sprint must not be blank")
+    if clean == sprint_id:
+        raise HTTPException(
+            status_code=422, detail="target_sprint must differ from the source sprint"
+        )
+    # Pseudo-sprints (Backlog) are never valid rollover targets: 422, not 404.
+    if clean.lower() == "backlog":
+        raise HTTPException(
+            status_code=422, detail=f"Unknown rollover sprint: {clean} (not a real sprint)"
+        )
+    with get_conn(db_path) as conn:
+        row = conn.execute("SELECT id FROM sprints WHERE id = ?", (sprint_id,)).fetchone()
+        if row is None:
+            return None
+        dest = conn.execute("SELECT id FROM sprints WHERE id = ?", (clean,)).fetchone()
+        if dest is None:
+            raise HTTPException(status_code=404, detail=f"Sprint not found: {clean}")
+        ids = [
+            r["id"]
+            for r in conn.execute(
+                "SELECT id FROM tasks WHERE sprint = ? AND status != 'done' ORDER BY id ASC",
+                (sprint_id,),
+            ).fetchall()
+        ]
+        if ids:
+            conn.execute(
+                "UPDATE tasks SET sprint = ? WHERE sprint = ? AND status != 'done'",
+                (clean, sprint_id),
+            )
+        return {"moved": len(ids), "task_ids": ids, "from": sprint_id, "to": clean}
+
+
 def list_team(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
     with get_conn(db_path) as conn:
         rows = conn.execute(

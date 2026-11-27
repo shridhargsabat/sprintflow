@@ -278,11 +278,14 @@ export default function BoardApp() {
         {sprintSettingsOpen && (
           <SprintSettingsModal
             sprints={board.sprints}
+            tasks={board.tasks}
             onClose={() => setSprintSettingsOpen(false)}
             onSave={(id, patch) => { void board.updateSprint(id, patch); }}
             onCreate={(payload) => { void board.createSprint(payload); }}
             onActivate={(id) => { void board.activateSprint(id); }}
             onCloseSprint={(id, rolloverTo) => { void board.closeSprint(id, rolloverTo); }}
+            onRolloverSprint={(id, targetId) => { void board.rolloverSprint(id, targetId); }}
+            onNothingToMove={() => board.showToast('Nothing to move', 'info')}
           />
         )}
 

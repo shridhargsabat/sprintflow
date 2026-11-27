@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { api, type CloseSprintResult, type CreateSprintPayload } from '../api';
+import { api, type CloseSprintResult, type CreateSprintPayload, type RolloverSprintResult } from '../api';
 import { DEFAULT_POINTS_SCALE, STATUS_COLUMNS } from '../constants';
 import { resolveSprintName } from '../utils/sprint';
 import type { BoardImport, SprintConfig, SprintPatch, Task, TaskFormValues, TaskStatus, TeamMember, Toast, ToastType } from '../types';
@@ -47,6 +47,7 @@ export interface UseBoard {
   createSprint: (payload: CreateSprintPayload) => Promise<void>;
   activateSprint: (id: string) => Promise<void>;
   closeSprint: (id: string, rolloverTo?: string) => Promise<CloseSprintResult | null>;
+  rolloverSprint: (id: string, targetId: string) => Promise<RolloverSprintResult | null>;
   updatePointsScale: (scale: number[]) => Promise<void>;
   moveTaskStatus: (taskId: string, newStatus: TaskStatus) => Promise<void>;
   promoteTask: (taskId: string) => Promise<void>;
@@ -320,6 +321,26 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
     }
   };
 
+  const rolloverSprint = async (id: string, targetId: string): Promise<RolloverSprintResult | null> => {
+    try {
+      const result = await api.rolloverSprint(id, targetId);
+      await refreshAll();
+      if (result.moved === 0) {
+        showToast('Nothing to move', 'info');
+      } else {
+        const targetName = resolveSprintName(sprints, result.to);
+        showToast(
+          `Moved ${result.moved} unfinished ${result.moved === 1 ? 'task' : 'tasks'} to ${targetName}`,
+          'success'
+        );
+      }
+      return result;
+    } catch {
+      showToast('Failed to move unfinished tasks', 'error');
+      return null;
+    }
+  };
+
   const updatePointsScale = async (scale: number[]): Promise<void> => {
     try {
       const updated = await api.updatePointsScale(scale);
@@ -347,6 +368,7 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
     createSprint,
     activateSprint,
     closeSprint,
+    rolloverSprint,
     updatePointsScale,
     moveTaskStatus,
     promoteTask,
