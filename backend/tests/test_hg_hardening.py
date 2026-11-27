@@ -730,8 +730,9 @@ def test_reset_gated_without_env_flag(client, monkeypatch):
 
 
 def test_seed_samples_gated_without_env_flag(tmp_path, monkeypatch):
-    # Production boot (flag unset) on a fresh DB: admin + default sprints,
-    # zero sample tasks/members/tags — an emptied board stays empty.
+    # Production boot (flag unset) on a fresh DB: admin + default sprints +
+    # standard tag defaults, zero sample tasks/members — an emptied board
+    # stays empty while task creation keeps working ('Frontend' validates).
     monkeypatch.delenv("SPRINTFLOW_SEED_SAMPLES", raising=False)
     p = str(tmp_path / "seed-gate.db")
     db_lib.init_db(p)
@@ -740,7 +741,7 @@ def test_seed_samples_gated_without_env_flag(tmp_path, monkeypatch):
         assert conn.execute("SELECT COUNT(*) FROM sprints").fetchone()[0] >= 1
         assert conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0] == 0
         assert conn.execute("SELECT COUNT(*) FROM team_members").fetchone()[0] == 0
-        assert conn.execute("SELECT COUNT(*) FROM tags").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM tags").fetchone()[0] == 6
 
 
 def test_seed_samples_present_with_env_flag(tmp_path, monkeypatch):
