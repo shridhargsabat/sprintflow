@@ -61,7 +61,7 @@ function ColorSwatches({
 }
 
 /** Tag master management. Self-contained: fetches + mutates via api. Non-admins get a read-only view. */
-export function TagsModal({ onClose }: { onClose: () => void }): React.JSX.Element {
+export function TagsModal({ onClose, onChanged }: { onClose: () => void; onChanged?: () => void }): React.JSX.Element {
   useEscapeKey(onClose);
   const { can } = usePermissions();
   const canManage = can('team.manage');
@@ -132,6 +132,9 @@ export function TagsModal({ onClose }: { onClose: () => void }): React.JSX.Eleme
       .then(updated => {
         setTags(prev => prev.map(x => (x.id === t.id ? updated : x)));
         setEditingId(null);
+        // Rename cascades to every task link (server-side, by tag id) —
+        // refresh the board so pills/filters show the new name at once.
+        onChanged?.();
       })
       .catch(err => setError(err instanceof Error ? err.message : 'Failed to update tag'))
       .finally(() => setESaving(false));
@@ -140,7 +143,10 @@ export function TagsModal({ onClose }: { onClose: () => void }): React.JSX.Eleme
   const handleDelete = (t: Tag): void => {
     setError(null);
     api.deleteTag(t.id)
-      .then(() => setTags(prev => prev.filter(x => x.id !== t.id)))
+      .then(() => {
+        setTags(prev => prev.filter(x => x.id !== t.id));
+        onChanged?.();
+      })
       .catch(err => {
         // L5: the 409 carries {tasks:N} — name the tag and its live usage
         // instead of the generic parsed message.

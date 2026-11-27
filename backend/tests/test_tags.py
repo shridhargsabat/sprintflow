@@ -50,7 +50,7 @@ def _task_payload(**overrides):
         "priority": "medium",
         "sprint": "Sprint 14",
         "points": 3,
-        "tag": "QA",
+        "tags": ["QA"],
     }
     data.update(overrides)
     return data
@@ -73,7 +73,10 @@ def test_list_tags_seeded_sorted_with_counts(client):
         expected = sum(
             1
             for t in tasks
-            if str(t["tag"]).lower() in (tag["name"].lower(), tag["id"].lower())
+            if any(
+                name.lower() in (tag["name"].lower(), tag["id"].lower())
+                for name in t["tags"]
+            )
         )
         assert tag["taskCount"] == expected, f"count mismatch for {tag['name']}"
 
@@ -136,12 +139,12 @@ def test_update_tag_partial_color_only(client):
 
 def test_update_tag_rename_repoints_tasks(client):
     created = client.post("/api/tags", json={"name": "Mobile"}).json()
-    task = client.post("/api/tasks", json=_task_payload(tag="Mobile")).json()
+    task = client.post("/api/tasks", json=_task_payload(tags=["Mobile"])).json()
     resp = client.put(f"/api/tags/{created['id']}", json={"name": "Mobile Apps"})
     assert resp.status_code == 200
     assert resp.json()["taskCount"] == 1
     got = next(t for t in client.get("/api/tasks").json() if t["id"] == task["id"])
-    assert got["tag"] == "Mobile Apps"
+    assert got["tags"] == ["Mobile Apps"]
 
 
 def test_update_tag_duplicate_name_409(client):
@@ -182,19 +185,19 @@ def test_delete_unknown_tag_404(client):
 # ---------- task tag validation ----------
 
 def test_create_task_unknown_tag_400(client):
-    resp = client.post("/api/tasks", json=_task_payload(tag="No Such Tag"))
+    resp = client.post("/api/tasks", json=_task_payload(tags=["No Such Tag"]))
     assert resp.status_code == 400
 
 
 def test_update_task_unknown_tag_400(client):
     created = client.post("/api/tasks", json=_task_payload()).json()
-    resp = client.put(f"/api/tasks/{created['id']}", json=_task_payload(tag="No Such Tag"))
+    resp = client.put(f"/api/tasks/{created['id']}", json=_task_payload(tags=["No Such Tag"]))
     assert resp.status_code == 400
 
 
 def test_create_task_known_tag_ok(client):
     for tag in ("QA", "Frontend", "API"):
-        resp = client.post("/api/tasks", json=_task_payload(tag=tag))
+        resp = client.post("/api/tasks", json=_task_payload(tags=[tag]))
         assert resp.status_code == 201, f"tag {tag}: {resp.text}"
 
 
@@ -208,12 +211,12 @@ def test_import_autocreates_missing_tags_with_warnings(client):
                 "id": "IMP-T1", "title": "New stream work", "description": "",
                 "assignees": [], "dueDate": "2026-12-20", "status": "todo",
                 "priority": "medium", "sprint": "Sprint 99", "points": 3,
-                "tag": "Observability",
+                "tags": ["Observability"],
             },
             {
                 "id": "IMP-T2", "title": "Seed stream work", "description": "",
                 "assignees": [], "dueDate": "2026-12-21", "status": "todo",
-                "priority": "low", "sprint": "Sprint 99", "points": 2, "tag": "QA",
+                "priority": "low", "sprint": "Sprint 99", "points": 2, "tags": ["QA"],
             },
         ],
     }
@@ -234,7 +237,7 @@ def test_import_known_tags_produce_no_tag_warnings(client):
             {
                 "id": "IMP-K1", "title": "Seed work", "description": "",
                 "assignees": [], "dueDate": "2026-12-20", "status": "todo",
-                "priority": "medium", "sprint": "Sprint 99", "points": 3, "tag": "Backend",
+                "priority": "medium", "sprint": "Sprint 99", "points": 3, "tags": ["Backend"],
             }
         ],
     }

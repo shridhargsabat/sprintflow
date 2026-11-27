@@ -423,7 +423,7 @@ export default function DashboardView({
                     <p className="text-xs font-semibold truncate">{t.title}</p>
                     <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate">
                       <span className="mr-1 inline-flex align-middle"><AssigneeCluster assignees={t.assignees} size="xs" /></span>
-                      {names} · {t.tag} · <span className={due.cls}>{due.text}</span>
+                      {names} · {(t.tags ?? []).join(', ') || 'Untagged'} · <span className={due.cls}>{due.text}</span>
                     </p>
                   </div>
                 </div>

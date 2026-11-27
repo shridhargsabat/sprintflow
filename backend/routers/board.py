@@ -138,6 +138,7 @@ def import_board(
         else:
             resolved_user_ids.append(user["id"])
     with db.get_conn() as conn:
+        conn.execute("DELETE FROM task_tags")
         conn.execute("DELETE FROM task_assignees")
         conn.execute("DELETE FROM tasks")
         conn.execute("DELETE FROM team_members")
@@ -145,12 +146,9 @@ def import_board(
         # master (each creation is collected into warnings[]).
         seen_tags: List[str] = []
         for t in payload.tasks:
-            raw_tag = t.get("tag") or "Frontend"
-            raw_tag = raw_tag.strip() if isinstance(raw_tag, str) else "Frontend"
-            if not raw_tag:
-                raw_tag = "Frontend"
-            if raw_tag not in seen_tags:
-                seen_tags.append(raw_tag)
+            for tag_name in _import_row_tags(t):
+                if tag_name not in seen_tags:
+                    seen_tags.append(tag_name)
         for tag_name in seen_tags:
             _, created = db.ensure_tag(conn, tag_name)
             if created:
@@ -161,16 +159,6 @@ def import_board(
                 (m["id"], m["name"], m.get("role", "Engineer"), m.get("color", "bg-indigo-600"), user_id),
             )
         for t in payload.tasks:
-            tag_value = t.get("tag") or "Frontend"
-            tag_value = tag_value.strip() if isinstance(tag_value, str) else "Frontend"
-            if not tag_value:
-                tag_value = "Frontend"
-            # L11: store the canonical tag name (ensure_tag above guarantees
-            # the row exists; the SELECT resolves slug-id inputs to names).
-            canonical = conn.execute(
-                "SELECT name FROM tags WHERE name = ? COLLATE NOCASE OR id = ? COLLATE NOCASE",
-                (tag_value, tag_value),
-            ).fetchone()
             # L2: store stripped title/sprint (validation already rejected
             # blank-after-strip, so these are non-empty here).
             title = t["title"].strip() if isinstance(t["title"], str) else t["title"]
@@ -179,8 +167,8 @@ def import_board(
             conn.execute(
                 """
                 INSERT INTO tasks
-                    (id, title, description, due_date, status, priority, sprint, points, tag)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, title, description, due_date, status, priority, sprint, points)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     t["id"],
@@ -191,9 +179,22 @@ def import_board(
                     t.get("priority", "medium"),
                     sprint,
                     int(t.get("points", 3)),
-                    canonical["name"] if canonical else tag_value,
                 ),
             )
+            # Link tags (ensure_tag above guarantees every row exists; the
+            # SELECT resolves slug-id inputs to canonical names, L11).
+            canonical_tags: List[str] = []
+            for tag_value in _import_row_tags(t):
+                canonical = conn.execute(
+                    """
+                    SELECT name FROM tags
+                    WHERE name = ? COLLATE NOCASE OR id = ? COLLATE NOCASE
+                    ORDER BY CASE WHEN name = ? COLLATE NOCASE THEN 0 ELSE 1 END
+                    """,
+                    (tag_value, tag_value, tag_value),
+                ).fetchone()
+                canonical_tags.append(canonical["name"] if canonical else tag_value)
+            db.set_task_tags(conn, t["id"], canonical_tags)
             for kind, ident in _resolve_import_assignees(t, warnings, conn):
                 if kind == "member":
                     conn.execute(
@@ -264,7 +265,12 @@ def _validate_import_task_row(t: Any, index: int, seen_ids: set) -> List[str]:
         seen_ids.add(tid)
     # Omitted keys fall back to the import's documented defaults (as before);
     # every present value must satisfy TaskPayload (title/status/priority/
-    # points ranges, length caps, assignee shapes).
+    # points ranges, length caps, assignee shapes). Legacy single-`tag` rows
+    # map to a one-item `tags` list so old exports validate identically.
+    tags_value = t.get("tags")
+    if tags_value is None and t.get("tag") is not None:
+        legacy = t.get("tag")
+        tags_value = [legacy] if isinstance(legacy, str) else legacy
     try:
         task = TaskPayload(
             title=t.get("title"),  # type: ignore[arg-type]  # None -> ValidationError -> per-row 400
@@ -275,7 +281,7 @@ def _validate_import_task_row(t: Any, index: int, seen_ids: set) -> List[str]:
             priority=t.get("priority", "medium"),
             sprint=t.get("sprint", "Sprint 14"),
             points=t.get("points", 3),
-            tag=t.get("tag", "Frontend"),
+            tags=tags_value,
         )
     except ValidationError as exc:
         errs.extend(_format_validation_errors(prefix, exc))
@@ -304,6 +310,29 @@ def _validate_import_task_row(t: Any, index: int, seen_ids: set) -> List[str]:
     if isinstance(legacy, bool):
         errs.append(f"{prefix}.assigneeUserId: boolean is not a user id")
     return errs
+
+
+def _import_row_tags(t: Any) -> List[str]:
+    """Normalized tag names for one import row (insert-time, lenient).
+
+    New `tags` arrays win; legacy single-`tag` rows map to a one-item list
+    (old exports keep importing cleanly); rows with neither default to
+    ["Frontend"]. Blank entries fall back to "Frontend" (the historical
+    single-tag behavior); an explicit [] stays untagged.
+    """
+    if not isinstance(t, dict):
+        return []
+    if t.get("tags") is not None:
+        raw = t.get("tags")
+        if not isinstance(raw, list):
+            return []  # row validation already flagged this; insert never runs
+        return [
+            (v.strip() if isinstance(v, str) else "") or "Frontend" for v in raw
+        ]
+    legacy = t.get("tag")
+    if legacy is None:
+        return ["Frontend"]
+    return [(legacy.strip() if isinstance(legacy, str) else "") or "Frontend"]
 
 
 def _validate_import_rows(payload: ImportPayload) -> List[str]:
