@@ -191,6 +191,13 @@ export interface CloseSprintResult {
   to: string;
 }
 
+export interface RolloverSprintResult {
+  moved: number;
+  task_ids: string[];
+  from: string;
+  to: string;
+}
+
 export interface MemberPayload {
   name: string;
   role?: string;
@@ -243,6 +250,11 @@ export const api = {
     request<CloseSprintResult>(`/sprints/${encodeURIComponent(id)}/close`, {
       method: 'POST',
       body: JSON.stringify(rolloverTo ? { rolloverTo } : {})
+    }),
+  rolloverSprint: (id: string, targetSprint: string): Promise<RolloverSprintResult> =>
+    request<RolloverSprintResult>(`/sprints/${encodeURIComponent(id)}/rollover`, {
+      method: 'POST',
+      body: JSON.stringify({ target_sprint: targetSprint })
     }),
 
   login: (email: string, password: string): Promise<LoginResponse> =>

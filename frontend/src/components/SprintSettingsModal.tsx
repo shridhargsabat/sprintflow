@@ -6,18 +6,21 @@ import ConfirmDialog from './ConfirmDialog';
 import { GLASS_PANEL, GLASS_PILL } from '../constants';
 import { formatShortDate } from '../utils/format';
 import { suggestNextSprintName } from '../utils/sprint';
-import type { SprintConfig, SprintPatch, SprintStatus } from '../types';
+import type { SprintConfig, SprintPatch, SprintStatus, Task } from '../types';
 import type { CreateSprintPayload } from '../api';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { usePermissions } from '../auth/usePermissions';
 
 interface SprintSettingsModalProps {
   sprints: SprintConfig[];
+  tasks: Task[];
   onClose: () => void;
   onSave: (id: string, patch: SprintPatch) => void;
   onCreate: (payload: CreateSprintPayload) => void;
   onActivate: (id: string) => void;
   onCloseSprint: (id: string, rolloverTo?: string) => void;
+  onRolloverSprint: (id: string, targetId: string) => void;
+  onNothingToMove: () => void;
 }
 
 const LENGTH_PRESETS: Array<{ label: string; days: number }> = [
@@ -49,15 +52,21 @@ function statusOf(sprint: SprintConfig): SprintStatus {
 function SprintRow({
   sprint,
   canManage,
+  unfinishedCount,
+  hasRolloverTarget,
   onSave,
   onActivate,
-  onRequestClose
+  onRequestClose,
+  onRequestRollover
 }: {
   sprint: SprintConfig;
   canManage: boolean;
+  unfinishedCount: number;
+  hasRolloverTarget: boolean;
   onSave: (id: string, patch: SprintPatch) => void;
   onActivate: (id: string) => void;
   onRequestClose: (sprint: SprintConfig) => void;
+  onRequestRollover: (sprint: SprintConfig) => void;
 }) {
   const [name, setName] = useState<string>(sprint.name);
   const [startDate, setStartDate] = useState<string>(sprint.startDate);
@@ -139,6 +148,15 @@ function SprintRow({
               className="px-4 py-2 rounded-full text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-500/10 border border-slate-400/25"
             >
               Close
+            </button>
+            <button
+              type="button"
+              disabled={!hasRolloverTarget}
+              onClick={() => onRequestRollover(sprint)}
+              title={`${unfinishedCount} unfinished ${unfinishedCount === 1 ? 'task' : 'tasks'}`}
+              className="px-4 py-2 rounded-full text-xs font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-500/10 border border-blue-400/25 min-h-[44px] md:min-h-0 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Move unfinished to…
             </button>
           </div>
           <button
@@ -253,13 +271,15 @@ function CreateSprintForm({ sprints, onCreate }: { sprints: SprintConfig[]; onCr
   );
 }
 
-export function SprintSettingsModal({ sprints, onClose, onSave, onCreate, onActivate, onCloseSprint }: SprintSettingsModalProps) {
+export function SprintSettingsModal({ sprints, tasks, onClose, onSave, onCreate, onActivate, onCloseSprint, onRolloverSprint, onNothingToMove }: SprintSettingsModalProps) {
   useEscapeKey(onClose);
   const { can } = usePermissions();
   const canManage = can('sprints.manage');
 
   const [pendingClose, setPendingClose] = useState<SprintConfig | null>(null);
   const [rollover, setRollover] = useState<string>('Backlog');
+  const [pendingRollover, setPendingRollover] = useState<SprintConfig | null>(null);
+  const [rolloverTarget, setRolloverTarget] = useState<string>('');
 
   const openSprints = sprints.filter(s => statusOf(s) !== 'closed');
   const rolloverOptions =
@@ -282,6 +302,54 @@ export function SprintSettingsModal({ sprints, onClose, onSave, onCreate, onActi
     if (!pendingClose) return;
     onCloseSprint(pendingClose.id, rollover === 'Backlog' ? undefined : rollover);
     setPendingClose(null);
+  };
+
+  // Unfinished (status != 'done') tasks currently in each sprint, mirroring
+  // the backend rollover filter (tasks store the stable sprint id).
+  const unfinishedCountFor = (sprintId: string): number =>
+    tasks.filter(t => t.sprint === sprintId && t.status !== 'done').length;
+
+  const rolloverTargetsFor = (sprintId: string): SprintConfig[] =>
+    openSprints.filter(s => s.id !== sprintId);
+
+  // Default target: the next sprint in list order after the source, else the
+  // first other open sprint ('' when no valid target exists).
+  const defaultTargetFor = (sprintId: string): string => {
+    const idx = sprints.findIndex(s => s.id === sprintId);
+    const after = idx >= 0 ? sprints.slice(idx + 1) : [];
+    const next = after.find(s => s.id !== sprintId && statusOf(s) !== 'closed');
+    if (next) return next.id;
+    return rolloverTargetsFor(sprintId)[0]?.id ?? '';
+  };
+
+  const rolloverTargetOptions =
+    pendingRollover === null
+      ? []
+      : rolloverTargetsFor(pendingRollover.id).map(s => ({
+          value: s.id,
+          label: `${s.name} (${STATUS_LABEL[statusOf(s)]})`
+        }));
+
+  const pendingRolloverTargetName =
+    sprints.find(s => s.id === rolloverTarget)?.name ?? rolloverTarget;
+  const pendingRolloverCount =
+    pendingRollover === null ? 0 : unfinishedCountFor(pendingRollover.id);
+
+  const handleRequestRollover = (sprint: SprintConfig): void => {
+    if (unfinishedCountFor(sprint.id) === 0) {
+      onNothingToMove();
+      return;
+    }
+    const def = defaultTargetFor(sprint.id);
+    if (!def) return;
+    setRolloverTarget(def);
+    setPendingRollover(sprint);
+  };
+
+  const handleConfirmRollover = (): void => {
+    if (!pendingRollover || !rolloverTarget) return;
+    onRolloverSprint(pendingRollover.id, rolloverTarget);
+    setPendingRollover(null);
   };
 
   return (
@@ -312,9 +380,12 @@ export function SprintSettingsModal({ sprints, onClose, onSave, onCreate, onActi
                 key={s.id}
                 sprint={s}
                 canManage={canManage}
+                unfinishedCount={unfinishedCountFor(s.id)}
+                hasRolloverTarget={rolloverTargetsFor(s.id).length > 0}
                 onSave={onSave}
                 onActivate={onActivate}
                 onRequestClose={handleRequestClose}
+                onRequestRollover={handleRequestRollover}
               />
             ))
           )}
@@ -325,6 +396,29 @@ export function SprintSettingsModal({ sprints, onClose, onSave, onCreate, onActi
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={pendingRollover !== null}
+        title={pendingRollover ? `Move unfinished to ${pendingRolloverTargetName}?` : 'Move unfinished?'}
+        message={
+          pendingRollover
+            ? `Move ${pendingRolloverCount} unfinished ${pendingRolloverCount === 1 ? 'task' : 'tasks'} from ${pendingRollover.name} to ${pendingRolloverTargetName}?`
+            : ''
+        }
+        confirmLabel="Move tasks"
+        onConfirm={handleConfirmRollover}
+        onCancel={() => setPendingRollover(null)}
+      >
+        <div>
+          <label className="block text-xs font-semibold mb-1">Target sprint</label>
+          <Dropdown
+            value={rolloverTarget}
+            onChange={setRolloverTarget}
+            options={rolloverTargetOptions}
+            className="inline-flex w-full min-h-[44px] md:min-h-0 items-center justify-between gap-2 rounded-2xl px-3 py-2 text-base md:text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] outline-none field-text"
+          />
+        </div>
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={pendingClose !== null}
