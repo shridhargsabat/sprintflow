@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, X } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import Calendar from './Calendar';
 import Dropdown from './Dropdown';
 import ConfirmDialog from './ConfirmDialog';
-import { GLASS_PANEL, GLASS_PILL } from '../constants';
+import { Modal } from './Modal';
+import { EyebrowBadge } from './EyebrowBadge';
+import { EmptyState } from './EmptyState';
+import { SprintStatusBadge, STATUS_LABEL } from './SprintStatusBadge';
+import { GLASS_PILL } from '../constants';
 import { formatShortDate } from '../utils/format';
 import { suggestNextSprintName } from '../utils/sprint';
 import type { SprintConfig, SprintPatch, SprintStatus, Task } from '../types';
@@ -29,18 +33,6 @@ const LENGTH_PRESETS: Array<{ label: string; days: number }> = [
   { label: '3 weeks · 15d', days: 15 },
   { label: '4 weeks · 20d', days: 20 }
 ];
-
-const STATUS_BADGE: Record<SprintStatus, string> = {
-  active: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-400/30',
-  planned: 'bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-400/30',
-  closed: 'bg-slate-900/10 dark:bg-white/10 text-slate-500 dark:text-slate-400 border border-slate-400/20'
-};
-
-const STATUS_LABEL: Record<SprintStatus, string> = {
-  active: 'Active',
-  planned: 'Planned',
-  closed: 'Closed'
-};
 
 const CALENDAR_FIELD = 'inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text';
 const TEXT_FIELD = 'w-full px-3 py-2 rounded-2xl text-base md:text-xs min-h-[44px] md:min-h-0 bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text placeholder-slate-500 dark:placeholder-slate-400';
@@ -84,9 +76,7 @@ function SprintRow({
             Currently {formatShortDate(sprint.startDate)} – {formatShortDate(sprint.endDate)} · {sprint.lengthDays} working days
           </p>
         </div>
-        <span className={`shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${STATUS_BADGE[status]}`}>
-          {STATUS_LABEL[status]}
-        </span>
+        <SprintStatusBadge status={status} />
       </div>
       {status !== 'closed' && (
         <>
@@ -353,96 +343,96 @@ export function SprintSettingsModal({ sprints, tasks, onClose, onSave, onCreate,
   };
 
   return (
-    <div onClick={onClose} className="lg-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/35 backdrop-blur-md">
-      <div onClick={e => e.stopPropagation()} className={`lg-modal-panel w-full max-w-lg rounded-[32px] overflow-hidden ${GLASS_PANEL}`}>
-        <div className="px-6 py-4 border-b border-slate-900/10 dark:border-white/10 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-400/30">SPRINTS</span>
-            <h3 className="text-base font-semibold">Sprint Settings</h3>
-          </div>
-          <button type="button" onClick={onClose} className="w-8 h-8 rounded-full hover:bg-white/60 dark:hover:bg-white/10 flex items-center justify-center">
-            <X className="w-4 h-4" />
+    <Modal
+      onClose={onClose}
+      closeButtonClassName="w-8 h-8 rounded-full hover:bg-white/60 dark:hover:bg-white/10 flex items-center justify-center"
+      title={
+        <div className="flex items-center gap-2">
+          <EyebrowBadge shrink={false}>SPRINTS</EyebrowBadge>
+          <h3 className="text-base font-semibold">Sprint Settings</h3>
+        </div>
+      }
+      footer={
+        <div className="pt-3 border-t border-slate-900/10 dark:border-white/10 flex items-center justify-end gap-2">
+          <button type="button" onClick={onClose} className={`px-4 py-2 rounded-full text-xs font-semibold ${GLASS_PILL}`}>
+            Close
           </button>
         </div>
-
-        <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto scroll-slim">
-          {!canManage && (
-            <div className="rounded-2xl bg-amber-500/10 border border-amber-400/30 px-4 py-3 text-xs text-amber-800 dark:text-amber-200">
-              Sprint management requires admin or lead access. You have read-only access.
-            </div>
-          )}
-          {canManage && <CreateSprintForm sprints={sprints} onCreate={onCreate} />}
-          {sprints.length === 0 ? (
-            <div className="py-10 text-center text-xs text-slate-400">No sprints configured yet.</div>
-          ) : (
-            sprints.map(s => (
-              <SprintRow
-                key={s.id}
-                sprint={s}
-                canManage={canManage}
-                unfinishedCount={unfinishedCountFor(s.id)}
-                hasRolloverTarget={rolloverTargetsFor(s.id).length > 0}
-                onSave={onSave}
-                onActivate={onActivate}
-                onRequestClose={handleRequestClose}
-                onRequestRollover={handleRequestRollover}
+      }
+      after={
+        <>
+          <ConfirmDialog
+            open={pendingRollover !== null}
+            title={pendingRollover ? `Move unfinished to ${pendingRolloverTargetName}?` : 'Move unfinished?'}
+            message={
+              pendingRollover
+                ? `Move ${pendingRolloverCount} unfinished ${pendingRolloverCount === 1 ? 'task' : 'tasks'} from ${pendingRollover.name} to ${pendingRolloverTargetName}?`
+                : ''
+            }
+            confirmLabel="Move tasks"
+            onConfirm={handleConfirmRollover}
+            onCancel={() => setPendingRollover(null)}
+          >
+            <div>
+              <label className="block text-xs font-semibold mb-1">Target sprint</label>
+              <Dropdown
+                value={rolloverTarget}
+                onChange={setRolloverTarget}
+                options={rolloverTargetOptions}
+                className="inline-flex w-full min-h-[44px] md:min-h-0 items-center justify-between gap-2 rounded-2xl px-3 py-2 text-base md:text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] outline-none field-text"
               />
-            ))
-          )}
-          <div className="pt-3 border-t border-slate-900/10 dark:border-white/10 flex items-center justify-end gap-2">
-            <button type="button" onClick={onClose} className={`px-4 py-2 rounded-full text-xs font-semibold ${GLASS_PILL}`}>
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
+            </div>
+          </ConfirmDialog>
 
-      <ConfirmDialog
-        open={pendingRollover !== null}
-        title={pendingRollover ? `Move unfinished to ${pendingRolloverTargetName}?` : 'Move unfinished?'}
-        message={
-          pendingRollover
-            ? `Move ${pendingRolloverCount} unfinished ${pendingRolloverCount === 1 ? 'task' : 'tasks'} from ${pendingRollover.name} to ${pendingRolloverTargetName}?`
-            : ''
-        }
-        confirmLabel="Move tasks"
-        onConfirm={handleConfirmRollover}
-        onCancel={() => setPendingRollover(null)}
-      >
-        <div>
-          <label className="block text-xs font-semibold mb-1">Target sprint</label>
-          <Dropdown
-            value={rolloverTarget}
-            onChange={setRolloverTarget}
-            options={rolloverTargetOptions}
-            className="inline-flex w-full min-h-[44px] md:min-h-0 items-center justify-between gap-2 rounded-2xl px-3 py-2 text-base md:text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] outline-none field-text"
-          />
+          <ConfirmDialog
+            open={pendingClose !== null}
+            title={pendingClose ? `Close ${pendingClose.name}?` : 'Close sprint?'}
+            message={
+              pendingClose
+                ? `Closing ${pendingClose.name} moves its open tasks to the selected destination. This cannot be undone.`
+                : ''
+            }
+            confirmLabel="Close Sprint"
+            danger
+            onConfirm={handleConfirmClose}
+            onCancel={() => setPendingClose(null)}
+          >
+            <div>
+              <label className="block text-xs font-semibold mb-1">Move open tasks to</label>
+              <Dropdown
+                value={rollover}
+                onChange={setRollover}
+                options={rolloverOptions}
+                className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] outline-none field-text"
+              />
+            </div>
+          </ConfirmDialog>
+        </>
+      }
+    >
+      {!canManage && (
+        <div className="rounded-2xl bg-amber-500/10 border border-amber-400/30 px-4 py-3 text-xs text-amber-800 dark:text-amber-200">
+          Sprint management requires admin or lead access. You have read-only access.
         </div>
-      </ConfirmDialog>
-
-      <ConfirmDialog
-        open={pendingClose !== null}
-        title={pendingClose ? `Close ${pendingClose.name}?` : 'Close sprint?'}
-        message={
-          pendingClose
-            ? `Closing ${pendingClose.name} moves its open tasks to the selected destination. This cannot be undone.`
-            : ''
-        }
-        confirmLabel="Close Sprint"
-        danger
-        onConfirm={handleConfirmClose}
-        onCancel={() => setPendingClose(null)}
-      >
-        <div>
-          <label className="block text-xs font-semibold mb-1">Move open tasks to</label>
-          <Dropdown
-            value={rollover}
-            onChange={setRollover}
-            options={rolloverOptions}
-            className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] outline-none field-text"
+      )}
+      {canManage && <CreateSprintForm sprints={sprints} onCreate={onCreate} />}
+      {sprints.length === 0 ? (
+        <EmptyState as="div">No sprints configured yet.</EmptyState>
+      ) : (
+        sprints.map(s => (
+          <SprintRow
+            key={s.id}
+            sprint={s}
+            canManage={canManage}
+            unfinishedCount={unfinishedCountFor(s.id)}
+            hasRolloverTarget={rolloverTargetsFor(s.id).length > 0}
+            onSave={onSave}
+            onActivate={onActivate}
+            onRequestClose={handleRequestClose}
+            onRequestRollover={handleRequestRollover}
           />
-        </div>
-      </ConfirmDialog>
-    </div>
+        ))
+      )}
+    </Modal>
   );
 }

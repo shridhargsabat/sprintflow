@@ -2,18 +2,8 @@ import { GLASS_PANEL } from '../constants';
 import { formatShortDate } from '../utils/format';
 import { resolveSprintName } from '../utils/sprint';
 import type { SprintConfig, SprintReport, SprintReportMovedTask, SprintReportTask, SprintStatus } from '../types';
-
-const STATUS_BADGE: Record<SprintStatus, string> = {
-  active: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-400/30',
-  planned: 'bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-400/30',
-  closed: 'bg-slate-900/10 dark:bg-white/10 text-slate-500 dark:text-slate-400 border border-slate-400/20'
-};
-
-const STATUS_LABEL: Record<SprintStatus, string> = {
-  active: 'Active',
-  planned: 'Planned',
-  closed: 'Closed'
-};
+import { SprintStatusBadge } from './SprintStatusBadge';
+import { PointsBadge } from './PointsBadge';
 
 function pts(n: number): string {
   return `${n} ${n === 1 ? 'pt' : 'pts'}`;
@@ -29,9 +19,9 @@ function TaskRow({ task, detail }: { task: SprintReportTask | SprintReportMovedT
         </p>
         {detail && <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{detail}</p>}
       </div>
-      <span className="shrink-0 px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-400/30">
+      <PointsBadge>
         {pts(task.points)}
-      </span>
+      </PointsBadge>
     </li>
   );
 }
@@ -85,9 +75,7 @@ export function SprintReportBody({ report, sprints }: { report: SprintReport; sp
           {formatShortDate(report.sprint.startDate)} – {formatShortDate(report.sprint.endDate)} · {report.sprint.lengthDays} working days ·{' '}
           {report.totals.tasks} {report.totals.tasks === 1 ? 'task' : 'tasks'} · {pts(report.totals.points)}
         </p>
-        <span className={`shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${STATUS_BADGE[status]}`}>
-          {STATUS_LABEL[status]}
-        </span>
+        <SprintStatusBadge status={status} />
       </div>
 
       <Section testId="report-completed" title="Completed" count={report.completed.count} points={report.completed.points} empty="No completed tasks yet">
