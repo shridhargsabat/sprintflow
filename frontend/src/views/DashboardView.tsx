@@ -93,7 +93,9 @@ export default function DashboardView({
     let labels = ['Nov 23', 'Nov 25', 'Nov 27', 'Nov 29', 'Dec 1', 'Dec 3', 'Dec 6'];
     if (activeSprint) {
       const len = Math.max(1, activeSprint.lengthDays);
-      const tickCount = 7;
+      // Spread at most 7 ticks over the working days; fewer ticks than days
+      // would round offsets onto the same date (dupe labels on short sprints).
+      const tickCount = len <= 1 ? 2 : Math.min(7, len);
       labels = Array.from({ length: tickCount }, (_, i) => {
         const offset = Math.round((i * (len - 1)) / (tickCount - 1));
         return formatShortDate(addWorkingDaysISO(activeSprint.startDate, offset));
