@@ -117,3 +117,43 @@ export interface TaskActivityEntry {
   newValue: string | null;
   createdAt: string;
 }
+
+/** One task row inside a sprint report section (current tasks). */
+export interface SprintReportTask {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  points: number;
+  sprint: string;
+}
+
+/**
+ * One task row inside the movedOut/movedIn sections. status/sprint are null
+ * when the task was deleted after moving (the trail outlives the row);
+ * from/to are the sprint refs of the latest matching move.
+ */
+export interface SprintReportMovedTask {
+  id: string;
+  title: string;
+  status: string | null;
+  points: number;
+  sprint: string | null;
+  from: string | null;
+  to: string | null;
+  movedAt: string | null;
+}
+
+export interface SprintReportSection<T> {
+  count: number;
+  points: number;
+  tasks: T[];
+}
+
+export interface SprintReport {
+  sprint: SprintConfig;
+  totals: { tasks: number; points: number };
+  completed: SprintReportSection<SprintReportTask>;
+  movedOut: SprintReportSection<SprintReportMovedTask>;
+  movedIn: SprintReportSection<SprintReportMovedTask>;
+  remainingUnfinished: SprintReportSection<SprintReportTask>;
+}

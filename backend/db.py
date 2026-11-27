@@ -1182,6 +1182,121 @@ def rollover_sprint(
     return {"moved": len(ids), "task_ids": ids, "from": sprint_id, "to": clean}
 
 
+def get_sprint_report(
+    sprint_id: str, db_path: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """Read-only per-sprint summary: header + totals + completed / moved / remaining.
+
+    - header: live sprint row (id, name, dates, status) via row_to_sprint.
+    - totals: tasks + points CURRENTLY in this sprint.
+    - completed: currently-done tasks in this sprint (count + points + rows).
+    - movedOut: tasks with a trail entry field='sprint' whose old_value is this
+      sprint; movedIn: entries whose new_value is this sprint. Rows carry the
+      task's LIVE id/title/status/points/current-sprint plus the from/to sprint
+      refs of the latest matching entry (callers resolve refs to live names).
+    - remainingUnfinished: tasks currently in this sprint with status != 'done'.
+
+    Dedupe rule (documented for the frontend + tests): one row per task per
+    list — the LATEST matching trail entry wins (max task_activity.id). A task
+    moved out then back in appears in BOTH lists honestly: it genuinely left
+    (an old_value match) and genuinely arrived (a new_value match).
+
+    Deleted tasks (trail outlives the row — no FK) still appear in the moved
+    lists with title=task id, status/sprint=None, points=0 rather than being
+    silently dropped. Unknown sprint -> None (the router maps it to 404).
+    """
+    with get_conn(db_path) as conn:
+        conn.executescript(TASK_ACTIVITY_DDL)
+        row = conn.execute("SELECT * FROM sprints WHERE id = ?", (sprint_id,)).fetchone()
+        if row is None:
+            return None
+        sprint = row_to_sprint(row)
+
+        current = conn.execute(
+            "SELECT id, title, status, points, sprint FROM tasks "
+            "WHERE sprint = ? ORDER BY id ASC",
+            (sprint_id,),
+        ).fetchall()
+        current_rows = [
+            {
+                "id": r["id"],
+                "title": r["title"],
+                "status": r["status"],
+                "points": r["points"],
+                "sprint": r["sprint"],
+            }
+            for r in current
+        ]
+        completed_rows = [t for t in current_rows if t["status"] == "done"]
+        remaining_rows = [t for t in current_rows if t["status"] != "done"]
+
+        trail = conn.execute(
+            "SELECT id, task_id, old_value, new_value, created_at FROM task_activity "
+            "WHERE field = 'sprint' AND (old_value = ? OR new_value = ?) "
+            "ORDER BY id ASC",
+            (sprint_id, sprint_id),
+        ).fetchall()
+        # Latest matching entry per task per direction (ascending scan: later
+        # entries overwrite earlier ones, so the max id wins).
+        latest_out: Dict[str, sqlite3.Row] = {}
+        latest_in: Dict[str, sqlite3.Row] = {}
+        for entry in trail:
+            if entry["old_value"] == sprint_id:
+                latest_out[entry["task_id"]] = entry
+            if entry["new_value"] == sprint_id:
+                latest_in[entry["task_id"]] = entry
+
+        live: Dict[str, Dict[str, Any]] = {}
+        moved_ids = list({*latest_out.keys(), *latest_in.keys()})
+        if moved_ids:
+            placeholders = ",".join("?" for _ in moved_ids)
+            for r in conn.execute(
+                f"SELECT id, title, status, points, sprint FROM tasks "
+                f"WHERE id IN ({placeholders})",
+                moved_ids,
+            ).fetchall():
+                live[r["id"]] = dict(r)
+
+        def _moved_row(task_id: str, entry: sqlite3.Row) -> Dict[str, Any]:
+            task = live.get(task_id)
+            return {
+                "id": task_id,
+                "title": task["title"] if task else task_id,
+                "status": task["status"] if task else None,
+                "points": task["points"] if task else 0,
+                "sprint": task["sprint"] if task else None,
+                "from": entry["old_value"],
+                "to": entry["new_value"],
+                "movedAt": entry["created_at"],
+            }
+
+        moved_out_rows = [
+            _moved_row(task_id, latest_out[task_id]) for task_id in sorted(latest_out)
+        ]
+        moved_in_rows = [
+            _moved_row(task_id, latest_in[task_id]) for task_id in sorted(latest_in)
+        ]
+
+        def _section(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+            return {
+                "count": len(rows),
+                "points": sum(int(r["points"] or 0) for r in rows),
+                "tasks": rows,
+            }
+
+        return {
+            "sprint": sprint,
+            "totals": {
+                "tasks": len(current_rows),
+                "points": sum(int(t["points"] or 0) for t in current_rows),
+            },
+            "completed": _section(completed_rows),
+            "movedOut": _section(moved_out_rows),
+            "movedIn": _section(moved_in_rows),
+            "remainingUnfinished": _section(remaining_rows),
+        }
+
+
 def list_team(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
     with get_conn(db_path) as conn:
         rows = conn.execute(

@@ -19,6 +19,17 @@ def get_sprints(
     return db.list_sprints()
 
 
+@router.get("/sprints/{sprint_id}/report")
+def get_sprint_report(
+    sprint_id: str,
+    _user: Dict[str, Any] = Depends(auth.get_current_user),
+) -> Dict[str, Any]:
+    report = db.get_sprint_report(sprint_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Sprint not found")
+    return report
+
+
 @router.post("/sprints", status_code=201)
 def create_sprint(
     payload: SprintCreate,
