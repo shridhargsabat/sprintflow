@@ -97,4 +97,5 @@ export interface SprintConfig {
 export interface SprintPatch {
   startDate?: string;
   lengthDays?: number;
+  name?: string;
 }
