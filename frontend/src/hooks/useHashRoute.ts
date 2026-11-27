@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ViewId } from '../types';
 
 // Route table: hash fragment <-> view. View keys double as route slugs
-// (#/dashboard, #/kanban, #/backlog). To add a view (e.g. 'reports' once a
-// ReportsView lands), extend ViewId in types.ts and append its key here.
-export const VIEW_IDS: ViewId[] = ['dashboard', 'kanban', 'backlog'];
+// (#/dashboard, #/kanban, #/backlog, #/reports). To add a view, extend
+// ViewId in types.ts and append its key here.
+export const VIEW_IDS: ViewId[] = ['dashboard', 'kanban', 'backlog', 'reports'];
 export const DEFAULT_VIEW: ViewId = 'dashboard';
 
 /** Map a location.hash to a view; empty/unknown hashes fall back to dashboard. */

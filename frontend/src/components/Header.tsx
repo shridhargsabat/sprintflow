@@ -4,6 +4,7 @@ import { useState } from 'react';
 import {
   Database,
   Download,
+  FileText,
   Hash,
   Kanban,
   Layers,
@@ -102,7 +103,8 @@ export default function Header({
             {[
               { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
               { id: 'kanban', label: 'Kanban', icon: Kanban },
-              { id: 'backlog', label: 'Backlog & Schedule', short: 'Backlog', icon: ListChecks }
+              { id: 'backlog', label: 'Backlog & Schedule', short: 'Backlog', icon: ListChecks },
+              { id: 'reports', label: 'Reports', icon: FileText }
             ].map(tab => {
               const Icon = tab.icon;
               const active = activeView === tab.id;
@@ -260,7 +262,8 @@ export default function Header({
           {[
             { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
             { id: 'kanban', label: 'Kanban', icon: Kanban },
-            { id: 'backlog', label: 'Backlog', icon: ListChecks }
+            { id: 'backlog', label: 'Backlog', icon: ListChecks },
+            { id: 'reports', label: 'Reports', icon: FileText }
           ].map(tab => {
             const Icon = tab.icon;
             const active = activeView === tab.id;
@@ -269,13 +272,13 @@ export default function Header({
                 key={tab.id}
                 type="button"
                 onClick={() => onSelectView(tab.id as ViewId)}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-4 min-h-[44px] rounded-full text-sm whitespace-nowrap transition-all duration-200 ${
+                className={`flex-1 flex items-center justify-center gap-0.5 px-1 min-h-[44px] rounded-full text-xs whitespace-nowrap transition-all duration-200 ${
                   active
                     ? 'font-semibold bg-white/90 dark:bg-white/20 text-blue-600 dark:text-white shadow-sm'
                     : 'font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                <Icon className="w-4 h-4 shrink-0" />
+                <Icon className="w-3.5 h-3.5 shrink-0" />
                 <span>{tab.label}</span>
               </button>
             );

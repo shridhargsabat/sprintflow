@@ -16,7 +16,8 @@ import FilterBar from './components/FilterBar';
 import DashboardView from './views/DashboardView';
 const KanbanView = lazy(() => import('./views/KanbanView'));
 const BacklogView = lazy(() => import('./views/BacklogView'));
-import type { PriorityFilter, Task, TaskModalState, TaskStatus } from './types';
+const ReportsView = lazy(() => import('./views/ReportsView'));
+import type { PriorityFilter, Task, TaskModalState, TaskStatus, ViewId } from './types';
 
 export default function BoardApp() {
   const [darkMode, setDarkMode] = useState<boolean>(false);
@@ -228,6 +229,12 @@ export default function BoardApp() {
                   onOpenDetails={(task) => openDetails(task)}
                   onMoveTaskStatus={moveTask}
                   onPromoteTask={promoteTask}
+                />
+              )}
+              {activeView === 'reports' && (
+                <ReportsView
+                  sprints={board.sprints}
+                  defaultSprintId={activeSprint ? activeSprint.id : null}
                 />
               )}
               </Suspense>
