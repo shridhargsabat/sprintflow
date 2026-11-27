@@ -39,7 +39,7 @@ export interface Task {
   priority: TaskPriority;
   sprint: string;
   points: number;
-  tag: string;
+  tags: string[];
 }
 
 export interface TaskPayload {
@@ -51,7 +51,7 @@ export interface TaskPayload {
   priority: TaskPriority;
   sprint: string;
   points: number;
-  tag: string;
+  tags: string[];
 }
 
 export type TaskFormValues = TaskPayload & { id: string | null };

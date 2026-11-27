@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react';
 import Dropdown from '../components/Dropdown';
 import GlassTooltip from '../components/GlassTooltip';
 import AssigneeCluster, { assigneeNames } from '../components/AssigneeCluster';
+import TagPills from '../components/TagPills';
 import type { Task, TaskStatus, TeamMember } from '../types';
 import { GLASS_PILL, PRIORITY_META, STATUS_COLUMNS } from '../constants';
 import { getDueMeta } from '../utils/format';
@@ -101,7 +102,7 @@ export default function KanbanView({ tasks, onOpenTask, onOpenDetails, onMoveTas
                         {t.title}
                       </h4>
                       <div className="flex flex-wrap items-center gap-1.5 mb-3">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-900/[0.06] dark:bg-white/10">{t.tag}</span>
+                        <TagPills tags={t.tags} />
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-900/[0.06] dark:bg-white/10">{t.points} pts</span>
                       </div>
                       <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-slate-900/[0.07] dark:border-white/10">
