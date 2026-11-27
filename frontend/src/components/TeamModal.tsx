@@ -43,7 +43,7 @@ const MEMBER_COLORS = [
   'bg-slate-500'
 ];
 
-const FIELD_INPUT = 'px-2.5 py-1.5 rounded-xl text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text';
+const FIELD_INPUT = 'px-2.5 py-2.5 md:py-1.5 rounded-xl text-base md:text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text';
 
 interface EditDraft {
   name: string;
@@ -268,7 +268,7 @@ export function TeamModal({ team, tasks, newMemberName, newMemberRole, onNameCha
               {canManage ? 'Click the pencil to edit; deletes ask for confirmation' : 'Read-only view'}
             </p>
           </div>
-          <button type="button" onClick={onClose} className="w-8 h-8 rounded-full hover:bg-white/60 dark:hover:bg-white/10 flex items-center justify-center">
+          <button type="button" onClick={onClose} className="w-11 h-11 md:w-8 md:h-8 rounded-full hover:bg-white/60 dark:hover:bg-white/10 flex items-center justify-center">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -279,7 +279,7 @@ export function TeamModal({ team, tasks, newMemberName, newMemberRole, onNameCha
             </div>
           )}
           <div className="flex items-center gap-2">
-            <div className={`flex-1 flex items-center gap-2 px-3.5 py-2 rounded-full text-xs field-text ${GLASS_PILL}`}>
+            <div className={`flex-1 min-w-0 flex items-center gap-2 px-3.5 py-2 rounded-full text-base md:text-xs field-text ${GLASS_PILL}`}>
               <Search className="w-3.5 h-3.5 shrink-0 text-slate-400" />
               <input
                 type="text"
@@ -339,11 +339,11 @@ export function TeamModal({ team, tasks, newMemberName, newMemberRole, onNameCha
                                 onChange={(v) => setDraft(d => ({ ...d, userId: v }))}
                                 options={linkOptions}
                                 placeholder="No login"
-                                className="inline-flex w-full items-center justify-between gap-1 rounded-xl px-2 py-1.5 text-[11px] font-medium bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text"
+                                className="inline-flex w-full items-center justify-between gap-1 rounded-xl px-2 py-2.5 md:py-1.5 text-base md:text-[11px] font-medium min-h-[44px] md:min-h-0 bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text"
                               />
                             </div>
                           )}
-                          <div className="flex items-center gap-1.5" role="radiogroup" aria-label="Avatar color">
+                          <div className="flex items-center gap-1.5 flex-wrap" role="radiogroup" aria-label="Avatar color">
                             {/* L6: foreign stored color gets an extra "current" swatch. */}
                             {(MEMBER_COLORS.includes(draft.color) ? MEMBER_COLORS : [draft.color, ...MEMBER_COLORS]).map(c => (
                               <button
@@ -353,8 +353,10 @@ export function TeamModal({ team, tasks, newMemberName, newMemberRole, onNameCha
                                 disabled={isSaving}
                                 aria-label={`Color ${c}`}
                                 aria-pressed={draft.color === c}
-                                className={`w-5 h-5 rounded-full ${c} transition ${draft.color === c ? 'ring-2 ring-offset-1 ring-blue-500 dark:ring-blue-400' : 'opacity-60 hover:opacity-100'}`}
-                              />
+                                className={`flex items-center justify-center rounded-full min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 transition disabled:opacity-50 ${draft.color === c ? '' : 'opacity-60 hover:opacity-100'}`}
+                              >
+                                <span className={`block w-5 h-5 rounded-full ${c} ${draft.color === c ? 'ring-2 ring-offset-1 ring-blue-500 dark:ring-blue-400' : ''}`} />
+                              </button>
                             ))}
                           </div>
                           <div className="flex-1" />
@@ -362,7 +364,7 @@ export function TeamModal({ team, tasks, newMemberName, newMemberRole, onNameCha
                             type="button"
                             onClick={() => setEditingId(null)}
                             disabled={isSaving}
-                            className="px-3 py-1.5 rounded-full text-[11px] font-medium hover:bg-white/60 dark:hover:bg-white/10 disabled:opacity-50"
+                            className="px-3 py-1.5 rounded-full text-[11px] font-medium min-h-[44px] md:min-h-0 hover:bg-white/60 dark:hover:bg-white/10 disabled:opacity-50"
                           >
                             Cancel
                           </button>
@@ -370,7 +372,7 @@ export function TeamModal({ team, tasks, newMemberName, newMemberRole, onNameCha
                             type="button"
                             onClick={() => void saveEdit(m)}
                             disabled={isSaving}
-                            className="px-3 py-1.5 rounded-full text-[11px] font-semibold bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white disabled:opacity-50"
+                            className="px-3 py-1.5 rounded-full text-[11px] font-semibold min-h-[44px] md:min-h-0 bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white disabled:opacity-50"
                           >
                             {isSaving ? 'Saving…' : 'Save'}
                           </button>
@@ -395,7 +397,7 @@ export function TeamModal({ team, tasks, newMemberName, newMemberRole, onNameCha
                               type="button"
                               onClick={() => startEdit(m)}
                               aria-label={`Edit ${m.name}`}
-                              className="p-1.5 rounded-full text-slate-500 hover:text-blue-600 dark:hover:text-blue-300"
+                              className="p-1.5 rounded-full text-slate-500 hover:text-blue-600 dark:hover:text-blue-300 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
@@ -404,7 +406,7 @@ export function TeamModal({ team, tasks, newMemberName, newMemberRole, onNameCha
                                 type="button"
                                 onClick={() => setPendingDelete(m)}
                                 aria-label={`Delete ${m.name}`}
-                                className="p-1.5 rounded-full text-slate-500 hover:text-rose-600"
+                                className="p-1.5 rounded-full text-slate-500 hover:text-rose-600 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -423,10 +425,12 @@ export function TeamModal({ team, tasks, newMemberName, newMemberRole, onNameCha
           </div>
           {canManage && (
             <>
-              <form onSubmit={onAddMember} className="flex gap-2 pt-3 border-t border-slate-900/10 dark:border-white/10">
-                <input type="text" required value={newMemberName} onChange={e => onNameChange(e.target.value)} placeholder="New member name..." className={`flex-1 px-3.5 py-2 rounded-full text-xs field-text ${GLASS_PILL}`} />
-                <input type="text" value={newMemberRole} onChange={e => onRoleChange(e.target.value)} placeholder="Role" className={`w-24 px-3 py-2 rounded-full text-xs field-text ${GLASS_PILL}`} />
-                <button type="submit" className="px-4 py-2 rounded-full text-xs font-semibold bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white">Add</button>
+              <form onSubmit={onAddMember} className="flex flex-col md:flex-row gap-2 pt-3 border-t border-slate-900/10 dark:border-white/10">
+                <input type="text" required value={newMemberName} onChange={e => onNameChange(e.target.value)} placeholder="New member name..." className={`flex-1 min-w-0 px-3.5 py-2 rounded-full text-base md:text-xs field-text ${GLASS_PILL}`} />
+                <div className="flex gap-2 md:contents">
+                  <input type="text" value={newMemberRole} onChange={e => onRoleChange(e.target.value)} placeholder="Role" className={`flex-1 md:flex-none min-w-0 md:w-24 px-3 py-2 rounded-full text-base md:text-xs field-text ${GLASS_PILL}`} />
+                  <button type="submit" className="px-4 py-2 rounded-full text-xs font-semibold shrink-0 min-h-[44px] md:min-h-0 bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white">Add</button>
+                </div>
               </form>
               {linkUsers !== null && (() => {
                 const unlinked = linkUsers.filter(u => !team.some(m => m.userId === u.id));
@@ -441,7 +445,7 @@ export function TeamModal({ team, tasks, newMemberName, newMemberRole, onNameCha
                           if (u) void onAddMemberFromUser({ id: u.id, name: u.name });
                         }}
                         options={[{ value: '', label: 'Add existing login as member...' }, ...unlinked.map(u => ({ value: String(u.id), label: `${u.name} (${u.email})` }))]}
-                        className={`inline-flex w-full items-center justify-between gap-2 rounded-full px-3.5 py-2 text-xs field-text ${GLASS_PILL}`}
+                        className={`inline-flex w-full items-center justify-between gap-2 rounded-full px-3.5 py-2 text-base md:text-xs min-h-[44px] md:min-h-0 field-text ${GLASS_PILL}`}
                       />
                     </div>
                   </div>
@@ -458,14 +462,14 @@ export function TeamModal({ team, tasks, newMemberName, newMemberRole, onNameCha
                   rows={3}
                   placeholder={'Ada Lovelace, Engineer\nGrace Hopper, Designer'}
                   disabled={bulkBusy}
-                  className={`w-full px-3.5 py-2.5 rounded-2xl text-xs field-text resize-y ${GLASS_PILL}`}
+                  className={`w-full px-3.5 py-2.5 rounded-2xl text-base md:text-xs field-text resize-y ${GLASS_PILL}`}
                 />
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => void runBulkAdd()}
                     disabled={bulkBusy}
-                    className="px-4 py-2 rounded-full text-xs font-semibold bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white disabled:opacity-50"
+                    className="px-4 py-2 rounded-full text-xs font-semibold min-h-[44px] md:min-h-0 bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white disabled:opacity-50"
                   >
                     {bulkBusy ? 'Adding…' : 'Add all'}
                   </button>

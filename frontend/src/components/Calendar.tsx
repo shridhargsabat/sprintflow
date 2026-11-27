@@ -89,7 +89,8 @@ export default function Calendar({
     const r = buttonRef.current?.getBoundingClientRect();
     if (!r) return;
     const width = Math.max(r.width, 288);
-    const estH = 340;
+    // Day cells are h-11 below md (44px touch targets) — allow extra height there.
+    const estH = window.innerWidth < 768 ? 400 : 340;
     const below = r.bottom + 8;
     const top = below + estH > window.innerHeight && r.top - 8 - estH > 0 ? r.top - 8 - estH : below;
     setMenuPos({ top, left: Math.min(r.left, window.innerWidth - width - 8), width });
@@ -279,7 +280,7 @@ export default function Calendar({
                   type="button"
                   aria-label="Previous month"
                   onClick={() => goMonth(-1)}
-                  className="rounded-full p-1.5 text-slate-600 transition-colors hover:bg-slate-500/10 dark:text-slate-300 dark:hover:bg-white/10"
+                  className="rounded-full p-1.5 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center text-slate-600 transition-colors hover:bg-slate-500/10 dark:text-slate-300 dark:hover:bg-white/10"
                 >
                   <ChevronLeft aria-hidden="true" className="h-4 w-4" />
                 </button>
@@ -290,7 +291,7 @@ export default function Calendar({
                   type="button"
                   aria-label="Next month"
                   onClick={() => goMonth(1)}
-                  className="rounded-full p-1.5 text-slate-600 transition-colors hover:bg-slate-500/10 dark:text-slate-300 dark:hover:bg-white/10"
+                  className="rounded-full p-1.5 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center text-slate-600 transition-colors hover:bg-slate-500/10 dark:text-slate-300 dark:hover:bg-white/10"
                 >
                   <ChevronRight aria-hidden="true" className="h-4 w-4" />
                 </button>
@@ -307,7 +308,7 @@ export default function Calendar({
                 ))}
                 {cells.map((iso, i) =>
                   iso === null ? (
-                    <span key={`blank-${i}`} role="gridcell" className="h-8" />
+                    <span key={`blank-${i}`} role="gridcell" className="h-11 md:h-8" />
                   ) : (
                     <button
                       key={iso}
@@ -329,7 +330,7 @@ export default function Calendar({
                           setFocusDay(iso);
                         }
                       }}
-                      className={`h-8 rounded-full text-sm transition-colors duration-100 ${
+                      className={`h-11 md:h-8 rounded-full text-sm transition-colors duration-100 ${
                         iso === value
                           ? 'bg-blue-600 font-semibold text-white shadow-sm dark:bg-blue-500'
                           : iso === today
