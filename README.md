@@ -77,6 +77,18 @@ npm run dev
 Open `http://localhost:5173`. All `/api/*` requests proxy
 to the backend on port `8000`.
 
+### Try the demo (sample data, one click)
+
+With the backend running and `SPRINTFLOW_ENABLE_DEMO=1` (already set
+in `.env.example` for compose; for bare uvicorn run
+`SPRINTFLOW_ENABLE_DEMO=1 .venv/bin/uvicorn app:app --port 8000`):
+
+1. Open the app → click **Try the demo** on the login page.
+2. The workspace reseeds fresh samples and signs you in as
+   `demo@sprintflow.local` (`Demo123!`, admin).
+3. Every demo login re-resets the board — your experiments never
+   pollute the next look.
+
 ### 3. Docker (optional)
 
 ```bash
