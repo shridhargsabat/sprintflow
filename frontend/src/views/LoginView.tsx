@@ -3,6 +3,7 @@ import type { FormEvent, ReactElement } from 'react';
 import { AlertCircle, Eye, EyeOff, Info, Layers, Loader2 } from 'lucide-react';
 import { GLASS_PANEL } from '../constants';
 import { useAuth } from '../auth/AuthContext';
+import { preloadBoardApp } from '../preloadBoardApp';
 
 function friendlyError(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
@@ -29,6 +30,9 @@ export default function LoginView(): ReactElement {
   const onSubmit = async (e: FormEvent): Promise<void> => {
     e.preventDefault();
     if (busy) return;
+    // MOB-LOW-C/C1: warm the lazy BoardApp chunk so it fetches concurrently
+    // with the auth request instead of after it (no post-login waterfall).
+    preloadBoardApp();
     setError('');
     clearReason();
     setBusy(true);
