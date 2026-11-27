@@ -197,3 +197,138 @@ def test_task_payload_links_empty_by_default(client):
     assert task["parent"] is None
     assert task["subtasks"] == []
     assert task["related"] == []
+
+
+# ---------- step 3: link endpoints + create-child ----------
+
+VIEWER = {"email": "links-viewer@sprintflow.local", "password": "Viewer123!"}
+
+
+def _viewer_headers(client, anon_client):
+    client.post(
+        "/api/auth/users",
+        json={"email": VIEWER["email"], "name": "Links Viewer",
+              "password": VIEWER["password"], "role": "viewer"},
+    )
+    resp = anon_client.post("/api/auth/login", json=VIEWER)
+    assert resp.status_code == 200, f"viewer login failed: {resp.text}"
+    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+
+def _link_http(client, task_id, linked_id, kind, headers=None):
+    return client.post(
+        f"/api/tasks/{task_id}/links",
+        json={"linked_task_id": linked_id, "kind": kind},
+        headers=headers,
+    )
+
+
+def test_post_link_subtask_201_and_child_shows_parent(client):
+    parent, child = _ids(client, "HTTP parent", "HTTP child")
+    resp = _link_http(client, parent, child, "subtask")
+    assert resp.status_code == 201, resp.text
+    assert resp.json() == {
+        "task_id": parent, "linked_task_id": child, "kind": "subtask",
+    }
+    tasks = _tasks_by_id(client)
+    assert [s["id"] for s in tasks[parent]["subtasks"]] == [child]
+    assert tasks[child]["parent"]["id"] == parent
+
+
+def test_post_link_related_both_sides(client):
+    a, b = _ids(client, "HTTP rel A", "HTTP rel B")
+    resp = _link_http(client, a, b, "related")
+    assert resp.status_code == 201, resp.text
+    tasks = _tasks_by_id(client)
+    assert [r["id"] for r in tasks[a]["related"]] == [b]
+    assert [r["id"] for r in tasks[b]["related"]] == [a]
+
+
+def test_post_link_errors(client):
+    task_id = _create(client)["id"]
+    other = _create(client, title="Link error other")["id"]
+    assert _link_http(client, task_id, task_id, "subtask").status_code == 422
+    assert _link_http(client, task_id, "DEV-999999", "subtask").status_code == 404
+    assert _link_http(client, "DEV-999999", task_id, "related").status_code == 404
+    assert _link_http(client, task_id, other, "blocks").status_code == 422
+    # Missing keys -> request validation 422.
+    assert client.post(f"/api/tasks/{task_id}/links", json={}).status_code == 422
+
+
+def test_post_link_cycle_422(client):
+    parent, child = _ids(client, "HTTP cyc P", "HTTP cyc C")
+    assert _link_http(client, parent, child, "subtask").status_code == 201
+    assert _link_http(client, child, parent, "subtask").status_code == 422
+
+
+def test_link_mutations_viewer_403(client, anon_client):
+    parent, child = _ids(client, "RBAC parent", "RBAC child")
+    headers = _viewer_headers(client, anon_client)
+    assert _link_http(client, parent, child, "subtask", headers).status_code == 403
+    assert _link_http(client, parent, child, "related", headers).status_code == 403
+    assert anon_client.delete(
+        f"/api/tasks/{parent}/links/{child}?kind=subtask", headers=headers
+    ).status_code == 403
+    assert anon_client.post(
+        f"/api/tasks/{parent}/children",
+        json=_payload(title="RBAC child"),
+        headers=headers,
+    ).status_code == 403
+    # Nothing was linked by the rejected calls.
+    assert _tasks_by_id(client)[parent]["subtasks"] == []
+
+
+def test_delete_link_idempotent(client):
+    parent, child = _ids(client, "Del-link P", "Del-link C")
+    assert _link_http(client, parent, child, "subtask").status_code == 201
+    resp = client.delete(f"/api/tasks/{parent}/links/{child}?kind=subtask")
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"removed": True}
+    again = client.delete(f"/api/tasks/{parent}/links/{child}?kind=subtask")
+    assert again.status_code == 200
+    assert again.json() == {"removed": False}
+    assert _tasks_by_id(client)[parent]["subtasks"] == []
+    assert _tasks_by_id(client)[child]["parent"] is None
+
+
+def test_delete_link_bad_kind_422(client):
+    parent, child = _ids(client, "Del-kind P", "Del-kind C")
+    resp = client.delete(f"/api/tasks/{parent}/links/{child}?kind=blocks")
+    assert resp.status_code == 422
+
+
+def test_create_child_links_and_inherits_sprint(client):
+    parent = _create(client, title="Child parent", sprint="Sprint 15")
+    resp = client.post(
+        f"/api/tasks/{parent['id']}/children",
+        json=_payload(title="Born child", points=5),
+    )
+    assert resp.status_code == 201, resp.text
+    child = resp.json()
+    assert child["sprint"] == "Sprint 15"  # inherits parent's sprint
+    assert child["status"] == "todo"
+    assert child["points"] == 5
+    tasks = _tasks_by_id(client)
+    assert tasks[child["id"]]["parent"]["id"] == parent["id"]
+    assert child["id"] in [s["id"] for s in tasks[parent["id"]]["subtasks"]]
+
+
+def test_create_child_unknown_parent_404(client):
+    resp = client.post(
+        "/api/tasks/DEV-999999/children", json=_payload(title="Orphan")
+    )
+    assert resp.status_code == 404
+
+
+def test_link_unlink_child_log_activity(client):
+    parent, child = _ids(client, "Trail parent", "Trail child")
+    assert _link_http(client, parent, child, "subtask").status_code == 201
+    trail = client.get(f"/api/tasks/{parent}/activity").json()
+    assert (trail[0]["action"], trail[0]["field"]) == ("link", "subtask")
+    assert trail[0]["newValue"] == child
+    assert client.delete(
+        f"/api/tasks/{parent}/links/{child}?kind=subtask"
+    ).status_code == 200
+    trail = client.get(f"/api/tasks/{parent}/activity").json()
+    assert (trail[0]["action"], trail[0]["field"]) == ("link", "subtask")
+    assert (trail[0]["oldValue"], trail[0]["newValue"]) == (child, None)
