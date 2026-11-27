@@ -1,6 +1,7 @@
 import { Suspense, lazy, useMemo, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { PRIORITY_META } from './constants';
+import { api } from './api';
 import { useBoard } from './hooks/useBoard';
 import { TaskModal } from './components/TaskModal';
 import { TaskDetailsModal } from './components/TaskDetailsModal';
@@ -15,7 +16,7 @@ import FilterBar from './components/FilterBar';
 import DashboardView from './views/DashboardView';
 const KanbanView = lazy(() => import('./views/KanbanView'));
 const BacklogView = lazy(() => import('./views/BacklogView'));
-import type { PriorityFilter, Task, TaskModalState, TaskStatus, ViewId } from './types';
+import type { PriorityFilter, Task, TaskFormValues, TaskModalState, TaskStatus, ViewId } from './types';
 
 export default function BoardApp() {
   const [darkMode, setDarkMode] = useState<boolean>(false);
@@ -30,6 +31,9 @@ export default function BoardApp() {
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const [taskModal, setTaskModal] = useState<TaskModalState>({ open: false, task: null, defaultStatus: 'todo' });
   const [detailsModal, setDetailsModal] = useState<{ open: boolean; task: Task | null }>({ open: false, task: null });
+  // When set, the open TaskModal is creating a subtask of this parent: the
+  // form defaults to the parent's sprint and the save links the result.
+  const [subtaskParent, setSubtaskParent] = useState<Task | null>(null);
   const [teamModalOpen, setTeamModalOpen] = useState<boolean>(false);
   const [usersModalOpen, setUsersModalOpen] = useState<boolean>(false);
   const [tagsModalOpen, setTagsModalOpen] = useState<boolean>(false);
@@ -120,8 +124,50 @@ export default function BoardApp() {
     setDetailsModal({ open: true, task });
   };
 
+  const openDetailsById = (taskId: string): void => {
+    const found = board.tasks.find(t => t.id === taskId);
+    if (found) {
+      setDetailsModal({ open: true, task: found });
+    } else {
+      board.showToast(`Task ${taskId} not found`, 'error');
+    }
+  };
+
   const closeDetails = (): void => {
     setDetailsModal({ open: false, task: null });
+  };
+
+  // "+ Add subtask" from the details modal: close details, open the creator
+  // defaulted to the parent's sprint; the save below links the result.
+  const openSubtaskCreator = (parent: Task): void => {
+    setSubtaskParent(parent);
+    closeDetails();
+    setTaskModal({ open: true, task: null, defaultStatus: 'todo' });
+  };
+
+  const closeTaskModal = (): void => {
+    setSubtaskParent(null);
+    setTaskModal({ open: false, task: null, defaultStatus: 'todo' });
+  };
+
+  // Create-then-link (two calls, one toast) while a subtask parent is set.
+  const saveTaskModal = (values: TaskFormValues): void => {
+    if (values.id || !subtaskParent) {
+      void board.saveTask(values);
+      return;
+    }
+    const parentId = subtaskParent.id;
+    void (async () => {
+      try {
+        const created = await api.createTask(values);
+        await api.addTaskLink(parentId, created.id, 'subtask');
+        await board.refreshAll();
+        board.showToast(`Created subtask ${created.id}`, 'success');
+      } catch (e) {
+        board.showToast(e instanceof Error ? e.message : 'Failed to create subtask', 'error');
+      }
+      closeTaskModal();
+    })();
   };
 
   const moveTask = (taskId: string, status: TaskStatus): void => {
@@ -236,24 +282,29 @@ export default function BoardApp() {
           <TaskModal
             task={taskModal.task}
             defaultStatus={taskModal.defaultStatus}
-            defaultSprint={sprintFilter === 'all' ? defaultSprintFilter : sprintFilter}
+            defaultSprint={subtaskParent ? subtaskParent.sprint : (sprintFilter === 'all' ? defaultSprintFilter : sprintFilter)}
             sprints={board.sprints}
             team={board.team}
             pointsScale={board.pointsScale}
-            onClose={() => setTaskModal({ open: false, task: null, defaultStatus: 'todo' })}
-            onSave={board.saveTask}
+            onClose={closeTaskModal}
+            onSave={saveTaskModal}
             onDelete={board.deleteTask}
           />
         )}
 
         {detailsModal.open && detailsModal.task && (
           <TaskDetailsModal
-            task={detailsModal.task}
+            task={board.tasks.find(t => t.id === detailsModal.task!.id) ?? detailsModal.task}
+            tasks={board.tasks}
             sprints={board.sprints}
             onClose={closeDetails}
             onEdit={() => { const t = detailsModal.task; closeDetails(); if (t) openTaskModal(t, t.status); }}
             onDelete={(id) => { void board.deleteTask(id); closeDetails(); }}
             onPromote={(id) => { promoteTask(id); closeDetails(); }}
+            onOpenTask={openDetailsById}
+            onAddSubtask={openSubtaskCreator}
+            onChanged={() => { void board.refreshAll(); }}
+            showToast={board.showToast}
           />
         )}
 
