@@ -5,7 +5,7 @@ import Calendar from './Calendar';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { api, type Tag, type UserDirectoryEntry } from '../api';
 import { usePermissions } from '../auth/usePermissions';
-import { GLASS_PANEL, GLASS_PILL, STATUS_COLUMNS } from '../constants';
+import { GLASS_PANEL, GLASS_PILL, DEFAULT_POINTS_SCALE, STATUS_COLUMNS } from '../constants';
 import type { AssigneeRef, AssigneeType, Task, TaskFormValues, TaskPriority, TaskStatus, TeamMember } from '../types';
 
 interface TaskModalProps {
@@ -13,12 +13,17 @@ interface TaskModalProps {
   defaultStatus: TaskStatus;
   defaultSprint: string;
   team: TeamMember[];
+  pointsScale?: number[];
   onClose: () => void;
   onSave: (values: TaskFormValues) => void;
   onDelete: (taskId: string) => void;
 }
 
-export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, onSave, onDelete }: TaskModalProps) {
+function defaultPointsFor(scale: number[]): number {
+  return scale.includes(3) ? 3 : scale[0] ?? 3;
+}
+
+export function TaskModal({ task, defaultStatus, defaultSprint, team, pointsScale, onClose, onSave, onDelete }: TaskModalProps) {
   useEscapeKey(onClose);
   const { can } = usePermissions();
   const canManage = can('team.manage');
@@ -35,7 +40,8 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
   const [status, setStatus] = useState<TaskStatus>(task ? task.status : defaultStatus);
   const [priority, setPriority] = useState<TaskPriority>(task ? task.priority : 'medium');
   const [sprint, setSprint] = useState<string>(task ? task.sprint : (defaultStatus === 'backlog' ? 'Sprint 15' : defaultSprint));
-  const [points, setPoints] = useState<number>(task ? Number(task.points || 3) : 3);
+  const scale = (pointsScale && pointsScale.length > 0 ? pointsScale : DEFAULT_POINTS_SCALE);
+  const [points, setPoints] = useState<number>(task ? Number(task.points || 3) : defaultPointsFor(scale));
   const [tags, setTags] = useState<string[]>(task ? [...(task.tags ?? [])] : ['Frontend']);
   const [masterTags, setMasterTags] = useState<Tag[] | null>(null);
   const [tagsFailed, setTagsFailed] = useState<boolean>(false);
@@ -209,7 +215,15 @@ export function TaskModal({ task, defaultStatus, defaultSprint, team, onClose, o
               <Dropdown
                 value={String(points)}
                 onChange={(v) => setPoints(Number(v))}
-                options={[1, 2, 3, 5, 8, 13].map(pt => ({ value: String(pt), label: `${pt} ${pt === 1 ? 'pt' : 'pts'}` }))}
+                options={(() => {
+                  const opts = scale.map(pt => ({ value: String(pt), label: `${pt} ${pt === 1 ? 'pt' : 'pts'}` }));
+                  // A task saved under an older scale keeps its value: keep it
+                  // selectable so editing never silently drops it (tags pattern).
+                  if (!scale.includes(points)) {
+                    opts.unshift({ value: String(points), label: `${points} ${points === 1 ? 'pt' : 'pts'} (custom)` });
+                  }
+                  return opts;
+                })()}
                 className="inline-flex w-full items-center justify-between gap-2 rounded-2xl px-2.5 py-2 text-base md:text-xs min-h-[44px] md:min-h-0 bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text"
               />
             </div>

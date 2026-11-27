@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
-import { STATUS_COLUMNS } from '../constants';
+import { DEFAULT_POINTS_SCALE, STATUS_COLUMNS } from '../constants';
 import type { BoardImport, SprintConfig, SprintPatch, Task, TaskFormValues, TaskStatus, TeamMember, Toast, ToastType } from '../types';
 
 export interface UseBoardDeps {
@@ -34,6 +34,7 @@ export interface UseBoard {
   team: TeamMember[];
   tasks: Task[];
   sprints: SprintConfig[];
+  pointsScale: number[];
   loading: boolean;
   apiError: string;
   toasts: Toast[];
@@ -42,6 +43,7 @@ export interface UseBoard {
   showToast: (message: string, type?: ToastType) => void;
   refreshAll: () => Promise<void>;
   updateSprint: (id: string, patch: SprintPatch) => Promise<void>;
+  updatePointsScale: (scale: number[]) => Promise<void>;
   moveTaskStatus: (taskId: string, newStatus: TaskStatus) => Promise<void>;
   promoteTask: (taskId: string) => Promise<void>;
   saveTask: (formValues: TaskFormValues) => Promise<void>;
@@ -59,6 +61,7 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [sprints, setSprints] = useState<SprintConfig[]>([]);
+  const [pointsScale, setPointsScale] = useState<number[]>(DEFAULT_POINTS_SCALE);
   const [loading, setLoading] = useState<boolean>(true);
   const [apiError, setApiError] = useState<string>('');
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -74,10 +77,22 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
   const refreshAll = async (): Promise<void> => {
     try {
       setApiError('');
-      const [teamData, tasksData, sprintsData] = await Promise.all([api.getTeam(), api.getTasks(), api.getSprints()]);
+      const [teamData, tasksData, sprintsData] = await Promise.all([
+        api.getTeam(), api.getTasks(), api.getSprints()
+      ]);
       setTeam(teamData);
       setTasks(tasksData);
       setSprints(sprintsData);
+      // Fail-soft: an older backend without the scale endpoint (or a
+      // transient failure) keeps the default picker options.
+      try {
+        const scaleData = await api.getPointsScale();
+        if (Array.isArray(scaleData?.scale) && scaleData.scale.length > 0) {
+          setPointsScale(scaleData.scale);
+        }
+      } catch {
+        /* keep DEFAULT_POINTS_SCALE */
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : '';
       setApiError(
@@ -263,10 +278,22 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
     }
   };
 
+  const updatePointsScale = async (scale: number[]): Promise<void> => {
+    try {
+      const updated = await api.updatePointsScale(scale);
+      setPointsScale(updated.scale);
+      showToast(`Points scale updated (${updated.scale.join(', ')})`, 'success');
+    } catch {
+      showToast('Failed to update points scale', 'error');
+      throw new Error('Failed to update points scale');
+    }
+  };
+
   return {
     team,
     tasks,
     sprints,
+    pointsScale,
     loading,
     apiError,
     toasts,
@@ -275,6 +302,7 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
     showToast,
     refreshAll,
     updateSprint,
+    updatePointsScale,
     moveTaskStatus,
     promoteTask,
     saveTask,

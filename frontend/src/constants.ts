@@ -2,6 +2,8 @@ import type { TaskPriority, TaskStatus } from './types';
 
 export const TODAY_ISO = '2026-11-26';
 
+export const DEFAULT_POINTS_SCALE: number[] = [1, 2, 3, 5, 8, 13];
+
 export const STATUS_COLUMNS: Array<{ id: TaskStatus; label: string; dot: string; badge: string }> = [
   { id: 'backlog', label: 'Backlog', dot: 'bg-slate-400', badge: 'bg-slate-500/15 text-slate-700 dark:text-slate-200 border border-white/40 dark:border-white/10' },
   { id: 'todo', label: 'To Do', dot: 'bg-sky-500', badge: 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-400/25' },

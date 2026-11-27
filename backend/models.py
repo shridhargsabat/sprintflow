@@ -123,3 +123,26 @@ class SprintUpdate(BaseModel):
         if not stripped:
             raise ValueError("Sprint name must not be blank")
         return stripped
+
+
+class PointsScalePayload(BaseModel):
+    """Admin-managed story-points scale. Every violation is a 422."""
+
+    scale: List[Any] = Field(..., min_length=1, max_length=30)
+
+    @field_validator("scale")
+    @classmethod
+    def _validate_scale(cls, value: List[Any]) -> List[int]:
+        # List[Any]: each entry is checked by hand so bools, floats,
+        # numeric strings and out-of-range values all 422 with one shape
+        # (pydantic int coercion would silently accept True/"3"/2.0).
+        cleaned: List[int] = []
+        for entry in value:
+            if isinstance(entry, bool) or not isinstance(entry, int):
+                raise ValueError(f"Scale entries must be integers, got {entry!r}")
+            if entry < 1 or entry > 50:
+                raise ValueError(f"Scale entries must be 1-50, got {entry!r}")
+            cleaned.append(entry)
+        if len(set(cleaned)) != len(cleaned):
+            raise ValueError("Scale entries must be unique")
+        return cleaned
