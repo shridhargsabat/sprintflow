@@ -127,7 +127,7 @@ def init_db(db_path: Optional[str] = None) -> None:
             """
         )
 
-        # Production guard: sample team/tasks/tags seed ONLY when explicitly
+        # Production guard: sample team/tasks seed ONLY when explicitly
         # allowed (dev/tests set SPRINTFLOW_SEED_SAMPLES=1; prod compose does
         # not). Without this, every backend boot resurrects demo data on an
         # intentionally emptied board (member_count == 0 after a wipe).
@@ -135,8 +135,10 @@ def init_db(db_path: Optional[str] = None) -> None:
             member_count = conn.execute("SELECT COUNT(*) FROM team_members").fetchone()[0]
             if member_count == 0:
                 seed_data(conn)
-            # Tag master: additive + idempotent, safe for seeded DBs.
-            seed_tags(conn)
+        # Tag master stays unconditional: the 6 standard tags are functional
+        # defaults (task creation defaults to 'Frontend', which must validate),
+        # not demo content. Quirk: a deleted standard tag returns on reboot.
+        seed_tags(conn)
         # Additive auto-migration for live DBs that predate the sprints table.
         # Unconditional: sprint-targeting flows (promote, pull-to-sprint) need
         # at least one sprint to exist on a fresh production board.
