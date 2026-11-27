@@ -1,4 +1,4 @@
-import type { BoardImport, SprintConfig, SprintPatch, SprintReport, SprintStatus, Task, TaskActivityEntry, TaskPayload, TaskStatus, TeamMember } from './types';
+import type { BoardImport, SprintConfig, SprintPatch, SprintReport, SprintStatus, Task, TaskActivityEntry, TaskLink, TaskLinkKind, TaskPayload, TaskStatus, TeamMember } from './types';
 
 export type { SprintStatus };
 
@@ -224,6 +224,12 @@ export const api = {
     request<Task>(`/tasks/${encodeURIComponent(id)}/promote`, { method: 'POST' }),
   deleteTask: (id: string): Promise<{ deleted: string }> =>
     request<{ deleted: string }>(`/tasks/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  addTaskLink: (id: string, linked_task_id: string, kind: TaskLinkKind): Promise<TaskLink> =>
+    request<TaskLink>(`/tasks/${encodeURIComponent(id)}/links`, { method: 'POST', body: JSON.stringify({ linked_task_id, kind }) }),
+  removeTaskLink: (id: string, linkedId: string, kind: TaskLinkKind): Promise<{ removed: boolean }> =>
+    request<{ removed: boolean }>(`/tasks/${encodeURIComponent(id)}/links/${encodeURIComponent(linkedId)}?kind=${kind}`, { method: 'DELETE' }),
+  createSubtask: (id: string, payload: TaskPayload): Promise<Task> =>
+    request<Task>(`/tasks/${encodeURIComponent(id)}/children`, { method: 'POST', body: JSON.stringify(payload) }),
   getTaskActivity: (id: string): Promise<TaskActivityEntry[]> =>
     request<TaskActivityEntry[]>(`/tasks/${encodeURIComponent(id)}/activity`),
 
