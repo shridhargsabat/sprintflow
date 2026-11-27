@@ -1,6 +1,7 @@
 """SQLite database layer for SprintFlow."""
 from __future__ import annotations
 
+import logging
 import os
 import re
 import sqlite3
@@ -9,6 +10,8 @@ from datetime import date, timedelta
 from typing import Any, Dict, Generator, List, Optional
 
 from fastapi import HTTPException
+
+logger = logging.getLogger("sprintflow.db")
 
 DB_PATH = os.environ.get(
     "SPRINTFLOW_DB_PATH",
@@ -51,7 +54,7 @@ DEFAULT_SPRINTS = [
 
 @contextmanager
 def get_conn(db_path: Optional[str] = None) -> Generator[sqlite3.Connection, None, None]:
-    conn = sqlite3.connect(db_path or DB_PATH)
+    conn = sqlite3.connect(db_path or DB_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
     try:
@@ -95,6 +98,14 @@ def init_db(db_path: Optional[str] = None) -> None:
                 ON task_assignees(task_id, user_id) WHERE user_id IS NOT NULL;
             CREATE INDEX IF NOT EXISTS idx_task_assignees_task ON task_assignees(task_id);
 
+            CREATE TABLE IF NOT EXISTS task_tags (
+                task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+                UNIQUE (task_id, tag_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_task_tags_task ON task_tags(task_id);
+            CREATE INDEX IF NOT EXISTS idx_task_tags_tag ON task_tags(tag_id);
+
             CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
             CREATE INDEX IF NOT EXISTS idx_tasks_sprint ON tasks(sprint);
             CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority);
@@ -129,20 +140,39 @@ def init_db(db_path: Optional[str] = None) -> None:
             """
         )
 
-        member_count = conn.execute("SELECT COUNT(*) FROM team_members").fetchone()[0]
-        if member_count == 0:
-            seed_data(conn)
+        # Production guard: sample team/tasks seed ONLY when explicitly
+        # allowed (dev/tests set SPRINTFLOW_SEED_SAMPLES=1; prod compose does
+        # not). Without this, every backend boot resurrects demo data on an
+        # intentionally emptied board (member_count == 0 after a wipe).
+        if os.environ.get("SPRINTFLOW_SEED_SAMPLES") == "1":
+            member_count = conn.execute("SELECT COUNT(*) FROM team_members").fetchone()[0]
+            if member_count == 0:
+                seed_data(conn)
+        # Tag master stays unconditional: the 6 standard tags are functional
+        # defaults (task creation defaults to 'Frontend', which must validate),
+        # not demo content. Quirk: a deleted standard tag returns on reboot.
+        seed_tags(conn)
         # Additive auto-migration for live DBs that predate the sprints table.
+        # Unconditional: sprint-targeting flows (promote, pull-to-sprint) need
+        # at least one sprint to exist on a fresh production board.
         seed_sprints(conn)
         # Sprint lifecycle migration: sprints.status + single-active index +
-        # exactly-one-active data (idempotent, safe for live DBs).
+        # exactly-one-active data (idempotent, safe for live DBs). Runs after
+        # seed_sprints so a fresh board converges on exactly one active.
         _migrate_sprint_status(conn)
-        # Tag master: additive + idempotent, safe for live DBs (new table).
-        seed_tags(conn)
+        # L10: case-insensitive tag-name uniqueness (dedupe legacy case-only
+        # dupes first so the NOCASE index can never break startup).
+        _enforce_tag_name_uniqueness(conn)
         # Additive auto-migration: link column for login-user <-> member.
         cols = [r[1] for r in conn.execute("PRAGMA table_info(team_members)").fetchall()]
         if "user_id" not in cols:
             conn.execute("ALTER TABLE team_members ADD COLUMN user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL")
+        # Multi-tag migration (idempotent, PRAGMA-guarded): legacy tasks.tag
+        # values are backfilled into task_tags, then the column is dropped.
+        # Runs BEFORE the assignee migration: the assignee table-rebuild
+        # fallback recreates tasks from TASKS_CORE_COLUMNS (which no longer
+        # includes tag), so tag links must already be safe in task_tags.
+        _migrate_task_tags(conn)
         # Multi-assignee migration (idempotent, guarded by PRAGMA checks so
         # fresh + already-migrated DBs are no-ops): legacy tasks.assignee_id /
         # tasks.assignee_user_id columns are backfilled into task_assignees,
@@ -176,7 +206,9 @@ def init_db(db_path: Optional[str] = None) -> None:
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_team_members_user_id "
             "ON team_members(user_id) WHERE user_id IS NOT NULL"
         )
-        # Always ensure the seeded admin login exists (idempotent).
+        # Seed the default admin ONLY on a fresh system (empty users table).
+        # A deliberately deleted admin is never resurrected while other
+        # users exist (M1); fresh-DB behavior is unchanged.
         seed_users(conn)
 
 
@@ -221,6 +253,37 @@ def _migrate_task_assignees(conn: sqlite3.Connection) -> None:
             _rebuild_tasks_without_legacy_columns(conn)
 
 
+def _migrate_task_tags(conn: sqlite3.Connection) -> None:
+    """Backfill task_tags from the legacy tasks.tag column, then drop it.
+
+    Idempotent: PRAGMA-guarded, so fresh DBs (no tag column) and
+    already-migrated DBs are no-ops. Unknown legacy values are
+    get-or-created first (ensure_tag) so no link is ever lost; NULL/blank
+    legacy values fall back to 'Frontend' (the historical column default).
+    """
+    task_cols = [r[1] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()]
+    if "tag" not in task_cols:
+        return
+    distinct = [r[0] for r in conn.execute("SELECT DISTINCT tag FROM tasks").fetchall()]
+    for raw in distinct:
+        clean = (raw or "").strip() or "Frontend"
+        ensure_tag(conn, clean)
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO task_tags (task_id, tag_id)
+        SELECT t.id, g.id FROM tasks t
+        JOIN tags g ON g.name = COALESCE(NULLIF(TRIM(t.tag), ''), 'Frontend') COLLATE NOCASE
+        """
+    )
+    try:
+        conn.execute("ALTER TABLE tasks DROP COLUMN tag")
+    except sqlite3.OperationalError:
+        # SQLite < 3.35 or a constrained schema: fall back to the shared
+        # table rebuild, which recreates tasks without the tag column
+        # (TASKS_CORE_COLUMNS no longer lists it).
+        _rebuild_tasks_without_legacy_columns(conn)
+
+
 TASKS_TABLE_DDL = """
     CREATE TABLE IF NOT EXISTS tasks (
         id TEXT PRIMARY KEY,
@@ -233,7 +296,6 @@ TASKS_TABLE_DDL = """
             CHECK(priority IN ('critical', 'high', 'medium', 'low')),
         sprint TEXT NOT NULL DEFAULT 'Sprint 14',
         points INTEGER NOT NULL DEFAULT 3,
-        tag TEXT NOT NULL DEFAULT 'Frontend',
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -241,21 +303,22 @@ TASKS_TABLE_DDL = """
 
 TASKS_CORE_COLUMNS = [
     "id", "title", "description", "due_date", "status", "priority",
-    "sprint", "points", "tag", "created_at", "updated_at",
+    "sprint", "points", "created_at", "updated_at",
 ]
 
 
 def _rebuild_tasks_without_legacy_columns(conn: sqlite3.Connection) -> None:
-    """Rebuild tasks without legacy assignee columns (DROP fallback).
+    """Rebuild tasks without legacy assignee/tag columns (DROP fallback).
 
     Runs with FK enforcement off and legacy_alter_table on (committed out of
     the caller's transaction first, since both PRAGMAs are no-ops inside one)
-    so the RENAME neither enforces nor rewrites task_assignees' FK — it keeps
-    pointing at `tasks`, which is recreated under the same name. The new
-    table keeps every core column and row; indexes are recreated.
+    so the RENAME neither enforces nor rewrites task_assignees'/task_tags'
+    FKs — they keep pointing at `tasks`, which is recreated under the same
+    name. The new table keeps every core column and row; indexes are
+    recreated.
     """
     cols = [r[1] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()]
-    if not ({"assignee_id", "assignee_user_id"} & set(cols)):
+    if not ({"assignee_id", "assignee_user_id", "tag"} & set(cols)):
         return
     keep = [c for c in TASKS_CORE_COLUMNS if c in cols]
     conn.commit()
@@ -291,20 +354,29 @@ def seed_data(conn: sqlite3.Connection) -> None:
     conn.executemany(
         """
         INSERT OR IGNORE INTO tasks
-            (id, title, description, due_date, status, priority, sprint, points, tag)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, title, description, due_date, status, priority, sprint, points)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        [(t[0], t[1], t[2], t[4], t[5], t[6], t[7], t[8], t[9]) for t in DEFAULT_TASKS],
+        [(t[0], t[1], t[2], t[4], t[5], t[6], t[7], t[8]) for t in DEFAULT_TASKS],
     )
-    # Seed assignees into the join table (DEFAULT_TASKS[3] is the member id).
+    # Seed assignees into the join table (DEFAULT_TASKS[3] is the member id)
+    # and tags into task_tags (DEFAULT_TASKS[9] is the tag name).
+    seed_sprints(conn)
+    seed_tags(conn)
     for task in DEFAULT_TASKS:
         if task[3]:
             conn.execute(
                 "INSERT OR IGNORE INTO task_assignees (task_id, member_id, user_id) VALUES (?, ?, NULL)",
                 (task[0], task[3]),
             )
-    seed_sprints(conn)
-    seed_tags(conn)
+        tag_row = conn.execute(
+            "SELECT id FROM tags WHERE name = ? COLLATE NOCASE", (task[9],)
+        ).fetchone()
+        if tag_row:
+            conn.execute(
+                "INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?, ?)",
+                (task[0], tag_row["id"]),
+            )
 
 
 DEFAULT_TAG_COLOR = "bg-sky-600"
@@ -347,48 +419,135 @@ def list_tags(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
         ).fetchall()
         out = []
         for r in rows:
-            count = conn.execute(
-                "SELECT COUNT(*) FROM tasks "
-                "WHERE tag = ? COLLATE NOCASE OR tag = ? COLLATE NOCASE",
-                (r["name"], r["id"]),
-            ).fetchone()[0]
             out.append(
-                {"id": r["id"], "name": r["name"], "color": r["color"], "taskCount": count}
+                {
+                    "id": r["id"],
+                    "name": r["name"],
+                    "color": r["color"],
+                    "taskCount": tag_usage_count(conn, r["name"]),
+                }
             )
         return out
 
 
-def validate_tag(conn: sqlite3.Connection, tag: Optional[str]) -> None:
-    """Reject a task tag unknown to the master with HTTP 400. None clears: OK."""
-    if tag is None:
-        return
-    row = conn.execute(
-        "SELECT 1 FROM tags WHERE name = ? COLLATE NOCASE OR id = ? COLLATE NOCASE",
-        (tag, tag),
-    ).fetchone()
-    if row is None:
-        raise HTTPException(status_code=400, detail=f"Unknown tag: {tag}")
+def tag_usage_count(conn: sqlite3.Connection, name: str) -> int:
+    """Live task usage for a tag, counted over the task_tags join table.
+
+    Links key on the tag id, so a rename never orphans or double-counts:
+    every distinct (task, tag) link counts exactly once for its tag.
+    """
+    return conn.execute(
+        """
+        SELECT COUNT(*) FROM task_tags tt
+        JOIN tags g ON g.id = tt.tag_id
+        WHERE g.name = ? COLLATE NOCASE
+        """,
+        (name,),
+    ).fetchone()[0]
+
+
+def _enforce_tag_name_uniqueness(conn: sqlite3.Connection) -> None:
+    """Enforce case-insensitive tag-name uniqueness (L10).
+
+    Idempotent startup migration: folds legacy case-only dupes ("Foo" vs
+    "foo", which the old case-sensitive UNIQUE allowed) into the
+    lowest-rowid winner — moving their task_tags links — then enforces a
+    NOCASE unique index so concurrent Foo/foo creates can no longer both
+    land.
+    """
+    rows = conn.execute("SELECT rowid, id, name FROM tags ORDER BY rowid ASC").fetchall()
+    winners: Dict[str, sqlite3.Row] = {}
+    for r in rows:
+        key = (r["name"] or "").lower()
+        if key not in winners:
+            winners[key] = r
+            continue
+        winner = winners[key]
+        # Move the loser's links to the winner (OR IGNORE: a task linked to
+        # both keeps one link), then drop any colliding leftovers.
+        conn.execute(
+            "UPDATE OR IGNORE task_tags SET tag_id = ? WHERE tag_id = ?",
+            (winner["id"], r["id"]),
+        )
+        conn.execute("DELETE FROM task_tags WHERE tag_id = ?", (r["id"],))
+        conn.execute("DELETE FROM tags WHERE rowid = ?", (r["rowid"],))
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_tags_name_nocase "
+        "ON tags(name COLLATE NOCASE)"
+    )
+
+
+def validate_tags(
+    conn: sqlite3.Connection, tags: Optional[List[Any]]
+) -> List[str]:
+    """Validate task tags against the master; 400 when any is unknown.
+
+    None (omitted) means the ["Frontend"] default; [] is a deliberately
+    untagged task. Returns canonical tag NAMEs, deduped (order-preserving);
+    accepts slug ids as input for backwards compatibility.
+    """
+    if tags is None:
+        tags = ["Frontend"]
+    if not isinstance(tags, list):
+        raise HTTPException(status_code=400, detail=f"Invalid tags: {tags!r} (expected a list)")
+    canonical: List[str] = []
+    seen = set()
+    for tag in tags:
+        if not isinstance(tag, str):
+            raise HTTPException(status_code=400, detail=f"Unknown tag: {tag!r}")
+        # L11: name matches win over id matches, so a cross name/id
+        # collision ("L11 Shared" as A's name and B's id) resolves to A.
+        row = conn.execute(
+            """
+            SELECT name FROM tags
+            WHERE name = ? COLLATE NOCASE OR id = ? COLLATE NOCASE
+            ORDER BY CASE WHEN name = ? COLLATE NOCASE THEN 0 ELSE 1 END
+            """,
+            (tag, tag, tag),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=400, detail=f"Unknown tag: {tag}")
+        name = str(row["name"])
+        if name.lower() not in seen:
+            seen.add(name.lower())
+            canonical.append(name)
+    return canonical
 
 
 def ensure_tag(conn: sqlite3.Connection, name: Optional[str], color: Optional[str] = None) -> tuple:
     """Get-or-create a tag by name. Returns (id, created)."""
     clean = (name or "").strip() or "Frontend"
-    row = conn.execute(
+    # L9: bounded get-or-create retries. A concurrent creator can slip
+    # between the SELECT and the INSERT; on IntegrityError we reselect
+    # by name (a hit means we lost cleanly — return the winner) or, for
+    # an id-only collision (distinct names, same slug), rescan for a
+    # fresh suffixed candidate and retry once.
+    for _ in range(2):
+        row = conn.execute(
+            "SELECT id FROM tags WHERE name = ? COLLATE NOCASE", (clean,)
+        ).fetchone()
+        if row:
+            return row["id"], False
+        base = slugify_tag_id(clean) or "tag"
+        candidate = base
+        suffix = 2
+        while conn.execute("SELECT 1 FROM tags WHERE id = ?", (candidate,)).fetchone():
+            candidate = f"{base}-{suffix}"
+            suffix += 1
+        try:
+            conn.execute(
+                "INSERT INTO tags (id, name, color) VALUES (?, ?, ?)",
+                (candidate, clean, (color or "").strip() or DEFAULT_TAG_COLOR),
+            )
+        except sqlite3.IntegrityError:
+            continue
+        return candidate, True
+    winner = conn.execute(
         "SELECT id FROM tags WHERE name = ? COLLATE NOCASE", (clean,)
     ).fetchone()
-    if row:
-        return row["id"], False
-    base = slugify_tag_id(clean) or "tag"
-    candidate = base
-    suffix = 2
-    while conn.execute("SELECT 1 FROM tags WHERE id = ?", (candidate,)).fetchone():
-        candidate = f"{base}-{suffix}"
-        suffix += 1
-    conn.execute(
-        "INSERT INTO tags (id, name, color) VALUES (?, ?, ?)",
-        (candidate, clean, (color or "").strip() or DEFAULT_TAG_COLOR),
-    )
-    return candidate, True
+    if winner:
+        return winner["id"], False
+    raise sqlite3.IntegrityError(f"ensure_tag could not create tag: {clean!r}")
 
 
 def seed_sprints(conn: sqlite3.Connection) -> None:
@@ -405,26 +564,37 @@ SEED_ADMIN_PASSWORD = "Admin123!"
 
 
 def seed_users(conn: sqlite3.Connection) -> None:
-    """Idempotently ensure the seeded admin user exists. Board reset/import
-    never touch the users table, so logins survive data resets."""
-    existing = conn.execute(
-        "SELECT id FROM users WHERE email = ?", (SEED_ADMIN_EMAIL,)
-    ).fetchone()
-    if existing:
+    """Seed the default admin login, but ONLY on a fresh system.
+
+    The seed admin is created only when the users table is EMPTY. Once any
+    user exists, seeding is skipped — so deleting the seed admin (e.g. after
+    rotating to a real admin account) is permanent and a restart can never
+    resurrect the public-password login. Board reset/import never touch the
+    users table, so logins survive data resets.
+    """
+    user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    if user_count > 0:
         return
     import bcrypt
 
     password_hash = bcrypt.hashpw(
         SEED_ADMIN_PASSWORD.encode("utf-8"), bcrypt.gensalt()
     ).decode("utf-8")
-    conn.execute(
+    cur = conn.execute(
         "INSERT OR IGNORE INTO users (email, name, password_hash, role) VALUES (?, ?, ?, 'admin')",
         (SEED_ADMIN_EMAIL, SEED_ADMIN_NAME, password_hash),
     )
+    if cur.rowcount:
+        logger.warning(
+            "SECURITY: seeded default admin login %s with the public dev "
+            "password — rotate it immediately via the Users admin UI",
+            SEED_ADMIN_EMAIL,
+        )
 
 
 def reset_db(db_path: Optional[str] = None) -> None:
     with get_conn(db_path) as conn:
+        conn.execute("DELETE FROM task_tags")
         conn.execute("DELETE FROM task_assignees")
         conn.execute("DELETE FROM tasks")
         conn.execute("DELETE FROM team_members")
@@ -435,6 +605,10 @@ def reset_db(db_path: Optional[str] = None) -> None:
 
 
 MAX_ASSIGNEES = 10
+
+# L14: max task ids per assignee-lookup query (well under SQLite's 32766
+# default bind-variable limit).
+_ASSIGNEE_LOOKUP_CHUNK = 500
 
 TASK_ASSIGNEES_SQL = """
     SELECT ta.task_id, ta.member_id, ta.user_id,
@@ -472,19 +646,26 @@ def _assignee_entry(row: sqlite3.Row) -> Optional[Dict[str, Any]]:
 def assignees_by_task(
     conn: sqlite3.Connection, task_ids: List[str]
 ) -> Dict[str, List[Dict[str, Any]]]:
-    """Batch-fetch enriched assignees for many tasks (single JOIN query)."""
+    """Batch-fetch enriched assignees for many tasks (JOIN queries, chunked)."""
     out: Dict[str, List[Dict[str, Any]]] = {tid: [] for tid in task_ids}
     if not task_ids:
         return out
-    placeholders = ",".join("?" for _ in task_ids)
-    rows = conn.execute(
-        TASK_ASSIGNEES_SQL + f" WHERE ta.task_id IN ({placeholders}) ORDER BY ta.rowid ASC",
-        task_ids,
-    ).fetchall()
-    for r in rows:
-        entry = _assignee_entry(r)
-        if entry is not None:
-            out.setdefault(r["task_id"], []).append(entry)
+    # Dedupe (order-preserving): a single IN query never multiplies rows for
+    # repeated ids, and chunking must preserve that.
+    unique: List[str] = list(dict.fromkeys(task_ids))
+    # L14: chunk so a huge id list can never breach SQLite's variable limit
+    # (default 32766 bind params) with a 500; 500/batch keeps margin.
+    for start in range(0, len(unique), _ASSIGNEE_LOOKUP_CHUNK):
+        batch = unique[start:start + _ASSIGNEE_LOOKUP_CHUNK]
+        placeholders = ",".join("?" for _ in batch)
+        rows = conn.execute(
+            TASK_ASSIGNEES_SQL + f" WHERE ta.task_id IN ({placeholders}) ORDER BY ta.rowid ASC",
+            batch,
+        ).fetchall()
+        for r in rows:
+            entry = _assignee_entry(r)
+            if entry is not None:
+                out.setdefault(r["task_id"], []).append(entry)
     return out
 
 
@@ -495,7 +676,11 @@ def assignees_for_task(
     return assignees_by_task(conn, [task_id]).get(task_id, [])
 
 
-def row_to_task(row: sqlite3.Row, assignees: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+def row_to_task(
+    row: sqlite3.Row,
+    assignees: Optional[List[Dict[str, Any]]] = None,
+    tags: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     return {
         "id": row["id"],
         "title": row["title"],
@@ -506,16 +691,20 @@ def row_to_task(row: sqlite3.Row, assignees: Optional[List[Dict[str, Any]]] = No
         "priority": row["priority"],
         "sprint": row["sprint"],
         "points": row["points"],
-        "tag": row["tag"],
+        "tags": list(tags) if tags else [],
     }
 
 
 def fetch_task(conn: sqlite3.Connection, task_id: str) -> Dict[str, Any]:
-    """Single task row with its JOIN-enriched assignees attached."""
+    """Single task row with its JOIN-enriched assignees and tags attached."""
     row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    return row_to_task(row, assignees_for_task(conn, task_id))
+    return row_to_task(
+        row,
+        assignees_for_task(conn, task_id),
+        tags_for_task(conn, task_id),
+    )
 
 
 def next_task_id(conn: sqlite3.Connection) -> str:
@@ -532,7 +721,24 @@ def next_task_id(conn: sqlite3.Connection) -> str:
 
 
 def sprint_end_date(start_date: str, length_days: int) -> str:
-    return (date.fromisoformat(start_date) + timedelta(days=length_days - 1)).isoformat()
+    """End date of a sprint: the Nth WORKING day (Mon-Fri).
+
+    length_days counts working days only. The start date is day 1 when it
+    falls on Mon-Fri; a weekend start rolls forward to the following Monday,
+    which is then counted as day 1. Existing stored length_days values are
+    reinterpreted as working days (no data migration).
+    """
+    current = date.fromisoformat(start_date)
+    if current.weekday() == 5:  # Saturday -> Monday
+        current += timedelta(days=2)
+    elif current.weekday() == 6:  # Sunday -> Monday
+        current += timedelta(days=1)
+    remaining = length_days - 1
+    while remaining > 0:
+        current += timedelta(days=1)
+        if current.weekday() < 5:
+            remaining -= 1
+    return current.isoformat()
 
 
 def row_to_sprint(row: sqlite3.Row) -> Dict[str, Any]:
@@ -574,7 +780,13 @@ def update_sprint(
             conn.execute("UPDATE sprints SET start_date = ? WHERE id = ?", (start_date, sprint_id))
         if length_days is not None:
             conn.execute("UPDATE sprints SET length_days = ? WHERE id = ?", (length_days, sprint_id))
+        if name is not None:
+            conn.execute("UPDATE sprints SET name = ? WHERE id = ?", (name, sprint_id))
         row = conn.execute("SELECT * FROM sprints WHERE id = ?", (sprint_id,)).fetchone()
+        # L13: the row can vanish mid-update (reset race) — None-safe so the
+        # router maps it to 404 instead of TypeErroring into a 500.
+        if row is None:
+            return None
         return row_to_sprint(row)
 
 
@@ -812,8 +1024,22 @@ def list_tasks(
         )
         params.append(assignee_user_id)
     if search and search.strip():
-        like = f"%{search.strip()}%"
-        clauses.append("(t.id LIKE ? OR t.title LIKE ? OR t.description LIKE ? OR t.tag LIKE ?)")
+        # L1: escape LIKE wildcards so a literal %/_ in the query matches
+        # only itself (params were always bound — never injectable — but an
+        # unescaped % over-matched, e.g. search "%" returned every task).
+        escaped = (
+            search.strip()
+            .replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        )
+        like = f"%{escaped}%"
+        clauses.append(
+            "(t.id LIKE ? ESCAPE '\\' OR t.title LIKE ? ESCAPE '\\' "
+            "OR t.description LIKE ? ESCAPE '\\' "
+            "OR EXISTS (SELECT 1 FROM task_tags tt JOIN tags g ON g.id = tt.tag_id "
+            "WHERE tt.task_id = t.id AND g.name LIKE ? ESCAPE '\\'))"
+        )
         params.extend([like, like, like, like])
 
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
@@ -821,8 +1047,13 @@ def list_tasks(
               {where} ORDER BY t.updated_at DESC, t.rowid DESC"""
     with get_conn(db_path) as conn:
         rows = conn.execute(sql, params).fetchall()
-        assignee_map = assignees_by_task(conn, [r["id"] for r in rows])
-        return [row_to_task(r, assignee_map.get(r["id"], [])) for r in rows]
+        task_ids = [r["id"] for r in rows]
+        assignee_map = assignees_by_task(conn, task_ids)
+        tag_map = tags_by_task(conn, task_ids)
+        return [
+            row_to_task(r, assignee_map.get(r["id"], []), tag_map.get(r["id"], []))
+            for r in rows
+        ]
 
 
 def list_user_directory(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -869,6 +1100,13 @@ def validate_assignees(
                 )
             key = ("member", member_id)
         elif kind == "user":
+            # M5: JSON true/false must never coerce to user id 1/0 via int()
+            # (id 1 is the admin). Numeric strings like "3" still convert.
+            if isinstance(raw_id, bool):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid assignee user id: {raw_id!r} (boolean is not a user id)",
+                )
             try:
                 user_id = int(raw_id)  # type: ignore[arg-type]
             except (TypeError, ValueError):
@@ -913,4 +1151,62 @@ def set_task_assignees(
                 "INSERT OR IGNORE INTO task_assignees (task_id, member_id, user_id) "
                 "VALUES (?, NULL, ?)",
                 (task_id, ident),
+            )
+
+
+TASK_TAGS_SQL = """
+    SELECT tt.task_id, g.name AS tag_name
+    FROM task_tags tt
+    JOIN tags g ON g.id = tt.tag_id
+"""
+
+
+def tags_by_task(
+    conn: sqlite3.Connection, task_ids: List[str]
+) -> Dict[str, List[str]]:
+    """Batch-fetch canonical tag names for many tasks (JOIN query, chunked).
+
+    Names sort NOCASE for a deterministic response order. Mirrors
+    assignees_by_task (dangling links are impossible: both FKs CASCADE).
+    """
+    out: Dict[str, List[str]] = {tid: [] for tid in task_ids}
+    if not task_ids:
+        return out
+    unique: List[str] = list(dict.fromkeys(task_ids))
+    for start in range(0, len(unique), _ASSIGNEE_LOOKUP_CHUNK):
+        batch = unique[start:start + _ASSIGNEE_LOOKUP_CHUNK]
+        placeholders = ",".join("?" for _ in batch)
+        rows = conn.execute(
+            TASK_TAGS_SQL
+            + f" WHERE tt.task_id IN ({placeholders})"
+            + " ORDER BY g.name COLLATE NOCASE ASC",
+            batch,
+        ).fetchall()
+        for r in rows:
+            out.setdefault(r["task_id"], []).append(str(r["tag_name"]))
+    return out
+
+
+def tags_for_task(conn: sqlite3.Connection, task_id: str) -> List[str]:
+    """Canonical tag names for a single task (sorted, [] when none)."""
+    return tags_by_task(conn, [task_id]).get(task_id, [])
+
+
+def set_task_tags(
+    conn: sqlite3.Connection, task_id: str, canonical_names: List[str]
+) -> None:
+    """Replace a task's join-table tag rows (full replacement).
+
+    Names must already be canonical (see validate_tags); the lookup resolves
+    them to tag ids for storage.
+    """
+    conn.execute("DELETE FROM task_tags WHERE task_id = ?", (task_id,))
+    for name in canonical_names:
+        row = conn.execute(
+            "SELECT id FROM tags WHERE name = ? COLLATE NOCASE", (name,)
+        ).fetchone()
+        if row is not None:
+            conn.execute(
+                "INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?, ?)",
+                (task_id, row["id"]),
             )

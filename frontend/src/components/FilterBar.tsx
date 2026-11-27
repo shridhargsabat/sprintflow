@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import Dropdown from './Dropdown';
 import { GlassTooltip } from './GlassTooltip';
-import { api, type UserDirectoryEntry } from '../api';
+import { api, type Tag, type UserDirectoryEntry } from '../api';
 import { GLASS_PANEL, GLASS_PILL } from '../constants';
 import { formatShortDate } from '../utils/format';
+import { resolveSprintName } from '../utils/sprint';
 import type { PriorityFilter, SprintConfig, TeamMember } from '../types';
 
 export interface FilterBarProps {
@@ -17,6 +18,8 @@ export interface FilterBarProps {
   onPriorityFilterChange: (value: PriorityFilter) => void;
   assigneeFilter: string;
   onAssigneeFilterChange: (value: string) => void;
+  tagFilter: string[];
+  onTagFilterChange: (value: string[]) => void;
   team: TeamMember[];
   hasActiveFilters: boolean;
   onClearFilters: () => void;
@@ -32,20 +35,27 @@ export default function FilterBar({
   onPriorityFilterChange,
   assigneeFilter,
   onAssigneeFilterChange,
+  tagFilter,
+  onTagFilterChange,
   team,
   hasActiveFilters,
   onClearFilters,
 }: FilterBarProps) {
+  // Sprint options always come from the LIVE sprints list (ids as values, so a
+  // Sprint Settings rename keeps every stored task linked). When the list is
+  // empty (backend unreachable), the current selection is kept as its own
+  // option instead of hardcoded names.
   const sprintOptions = [
     { value: 'all', label: 'All Sprints & Backlog' },
-    ...(sprints.length > 0
-      ? sprints.map(s => ({
-          value: s.id,
-          label: `${s.name} (${formatShortDate(s.startDate)} – ${formatShortDate(s.endDate)})${s.status === 'active' ? ' • Active' : ''}`
-        }))
-      : [{ value: 'Sprint 14', label: 'Sprint 14' }, { value: 'Sprint 15', label: 'Sprint 15' }]),
+    ...sprints.map(s => ({
+      value: s.id,
+      label: `${s.name} (${formatShortDate(s.startDate)} – ${formatShortDate(s.endDate)})${s.status === 'active' ? ' • Active' : ''}`
+    })),
     { value: 'Backlog', label: 'Unassigned Backlog' }
   ];
+  if (sprintFilter !== 'all' && sprintFilter !== 'Backlog' && !sprintOptions.some(o => o.value === sprintFilter)) {
+    sprintOptions.splice(1, 0, { value: sprintFilter, label: resolveSprintName(sprints, sprintFilter) });
+  }
   // Dropdown exposes no open-state callback, so observe its trigger button's
   // aria-expanded attribute: hides the "Filter by assignee" tooltip bubble
   // while the Who menu is open (covers click toggle, option select, Escape,
@@ -53,6 +63,14 @@ export default function FilterBar({
   const whoWrapRef = useRef<HTMLDivElement>(null);
   const [whoOpen, setWhoOpen] = useState(false);
   const [directory, setDirectory] = useState<UserDirectoryEntry[]>([]);
+  const [masterTags, setMasterTags] = useState<Tag[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    api.listTags()
+      .then(ts => { if (!cancelled) setMasterTags(ts); })
+      .catch(() => { /* fail-soft: tag filter hides when the master is unreachable */ });
+    return () => { cancelled = true; };
+  }, []);
   useEffect(() => {
     let cancelled = false;
     api.listUserDirectory()
@@ -131,6 +149,23 @@ export default function FilterBar({
               />
             </GlassTooltip>
           </div>
+
+          {masterTags.length > 0 && (
+            <div className="shrink-0 min-w-36">
+              <GlassTooltip label="Filter by tags (match any)" position="bottom" className="block w-full">
+                <Dropdown
+                  multi
+                  value={tagFilter}
+                  onChange={onTagFilterChange}
+                  searchable
+                  searchPlaceholder="Search tags…"
+                  placeholder="Tags: All"
+                  options={masterTags.map(t => ({ value: t.name, label: `${t.name} (${t.taskCount ?? 0})` }))}
+                  className={`inline-flex w-full items-center justify-between gap-2 rounded-full px-3.5 py-1.5 text-xs font-medium cursor-pointer ${GLASS_PILL}`}
+                />
+              </GlassTooltip>
+            </div>
+          )}
 
           {hasActiveFilters && (
             <button type="button" onClick={onClearFilters} className="px-3 py-1.5 rounded-full text-xs font-semibold text-blue-600 dark:text-blue-300 hover:bg-blue-500/10">

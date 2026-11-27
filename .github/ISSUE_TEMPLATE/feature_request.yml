@@ -1,0 +1,46 @@
+name: Feature request
+description: Propose an enhancement for SprintFlow
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What can't you do today? What sprint workflow motivates this?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should happen instead? Include UI sketch, API shape, or endpoint design if relevant.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Dashboard / KPIs
+        - Kanban board
+        - Backlog & team schedule
+        - Backend API (/api/*)
+        - Auth / login
+        - Import / reset
+        - Docker / deploy
+        - Docs
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches or workarounds you tried.
+  - type: checkboxes
+    id: fit
+    attributes:
+      label: Fit with project direction
+      description: SprintFlow stays a lightweight sprint board — Dashboard, Kanban, Backlog — on FastAPI + SQLite.
+      options:
+        - label: This keeps the stack simple (no new services or heavy dependencies)
+        - label: I am willing to contribute this (code, tests, or docs)

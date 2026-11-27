@@ -12,7 +12,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 
 const FIELD =
-  'px-3 py-2 rounded-full text-xs field-text bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50';
+  'px-3 py-2 rounded-full text-base md:text-xs min-h-[44px] md:min-h-0 field-text bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50';
 
 const ROLES: Role[] = ['admin', 'lead', 'member', 'viewer'];
 
@@ -158,19 +158,19 @@ export function UsersModal({ onClose }: { onClose: () => void }): React.JSX.Elem
 
   return (
     <div onClick={onClose} className="lg-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/35 backdrop-blur-md">
-      <div onClick={e => e.stopPropagation()} className={`lg-modal-panel w-full max-w-md rounded-[32px] overflow-hidden ${GLASS_PANEL}`}>
-        <div className="px-6 py-4 border-b border-slate-900/10 dark:border-white/10 flex items-center justify-between">
+      <div onClick={e => e.stopPropagation()} className={`lg-modal-panel w-full max-w-md rounded-[32px] overflow-hidden flex flex-col md:block max-h-[90vh] md:max-h-none ${GLASS_PANEL}`}>
+        <div className="px-6 py-4 border-b border-slate-900/10 dark:border-white/10 flex items-center justify-between shrink-0">
           <div>
             <h3 className="text-base font-semibold flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-blue-500" /> Manage Users
             </h3>
             <p className="text-[11px] text-slate-600 dark:text-slate-400">Login accounts &amp; roles (admin only)</p>
           </div>
-          <button type="button" onClick={onClose} className="w-8 h-8 rounded-full hover:bg-white/60 dark:hover:bg-white/10 flex items-center justify-center">
+          <button type="button" onClick={onClose} className="w-11 h-11 md:w-8 md:h-8 rounded-full hover:bg-white/60 dark:hover:bg-white/10 flex items-center justify-center">
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-4 overflow-y-auto scroll-slim md:overflow-visible min-h-0">
           {error && (
             <div className="px-3.5 py-2 rounded-2xl text-xs font-medium bg-rose-500/15 text-rose-700 dark:text-rose-200 border border-rose-400/30">
               {error}
@@ -208,12 +208,12 @@ export function UsersModal({ onClose }: { onClose: () => void }): React.JSX.Elem
                     <div className="flex gap-2">
                       <input type="text" value={eName} onChange={e => setEName(e.target.value)} placeholder="Full name" className={`flex-1 min-w-0 ${FIELD}`} />
                       {!isSelf ? (
-                        <div className="w-28 shrink-0">
+                        <div className="w-32 md:w-28 shrink-0">
                           <Dropdown
                             value={eRole}
                             onChange={(v) => setERole(v as Role)}
                             options={ROLES.map(r => ({ value: r, label: r }))}
-                            className={`inline-flex w-full items-center justify-between gap-2 rounded-full px-3 py-2 text-xs field-text ${GLASS_PILL}`}
+                            className={`inline-flex w-full items-center justify-between gap-2 rounded-full px-3 py-2 text-base md:text-xs min-h-[44px] md:min-h-0 field-text ${GLASS_PILL}`}
                           />
                         </div>
                       ) : (
@@ -227,8 +227,8 @@ export function UsersModal({ onClose }: { onClose: () => void }): React.JSX.Elem
                       <input type="password" value={ePassword} onChange={e => setEPassword(e.target.value)} placeholder="New pw (blank=keep)" className={`w-36 ${FIELD}`} />
                     </div>
                     <div className="flex gap-2 justify-end">
-                      <button type="button" onClick={() => setEditingId(null)} className="px-3.5 py-1.5 rounded-full text-xs font-medium hover:bg-white/60 dark:hover:bg-white/10">Cancel</button>
-                      <button type="button" onClick={() => handleSaveEdit(u)} disabled={eSaving} className="px-4 py-1.5 rounded-full text-xs font-semibold bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white disabled:opacity-60">
+                      <button type="button" onClick={() => setEditingId(null)} className="px-3.5 py-1.5 rounded-full text-xs font-medium min-h-[44px] md:min-h-0 hover:bg-white/60 dark:hover:bg-white/10">Cancel</button>
+                      <button type="button" onClick={() => handleSaveEdit(u)} disabled={eSaving} className="px-4 py-1.5 rounded-full text-xs font-semibold min-h-[44px] md:min-h-0 bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white disabled:opacity-60">
                         {eSaving ? 'Saving…' : 'Save'}
                       </button>
                     </div>
@@ -252,7 +252,7 @@ export function UsersModal({ onClose }: { onClose: () => void }): React.JSX.Elem
                     return (
                       <span className="mt-0.5 inline-flex items-center gap-1 px-1.5 py-px rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-700 dark:text-blue-200 border border-blue-400/25">
                         {tm.name}
-                        <button type="button" onClick={() => setPendingUnlink(tm)} title={`Unlink ${tm.name}`} className="hover:text-rose-600">
+                        <button type="button" onClick={() => setPendingUnlink(tm)} title={`Unlink ${tm.name}`} className="hover:text-rose-600 min-w-[32px] min-h-[32px] md:min-w-0 md:min-h-0 inline-flex items-center justify-center -my-1">
                           <Unlink className="w-3 h-3" />
                         </button>
                       </span>
@@ -262,11 +262,11 @@ export function UsersModal({ onClose }: { onClose: () => void }): React.JSX.Elem
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border ${ROLE_PILL[u.role]}`}>
                   {u.role}
                 </span>
-                <button type="button" onClick={() => startEdit(u)} title={`Edit ${u.email}`} className="p-1.5 rounded-full text-slate-500 hover:text-blue-600">
+                <button type="button" onClick={() => startEdit(u)} title={`Edit ${u.email}`} className="p-1.5 rounded-full text-slate-500 hover:text-blue-600 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center">
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
                 {!isSelf && (
-                  <button type="button" onClick={() => setPendingDelete(u)} title={`Delete ${u.email}`} className="p-1.5 rounded-full text-slate-500 hover:text-rose-600">
+                  <button type="button" onClick={() => setPendingDelete(u)} title={`Delete ${u.email}`} className="p-1.5 rounded-full text-slate-500 hover:text-rose-600 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 )}
@@ -275,15 +275,15 @@ export function UsersModal({ onClose }: { onClose: () => void }): React.JSX.Elem
             })}
           </div>
           <form onSubmit={handleCreate} className="pt-3 border-t border-slate-900/10 dark:border-white/10">
-            <fieldset disabled={loadFailed} className="space-y-2">
+            <fieldset disabled={loadFailed} className="space-y-2 min-w-0">
             <div className="flex gap-2">
               <input type="text" required value={name} onChange={e => setName(e.target.value)} placeholder="Full name" className={`flex-1 min-w-0 ${FIELD}`} />
-              <div className="w-28 shrink-0">
+              <div className="w-32 md:w-28 shrink-0">
                 <Dropdown
                   value={role}
                   onChange={(v) => setRole(v as Role)}
                   options={ROLES.map(r => ({ value: r, label: r }))}
-                  className={`inline-flex w-full items-center justify-between gap-2 rounded-full px-3 py-2 text-xs field-text ${GLASS_PILL}`}
+                  className={`inline-flex w-full items-center justify-between gap-2 rounded-full px-3 py-2 text-base md:text-xs min-h-[44px] md:min-h-0 field-text ${GLASS_PILL}`}
                 />
               </div>
             </div>
@@ -295,9 +295,9 @@ export function UsersModal({ onClose }: { onClose: () => void }): React.JSX.Elem
               value={memberId}
               onChange={setMemberId}
               options={[{ value: '', label: 'Link team member (optional)' }, ...team.filter(t => t.userId == null).map(t => ({ value: t.id, label: `${t.name} (${t.role})` }))]}
-              className={`inline-flex w-full items-center justify-between gap-2 rounded-full px-3 py-2 text-xs field-text ${GLASS_PILL}`}
+              className={`inline-flex w-full items-center justify-between gap-2 rounded-full px-3 py-2 text-base md:text-xs min-h-[44px] md:min-h-0 field-text ${GLASS_PILL}`}
             />
-            <button type="submit" disabled={saving || loadFailed} className="w-full px-4 py-2 rounded-full text-xs font-semibold bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white disabled:opacity-60">
+            <button type="submit" disabled={saving || loadFailed} className="w-full px-4 py-2 rounded-full text-xs font-semibold min-h-[44px] md:min-h-0 bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white disabled:opacity-60">
               {saving ? 'Creating…' : 'Create User'}
             </button>
             </fieldset>

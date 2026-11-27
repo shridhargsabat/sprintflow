@@ -20,11 +20,12 @@ def _tag_with_count(conn: sqlite3.Connection, tag_id: str) -> Dict[str, Any]:
     ).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="Tag not found")
-    count = conn.execute(
-        "SELECT COUNT(*) FROM tasks WHERE tag = ? COLLATE NOCASE OR tag = ? COLLATE NOCASE",
-        (row["name"], row["id"]),
-    ).fetchone()[0]
-    return {"id": row["id"], "name": row["name"], "color": row["color"], "taskCount": count}
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "color": row["color"],
+        "taskCount": db.tag_usage_count(conn, row["name"]),
+    }
 
 
 @router.get("/tags")
@@ -103,11 +104,8 @@ def update_tag(
             raise HTTPException(
                 status_code=409, detail=f"Tag already exists: {new_name}"
             )
-        if new_name != existing["name"]:
-            conn.execute(
-                "UPDATE tasks SET tag = ? WHERE tag = ? COLLATE NOCASE",
-                (new_name, existing["name"]),
-            )
+        # Rename needs no task retagging: task_tags links key on the tag id,
+        # so the new name resolves automatically on every read.
         return _tag_with_count(conn, tag_id)
 
 
@@ -122,11 +120,26 @@ def delete_tag(
         ).fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Tag not found")
-        usage = conn.execute(
-            "SELECT COUNT(*) FROM tasks WHERE tag = ? COLLATE NOCASE OR tag = ? COLLATE NOCASE",
-            (existing["name"], existing["id"]),
-        ).fetchone()[0]
+        usage = db.tag_usage_count(conn, existing["name"])
         if usage > 0:
             return JSONResponse(status_code=409, content={"tasks": usage})  # type: ignore[return-value]
-        conn.execute("DELETE FROM tags WHERE id = ?", (tag_id,))
+        # L8: the DELETE itself re-checks usage atomically — a task linked
+        # between the check above and this statement blocks the delete
+        # instead of orphaning the tag. A 0-row delete means the tag either
+        # vanished (404) or gained usage (409); recheck to report correctly.
+        cur = conn.execute(
+            "DELETE FROM tags WHERE id = ? "
+            "AND NOT EXISTS (SELECT 1 FROM task_tags WHERE tag_id = ?)",
+            (tag_id, tag_id),
+        )
+        if cur.rowcount == 0:
+            gone = conn.execute(
+                "SELECT id, name FROM tags WHERE id = ?", (tag_id,)
+            ).fetchone()
+            if gone is None:
+                raise HTTPException(status_code=404, detail="Tag not found")
+            usage = db.tag_usage_count(conn, gone["name"])
+            if usage > 0:
+                return JSONResponse(status_code=409, content={"tasks": usage})  # type: ignore[return-value]
+            raise HTTPException(status_code=404, detail="Tag not found")
         return {"deleted": tag_id}

@@ -24,16 +24,8 @@ import GlassTooltip from '../components/GlassTooltip';
 import AssigneeCluster, { assigneeNames } from '../components/AssigneeCluster';
 import { GlassChartTooltip } from '../components/GlassChartTooltip';
 import { PRIORITY_META, GLASS_PANEL, GLASS_SUBCARD, GLASS_PILL, TODAY_ISO } from '../constants';
-import { getInitials, formatShortDate, getDueMeta } from '../utils/format';
-
-function addDaysISO(startISO: string, offset: number): string {
-  const [y, m, d] = startISO.split('-').map(Number);
-  if (!y || !m || !d) return startISO;
-  const dt = new Date(y, m - 1, d + offset);
-  const mm = String(dt.getMonth() + 1).padStart(2, '0');
-  const dd = String(dt.getDate()).padStart(2, '0');
-  return `${dt.getFullYear()}-${mm}-${dd}`;
-}
+import { getInitials, formatShortDate, getDueMeta, addWorkingDaysISO, workingDaysBetween } from '../utils/format';
+import { resolveSprintName } from '../utils/sprint';
 
 export interface DashboardViewProps {
   tasks: Task[];
@@ -98,7 +90,7 @@ export default function DashboardView({
   }, [tasks]);
 
   const burndownData = useMemo(() => {
-    const total = Math.max(kpis.totalPts, 10);
+    const total = kpis.totalPts;
     const remaining = Math.max(0, kpis.totalPts - kpis.donePts);
     const activeSprint = sprints.find(s => s.id === sprintFilter || s.name === sprintFilter)
       ?? (activeSprintId ? sprints.find(s => s.id === activeSprintId) : undefined)
@@ -107,10 +99,12 @@ export default function DashboardView({
     let labels = ['Nov 23', 'Nov 25', 'Nov 27', 'Nov 29', 'Dec 1', 'Dec 3', 'Dec 6'];
     if (activeSprint) {
       const len = Math.max(1, activeSprint.lengthDays);
-      const tickCount = 7;
+      // Spread at most 7 ticks over the working days; fewer ticks than days
+      // would round offsets onto the same date (dupe labels on short sprints).
+      const tickCount = len <= 1 ? 2 : Math.min(7, len);
       labels = Array.from({ length: tickCount }, (_, i) => {
         const offset = Math.round((i * (len - 1)) / (tickCount - 1));
-        return formatShortDate(addDaysISO(activeSprint.startDate, offset));
+        return formatShortDate(addWorkingDaysISO(activeSprint.startDate, offset));
       });
     }
     return labels.map((day, i) => ({
@@ -136,27 +130,35 @@ export default function DashboardView({
           ? 'Closed'
           : 'Planned';
       const badge = `${matched.name} · ${statusLabel}`;
-      const todayMs = new Date(`${TODAY_ISO}T00:00:00`).getTime();
-      const daysLeft = Math.max(0, Math.round((new Date(`${matched.endDate}T00:00:00`).getTime() - todayMs) / 86400000));
-      const daysUntilStart = Math.max(0, Math.round((new Date(`${matched.startDate}T00:00:00`).getTime() - todayMs) / 86400000));
-      if (matched.name === 'Sprint 14' || sprintFilter === 'Sprint 14') {
-        return { badge, dates, title: 'Core Platform v2.4 Delivery', sub: `${daysLeft} days remaining · Synced with SQLite backend` };
+      const daysLeft = workingDaysBetween(TODAY_ISO, matched.endDate);
+      const daysUntilStart = workingDaysBetween(TODAY_ISO, matched.startDate);
+      // Themed titles key off list position (first = active, second = planned),
+      // never the sprint's renameable name — visuals stay identical after rename.
+      const position = sprints.findIndex(s => s.id === matched.id);
+      if (position <= 0) {
+        return { badge, dates, title: 'Core Platform v2.4 Delivery', sub: `${daysLeft} working days remaining · Synced with SQLite backend` };
       }
-      if (matched.name === 'Sprint 15' || sprintFilter === 'Sprint 15') {
-        return { badge, dates, title: 'Scale & Reliability Hardening', sub: `Starts in ${daysUntilStart} days · Backlog grooming & capacity planning` };
+      if (position === 1) {
+        return { badge, dates, title: 'Scale & Reliability Hardening', sub: `Starts in ${daysUntilStart} working days · Backlog grooming & capacity planning` };
       }
       return { badge, dates, title: `${matched.name} Delivery`, sub: 'Sprint overview · Synced with SQLite backend' };
     }
     if (sprintFilter === 'Sprint 14') {
-      return { badge: 'Sprint 14 · Active', dates: 'Nov 23 – Dec 6, 2026', title: 'Core Platform v2.4 Delivery', sub: '10 days remaining · Synced with SQLite backend' };
+      return { badge: 'Sprint 14 · Active', dates: 'Nov 23 – Dec 10, 2026', title: 'Core Platform v2.4 Delivery', sub: '10 working days remaining · Synced with SQLite backend' };
     }
     if (sprintFilter === 'Sprint 15') {
-      return { badge: 'Sprint 15 · Planned', dates: 'Dec 7 – Dec 20, 2026', title: 'Scale & Reliability Hardening', sub: 'Starts in 11 days · Backlog grooming & capacity planning' };
+      return { badge: 'Sprint 15 · Planned', dates: 'Dec 11 – Dec 30, 2026', title: 'Scale & Reliability Hardening', sub: 'Starts in 11 working days · Backlog grooming & capacity planning' };
     }
     if (sprintFilter === 'Backlog') {
       return { badge: 'Product Backlog', dates: 'Unscheduled Queue', title: 'Upcoming Engineering Backlog', sub: 'Prioritized work ready to pull into upcoming sprints' };
     }
-    return { badge: 'All Sprints · Portfolio', dates: 'Q4 2026 Roadmap', title: 'Full Project Delivery Overview', sub: 'Combined view of active sprint, planned sprint & backlog' };
+    if (sprintFilter === 'all') {
+      return { badge: 'All Sprints · Portfolio', dates: 'Q4 2026 Roadmap', title: 'Full Project Delivery Overview', sub: 'Combined view of active sprint, planned sprint & backlog' };
+    }
+    // Unmatched ref (sprints list not loaded yet, or a stale id): resolve the
+    // live name when possible instead of hardcoding a sprint identity.
+    const name = resolveSprintName(sprints, sprintFilter);
+    return { badge: `${name} · Sprint`, dates: '', title: `${name} Delivery`, sub: 'Sprint overview · Synced with SQLite backend' };
   }, [sprintFilter, sprints, activeSprintId]);
 
   const ongoingTasks = useMemo(
@@ -277,6 +279,11 @@ export default function DashboardView({
           </GlassTooltip>
         </div>
         <div className="h-48 w-full mt-2">
+          {kpis.totalPts === 0 ? (
+            <div className="h-full w-full flex items-center justify-center">
+              <p className="text-xs text-slate-500 dark:text-slate-400 text-center px-6">No story points in this sprint yet.<br />Add tasks with points to track burndown.</p>
+            </div>
+          ) : (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={burndownData} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
               <defs>
@@ -296,17 +303,18 @@ export default function DashboardView({
               <Area type="monotone" dataKey="remaining" stroke="#0a84ff" fill="url(#burnGradLive)" strokeWidth={2.5} dot={{ r: 3.5, fill: '#0a84ff' }} connectNulls={false} name="Remaining Pts" />
             </AreaChart>
           </ResponsiveContainer>
+          )}
         </div>
       </div>
 
       <div className={`lg-enter lg-delay-4 lg-card-hover md:col-span-6 lg:col-span-7 rounded-[32px] p-5 flex flex-col ${GLASS_PANEL}`}>
         <div className="flex items-center justify-between gap-2 mb-4">
-          <div>
+          <div className="min-w-0">
             <h3 className="text-sm font-semibold tracking-tight">Who Is Doing What</h3>
             <p className="text-[11px] text-slate-600 dark:text-slate-400">Live team allocation, active focus &amp; next deadline</p>
           </div>
           <GlassTooltip label="Rename team members">
-            <button type="button" onClick={onOpenTeam} className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
+            <button type="button" onClick={onOpenTeam} className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 whitespace-nowrap shrink-0 min-h-[44px] md:min-h-0 py-2 md:py-0">
               <UserCog className="w-3.5 h-3.5" /> Rename Team
             </button>
           </GlassTooltip>
@@ -426,7 +434,7 @@ export default function DashboardView({
                     <p className="text-xs font-semibold truncate">{t.title}</p>
                     <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate">
                       <span className="mr-1 inline-flex align-middle"><AssigneeCluster assignees={t.assignees} size="xs" /></span>
-                      {names} · {t.tag} · <span className={due.cls}>{due.text}</span>
+                      {names} · {(t.tags ?? []).join(', ') || 'Untagged'} · <span className={due.cls}>{due.text}</span>
                     </p>
                   </div>
                 </div>
@@ -439,12 +447,12 @@ export default function DashboardView({
 
       <div className={`lg-enter lg-delay-6 lg-card-hover md:col-span-3 lg:col-span-6 rounded-[32px] p-5 flex flex-col ${GLASS_PANEL}`}>
         <div className="flex items-center justify-between gap-2 mb-4">
-          <div>
+          <div className="min-w-0">
             <h3 className="text-sm font-semibold tracking-tight">Priority Backlog</h3>
             <p className="text-[11px] text-slate-600 dark:text-slate-400">Queued work ready to pull into active sprint</p>
           </div>
           <GlassTooltip label="Open full backlog">
-            <button type="button" onClick={onOpenBacklog} className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
+            <button type="button" onClick={onOpenBacklog} className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 whitespace-nowrap shrink-0 min-h-[44px] md:min-h-0 py-2 md:py-0">
               Full Backlog <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </GlassTooltip>

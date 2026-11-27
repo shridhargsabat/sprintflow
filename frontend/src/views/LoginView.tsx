@@ -3,9 +3,7 @@ import type { FormEvent, ReactElement } from 'react';
 import { AlertCircle, Eye, EyeOff, Info, Layers, Loader2 } from 'lucide-react';
 import { GLASS_PANEL } from '../constants';
 import { useAuth } from '../auth/AuthContext';
-
-const DEMO_EMAIL = 'admin@sprintflow.local';
-const DEMO_PASSWORD = 'Admin123!';
+import { preloadBoardApp } from '../preloadBoardApp';
 
 function friendlyError(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
@@ -23,21 +21,18 @@ function friendlyError(err: unknown): string {
 
 export default function LoginView(): ReactElement {
   const { login, reason, clearReason } = useAuth();
-  const [email, setEmail] = useState<string>(DEMO_EMAIL);
+  const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [busy, setBusy] = useState<boolean>(false);
 
-  const fillDemo = (): void => {
-    setEmail(DEMO_EMAIL);
-    setPassword(DEMO_PASSWORD);
-    setError('');
-  };
-
   const onSubmit = async (e: FormEvent): Promise<void> => {
     e.preventDefault();
     if (busy) return;
+    // MOB-LOW-C/C1: warm the lazy BoardApp chunk so it fetches concurrently
+    // with the auth request instead of after it (no post-login waterfall).
+    preloadBoardApp();
     setError('');
     clearReason();
     setBusy(true);
@@ -98,7 +93,7 @@ export default function LoginView(): ReactElement {
               value={email}
               onChange={e => setEmail(e.target.value)}
               placeholder="you@company.com"
-              className="field-text w-full rounded-2xl bg-white/70 dark:bg-white/10 border border-white/80 dark:border-white/15 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-sky-400/60 focus:ring-2 focus:ring-sky-400/30 transition"
+              className="field-text w-full rounded-2xl bg-white/70 dark:bg-white/10 border border-white/80 dark:border-white/15 px-4 py-2.5 text-base md:text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-sky-400/60 focus:ring-2 focus:ring-sky-400/30 transition"
             />
           </label>
 
@@ -112,13 +107,13 @@ export default function LoginView(): ReactElement {
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="field-text w-full rounded-2xl bg-white/70 dark:bg-white/10 border border-white/80 dark:border-white/15 px-4 py-2.5 pr-11 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-sky-400/60 focus:ring-2 focus:ring-sky-400/30 transition"
+                className="field-text w-full rounded-2xl bg-white/70 dark:bg-white/10 border border-white/80 dark:border-white/15 px-4 py-2.5 pr-11 text-base md:text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-sky-400/60 focus:ring-2 focus:ring-sky-400/30 transition"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(s => !s)}
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-500/10 transition"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-500/10 transition"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -128,26 +123,12 @@ export default function LoginView(): ReactElement {
           <button
             type="submit"
             disabled={busy}
-            className="lg-press mt-1 w-full rounded-full bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white text-sm font-semibold py-2.5 px-5 flex items-center justify-center gap-2 shadow-[0_10px_28px_-8px_rgba(10,132,255,0.6),inset_0_1px_1px_rgba(255,255,255,0.45)] disabled:opacity-60 disabled:cursor-wait"
+            className="lg-press mt-1 w-full rounded-full bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white text-sm font-semibold py-2.5 px-5 min-h-[44px] md:min-h-0 flex items-center justify-center gap-2 shadow-[0_10px_28px_-8px_rgba(10,132,255,0.6),inset_0_1px_1px_rgba(255,255,255,0.45)] disabled:opacity-60 disabled:cursor-wait"
           >
             {busy && <Loader2 className="w-4 h-4 animate-spin" />}
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
-
-        <button
-          type="button"
-          onClick={fillDemo}
-          title="Click to fill demo credentials"
-          className="mt-5 w-full rounded-2xl bg-white/50 dark:bg-white/[0.07] border border-white/70 dark:border-white/15 px-4 py-3 text-left hover:bg-white/70 dark:hover:bg-white/[0.12] transition"
-        >
-          <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1">
-            Demo account — click to fill
-          </span>
-          <span className="block text-xs font-mono text-slate-700 dark:text-slate-200">
-            {DEMO_EMAIL} <span className="text-slate-400">/</span> {DEMO_PASSWORD}
-          </span>
-        </button>
       </div>
     </div>
   );

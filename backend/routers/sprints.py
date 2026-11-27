@@ -35,6 +35,16 @@ def update_sprint(
     payload: SprintUpdate,
     _user: Dict[str, Any] = Depends(auth.require_permissions("sprints.manage")),
 ) -> Dict[str, Any]:
+    if payload.name is not None:
+        # No UNIQUE constraint on sprints.name (see DDL), so guard here:
+        # reject names colliding with another sprint's id or name (case-insensitive),
+        # otherwise id-or-name lookups (board filter, burndown) go ambiguous.
+        lowered = payload.name.lower()
+        for other in db.list_sprints():
+            if other["id"] == sprint_id:
+                continue
+            if other["id"].lower() == lowered or other["name"].lower() == lowered:
+                raise HTTPException(status_code=409, detail=f"Sprint already exists: {payload.name}")
     updated = db.update_sprint(
         sprint_id,
         start_date=payload.startDate,

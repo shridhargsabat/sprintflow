@@ -1,0 +1,68 @@
+name: Bug report
+description: Something renders wrong, crashes, or behaved unexpectedly
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: SprintFlow version
+      description: Git commit SHA or release tag (e.g. v1.0.0). Output of `git rev-parse --short HEAD` works.
+      placeholder: "a1b2c3d"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How are you running it?
+      options:
+        - Local dev (vite + uvicorn)
+        - Docker Compose
+        - Other (describe below)
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part is affected?
+      options:
+        - Dashboard / KPIs
+        - Kanban board
+        - Backlog & team schedule
+        - Backend API (/api/*)
+        - Auth / login
+        - Import / reset
+        - Docker / deploy
+        - Docs
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and OS
+      placeholder: "Chrome 131, Ubuntu 24.04"
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Exact clicks, API calls, or minimal snippet — enough for a maintainer to see it too.
+      placeholder: |
+        1. Go to Backlog, click "Promote" on task X
+        2. Switch to Kanban
+        3. Task X appears twice
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual
+      description: What should have happened, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Backend traceback or browser console errors. Wrap in triple backticks.

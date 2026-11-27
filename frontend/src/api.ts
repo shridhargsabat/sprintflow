@@ -43,10 +43,15 @@ export interface UserDirectoryEntry {
 }
 
 export interface Tag {
-  id: number;
+  id: string;
   name: string;
   color: string;
   taskCount: number;
+}
+
+/** Shape of the 409 body when a tag still in use cannot be deleted. */
+export interface TagDeleteConflict {
+  tasks: number;
 }
 
 export interface CreateTagPayload {
@@ -95,6 +100,62 @@ interface RequestOptions extends Omit<RequestInit, 'body'> {
   skipAuthHandler?: boolean;
 }
 
+/** Typed fetch failure: HTTP status + human message + parsed body (if JSON). */
+export class ApiError extends Error {
+  status: number;
+  data: unknown;
+  constructor(status: number, message: string, data: unknown = null) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.data = data;
+  }
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null;
+}
+
+/**
+ * L5: turn an error response body into a banner-ready message. Parses the
+ * FastAPI `{detail}` envelope (string, list of {loc,msg}, or {errors[]})
+ * and the tag-delete 409 `{tasks:N}` shape instead of showing raw JSON.
+ */
+export function parseErrorMessage(status: number, text: string): { message: string; data: unknown } {
+  if (!text) return { message: `Request failed (${status})`, data: null };
+  let data: unknown = null;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    return { message: text, data: null };
+  }
+  if (isRecord(data)) {
+    const detail = data.detail;
+    if (typeof detail === 'string' && detail.trim() !== '') return { message: detail, data };
+    if (Array.isArray(detail)) {
+      const parts = detail
+        .map(e => {
+          if (typeof e === 'string') return e;
+          if (isRecord(e) && typeof e.msg === 'string') {
+            const loc = Array.isArray(e.loc) ? e.loc.slice(1).join('.') : '';
+            return loc ? `${loc}: ${e.msg}` : e.msg;
+          }
+          return null;
+        })
+        .filter((s): s is string => s !== null);
+      if (parts.length > 0) return { message: parts.slice(0, 5).join('; '), data };
+    } else if (isRecord(detail) && Array.isArray(detail.errors)) {
+      const errs = detail.errors.filter((e): e is string => typeof e === 'string');
+      if (errs.length > 0) return { message: errs.slice(0, 5).join('; '), data };
+    }
+    if (status === 409 && typeof data.tasks === 'number') {
+      const n = data.tasks;
+      return { message: `Tag is used by ${n} ${n === 1 ? 'task' : 'tasks'} — retag those tasks first`, data };
+    }
+  }
+  return { message: text, data };
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { skipAuthHandler, ...fetchOptions } = options;
   const headers: Record<string, string> = {
@@ -107,11 +168,13 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   if (res.status === 401 && !skipAuthHandler) {
     authExpiredHandler?.();
     const text = await res.text();
-    throw new Error(text || 'Session expired (401)');
+    const { message, data } = parseErrorMessage(res.status, text);
+    throw new ApiError(res.status, message || 'Session expired (401)', data);
   }
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || `Request failed (${res.status})`);
+    const { message, data } = parseErrorMessage(res.status, text);
+    throw new ApiError(res.status, message, data);
   }
   return res.json() as Promise<T>;
 }
@@ -135,6 +198,13 @@ export interface MemberPayload {
   userId?: number | null;
 }
 
+/** L4: DELETE /api/team/{id} reports what actually happened to the tasks. */
+export interface DeleteMemberResponse {
+  deleted: string;
+  reassignedTasks: number;
+  fallback: string | null;
+}
+
 export const api = {
   getTasks: (): Promise<Task[]> => request<Task[]>('/tasks'),
   createTask: (payload: TaskPayload): Promise<Task> =>
@@ -153,14 +223,13 @@ export const api = {
     request<TeamMember>('/team', { method: 'POST', body: JSON.stringify(payload) }),
   updateMember: (id: string, payload: MemberPayload): Promise<TeamMember> =>
     request<TeamMember>(`/team/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) }),
-  deleteMember: (id: string): Promise<{ deleted: string }> =>
-    request<{ deleted: string }>(`/team/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  deleteMember: (id: string, reassignTo?: string): Promise<DeleteMemberResponse> => {
+    const qs = reassignTo ? `?reassignTo=${encodeURIComponent(reassignTo)}` : '';
+    return request<DeleteMemberResponse>(`/team/${encodeURIComponent(id)}${qs}`, { method: 'DELETE' });
+  },
 
   importBoard: (payload: BoardImport): Promise<{ team: number; tasks: number }> =>
     request<{ team: number; tasks: number }>('/import', { method: 'POST', body: JSON.stringify(payload) }),
-  resetBoard: (): Promise<{ status: string }> =>
-    request<{ status: string }>('/reset', { method: 'POST' }),
-
   getSprints: (): Promise<SprintConfig[]> => request<SprintConfig[]>('/sprints'),
   updateSprint: (id: string, patch: SprintPatch): Promise<SprintConfig> =>
     request<SprintConfig>(`/sprints/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(patch) }),
@@ -196,8 +265,8 @@ export const api = {
   listTags: (): Promise<Tag[]> => request<Tag[]>('/tags'),
   createTag: (payload: CreateTagPayload): Promise<Tag> =>
     request<Tag>('/tags', { method: 'POST', body: JSON.stringify(payload) }),
-  updateTag: (id: number, payload: UpdateTagPayload): Promise<Tag> =>
-    request<Tag>(`/tags/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
-  deleteTag: (id: number): Promise<{ deleted: number }> =>
-    request<{ deleted: number }>(`/tags/${id}`, { method: 'DELETE' })
+  updateTag: (id: string, payload: UpdateTagPayload): Promise<Tag> =>
+    request<Tag>(`/tags/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  deleteTag: (id: string): Promise<{ deleted: string }> =>
+    request<{ deleted: string }>(`/tags/${encodeURIComponent(id)}`, { method: 'DELETE' })
 };

@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react';
 import Dropdown from '../components/Dropdown';
 import GlassTooltip from '../components/GlassTooltip';
 import AssigneeCluster, { assigneeNames } from '../components/AssigneeCluster';
+import TagPills from '../components/TagPills';
 import type { Task, TaskStatus, TeamMember } from '../types';
 import { GLASS_PILL, PRIORITY_META, STATUS_COLUMNS } from '../constants';
 import { getDueMeta } from '../utils/format';
@@ -52,7 +53,7 @@ export default function KanbanView({ tasks, onOpenTask, onOpenDetails, onMoveTas
                 setDraggedTaskId(null);
                 if (id) onMoveTaskStatus(id, col.id);
               }}
-              style={{ animationDelay: `${colIdx * 60}ms` }} className={`lg-enter rounded-[28px] p-3.5 flex flex-col gap-3 min-h-[280px] transition-all duration-300 backdrop-blur-2xl backdrop-saturate-150 ${
+              style={{ animationDelay: `${colIdx * 60}ms` }} className={`lg-enter rounded-[28px] p-3.5 flex flex-col gap-3 min-h-0 md:min-h-[280px] transition-all duration-300 backdrop-blur-2xl backdrop-saturate-150 ${
                 dragOverCol === col.id
                   ? 'bg-blue-500/15 border-2 border-blue-500/60'
                   : 'bg-white/40 dark:bg-white/[0.04] border border-white/65 dark:border-white/[0.10]'
@@ -80,7 +81,7 @@ export default function KanbanView({ tasks, onOpenTask, onOpenDetails, onMoveTas
 
               <div className="space-y-2.5 flex-1">
                 {colTasks.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-400/40 dark:border-white/15 py-8 px-3 text-center text-[11px] text-slate-500">Drop task here</div>
+                  <div className="rounded-2xl border border-dashed border-slate-400/40 dark:border-white/15 py-4 md:py-8 px-3 text-center text-[11px] text-slate-500">Drop task here</div>
                 ) : colTasks.map(t => {
                   const p = PRIORITY_META[t.priority];
                   const due = getDueMeta(t.dueDate, t.status);
@@ -101,7 +102,7 @@ export default function KanbanView({ tasks, onOpenTask, onOpenDetails, onMoveTas
                         {t.title}
                       </h4>
                       <div className="flex flex-wrap items-center gap-1.5 mb-3">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-900/[0.06] dark:bg-white/10">{t.tag}</span>
+                        <TagPills tags={t.tags} />
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-900/[0.06] dark:bg-white/10">{t.points} pts</span>
                       </div>
                       <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-slate-900/[0.07] dark:border-white/10">

@@ -73,7 +73,7 @@ AVATAR_COLORS = [
 
 @router.get("/team")
 def get_team(
-    _user: Dict[str, Any] = Depends(auth.get_current_user),
+    _user: Dict[str, Any] = Depends(auth.require_permissions("team.view")),
 ) -> List[Dict[str, Any]]:
     return db.list_team()
 
@@ -187,10 +187,13 @@ def delete_member(
                 """,
                 (member_id, reassignTo),
             )
-            conn.execute(
+            moved = conn.execute(
                 "UPDATE task_assignees SET member_id = ? WHERE member_id = ?",
                 (reassignTo, member_id),
             )
+            # L3: report tasks actually moved, not the pre-dedupe owned
+            # count (co-owned tasks are deduped above, never moved).
+            reassigned_tasks = moved.rowcount
             fallback: Optional[str] = reassignTo
         else:
             conn.execute(

@@ -171,11 +171,3 @@ body {
 .field-text::selection {
   background-color: rgb(59 130 246 / 0.2);
 }
-
-/* Apple liquid-glass refraction (ITMS port): SVG edge-bending + chromatic
-   aberration stacked over frost. Requires <LiquidGlassFilter /> mounted once
-   at the app root. -webkit line is the fallback where url() refs fail. */
-.lg-refract {
-  -webkit-backdrop-filter: blur(36px) saturate(200%);
-  backdrop-filter: url(#sf-liquid-glass-refract) blur(36px) saturate(200%);
-}

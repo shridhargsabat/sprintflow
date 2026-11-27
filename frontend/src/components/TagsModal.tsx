@@ -2,14 +2,14 @@ import { useEffect, useState } from 'react';
 import type React from 'react';
 import { Pencil, Tags, Trash2, X } from 'lucide-react';
 import { GLASS_PANEL, GLASS_SUBCARD } from '../constants';
-import { api } from '../api';
+import { api, ApiError } from '../api';
 import type { Tag, UpdateTagPayload } from '../api';
 import ConfirmDialog from './ConfirmDialog';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { usePermissions } from '../auth/usePermissions';
 
 const FIELD =
-  'px-3 py-2 rounded-full text-xs field-text bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50';
+  'px-3 py-2 rounded-full text-base md:text-xs min-h-[44px] md:min-h-0 field-text bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50';
 
 /** Shared tag color palette (hex so dots render via inline style). */
 export const TAG_COLORS = [
@@ -38,9 +38,12 @@ function ColorSwatches({
   disabled?: boolean;
   label: string;
 }): React.JSX.Element {
+  // L6: when the stored color is outside the palette (seed/foreign value),
+  // show it as an extra "current" swatch instead of silently resetting.
+  const swatches = value !== '' && !TAG_COLORS.includes(value) ? [value, ...TAG_COLORS] : TAG_COLORS;
   return (
-    <div className="flex items-center gap-1.5" role="radiogroup" aria-label={label}>
-      {TAG_COLORS.map(c => (
+    <div className="flex items-center gap-1.5 flex-wrap" role="radiogroup" aria-label={label}>
+      {swatches.map(c => (
         <button
           key={c}
           type="button"
@@ -48,16 +51,17 @@ function ColorSwatches({
           disabled={disabled}
           aria-label={`Color ${c}`}
           aria-pressed={value === c}
-          style={{ backgroundColor: c }}
-          className={`w-5 h-5 rounded-full transition disabled:opacity-50 ${value === c ? 'ring-2 ring-offset-1 ring-blue-500 dark:ring-blue-400' : 'opacity-60 hover:opacity-100'}`}
-        />
+          className={`flex items-center justify-center rounded-full min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 transition disabled:opacity-50 ${value === c ? '' : 'opacity-60 hover:opacity-100'}`}
+        >
+          <span style={{ backgroundColor: c }} className={`block w-5 h-5 rounded-full ${value === c ? 'ring-2 ring-offset-1 ring-blue-500 dark:ring-blue-400' : ''}`} />
+        </button>
       ))}
     </div>
   );
 }
 
 /** Tag master management. Self-contained: fetches + mutates via api. Non-admins get a read-only view. */
-export function TagsModal({ onClose }: { onClose: () => void }): React.JSX.Element {
+export function TagsModal({ onClose, onChanged }: { onClose: () => void; onChanged?: () => void }): React.JSX.Element {
   useEscapeKey(onClose);
   const { can } = usePermissions();
   const canManage = can('team.manage');
@@ -73,7 +77,7 @@ export function TagsModal({ onClose }: { onClose: () => void }): React.JSX.Eleme
   const [color, setColor] = useState<string>(TAG_COLORS[0]);
   const [saving, setSaving] = useState(false);
 
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [eName, setEName] = useState('');
   const [eColor, setEColor] = useState<string>(TAG_COLORS[0]);
   const [eSaving, setESaving] = useState(false);
@@ -111,7 +115,9 @@ export function TagsModal({ onClose }: { onClose: () => void }): React.JSX.Eleme
   const startEdit = (t: Tag): void => {
     setEditingId(t.id);
     setEName(t.name);
-    setEColor(TAG_COLORS.includes(t.color) ? t.color : TAG_COLORS[0]);
+    // L6: preserve the stored color even when it is outside the palette —
+    // ColorSwatches renders it as an extra "current" swatch.
+    setEColor(t.color && t.color.trim() !== '' ? t.color : TAG_COLORS[0]);
     setError(null);
   };
 
@@ -126,6 +132,9 @@ export function TagsModal({ onClose }: { onClose: () => void }): React.JSX.Eleme
       .then(updated => {
         setTags(prev => prev.map(x => (x.id === t.id ? updated : x)));
         setEditingId(null);
+        // Rename cascades to every task link (server-side, by tag id) —
+        // refresh the board so pills/filters show the new name at once.
+        onChanged?.();
       })
       .catch(err => setError(err instanceof Error ? err.message : 'Failed to update tag'))
       .finally(() => setESaving(false));
@@ -134,8 +143,21 @@ export function TagsModal({ onClose }: { onClose: () => void }): React.JSX.Eleme
   const handleDelete = (t: Tag): void => {
     setError(null);
     api.deleteTag(t.id)
-      .then(() => setTags(prev => prev.filter(x => x.id !== t.id)))
-      .catch(err => setError(err instanceof Error ? err.message : 'Failed to delete tag'));
+      .then(() => {
+        setTags(prev => prev.filter(x => x.id !== t.id));
+        onChanged?.();
+      })
+      .catch(err => {
+        // L5: the 409 carries {tasks:N} — name the tag and its live usage
+        // instead of the generic parsed message.
+        if (err instanceof ApiError && err.status === 409) {
+          const d = err.data as { tasks?: unknown } | null;
+          const n = typeof d?.tasks === 'number' ? d.tasks : (t.taskCount ?? 0);
+          setError(`Cannot delete "${t.name}" — ${n} ${n === 1 ? 'task still uses' : 'tasks still use'} this tag. Retag those tasks first.`);
+          return;
+        }
+        setError(err instanceof Error ? err.message : 'Failed to delete tag');
+      });
   };
 
   const confirmDelete = (): void => {
@@ -158,8 +180,8 @@ export function TagsModal({ onClose }: { onClose: () => void }): React.JSX.Eleme
 
   return (
     <div onClick={onClose} className="lg-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/35 backdrop-blur-md">
-      <div onClick={e => e.stopPropagation()} className={`lg-modal-panel w-full max-w-md rounded-[32px] overflow-hidden ${GLASS_PANEL}`}>
-        <div className="px-6 py-4 border-b border-slate-900/10 dark:border-white/10 flex items-center justify-between">
+      <div onClick={e => e.stopPropagation()} className={`lg-modal-panel w-full max-w-md rounded-[32px] overflow-hidden flex flex-col md:block max-h-[90vh] md:max-h-none ${GLASS_PANEL}`}>
+        <div className="px-6 py-4 border-b border-slate-900/10 dark:border-white/10 flex items-center justify-between shrink-0">
           <div>
             <h3 className="text-base font-semibold flex items-center gap-2">
               <Tags className="w-4 h-4 text-blue-500" /> Manage Tags
@@ -168,11 +190,11 @@ export function TagsModal({ onClose }: { onClose: () => void }): React.JSX.Eleme
               {canManage ? 'Master tag list used by every task' : 'Read-only view'}
             </p>
           </div>
-          <button type="button" onClick={onClose} className="w-8 h-8 rounded-full hover:bg-white/60 dark:hover:bg-white/10 flex items-center justify-center">
+          <button type="button" onClick={onClose} className="w-11 h-11 md:w-8 md:h-8 rounded-full hover:bg-white/60 dark:hover:bg-white/10 flex items-center justify-center">
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-4 overflow-y-auto scroll-slim md:overflow-visible min-h-0">
           {!canManage && (
             <div className="rounded-2xl bg-amber-500/15 border border-amber-400/30 px-4 py-2.5 text-xs text-amber-800 dark:text-amber-200">
               Ask an admin to edit tags.
@@ -222,8 +244,8 @@ export function TagsModal({ onClose }: { onClose: () => void }): React.JSX.Eleme
                     <div className="flex items-center gap-2 flex-wrap">
                       <ColorSwatches value={eColor} onChange={setEColor} disabled={eSaving} label="Tag color" />
                       <div className="flex-1" />
-                      <button type="button" onClick={() => setEditingId(null)} disabled={eSaving} className="px-3.5 py-1.5 rounded-full text-xs font-medium hover:bg-white/60 dark:hover:bg-white/10 disabled:opacity-50">Cancel</button>
-                      <button type="button" onClick={() => handleSaveEdit(t)} disabled={eSaving} className="px-4 py-1.5 rounded-full text-xs font-semibold bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white disabled:opacity-60">
+                      <button type="button" onClick={() => setEditingId(null)} disabled={eSaving} className="px-3.5 py-1.5 rounded-full text-xs font-medium min-h-[44px] md:min-h-0 hover:bg-white/60 dark:hover:bg-white/10 disabled:opacity-50">Cancel</button>
+                      <button type="button" onClick={() => handleSaveEdit(t)} disabled={eSaving} className="px-4 py-1.5 rounded-full text-xs font-semibold min-h-[44px] md:min-h-0 bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white disabled:opacity-60">
                         {eSaving ? 'Saving…' : 'Save'}
                       </button>
                     </div>
@@ -243,10 +265,10 @@ export function TagsModal({ onClose }: { onClose: () => void }): React.JSX.Eleme
                   </span>
                   {canManage && (
                     <>
-                      <button type="button" onClick={() => startEdit(t)} title={`Edit ${t.name}`} aria-label={`Edit ${t.name}`} className="p-1.5 rounded-full text-slate-500 hover:text-blue-600">
+                      <button type="button" onClick={() => startEdit(t)} title={`Edit ${t.name}`} aria-label={`Edit ${t.name}`} className="p-1.5 rounded-full text-slate-500 hover:text-blue-600 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
-                      <button type="button" onClick={() => setPendingDelete(t)} title={`Delete ${t.name}`} aria-label={`Delete ${t.name}`} className="p-1.5 rounded-full text-slate-500 hover:text-rose-600">
+                      <button type="button" onClick={() => setPendingDelete(t)} title={`Delete ${t.name}`} aria-label={`Delete ${t.name}`} className="p-1.5 rounded-full text-slate-500 hover:text-rose-600 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </>
@@ -257,10 +279,10 @@ export function TagsModal({ onClose }: { onClose: () => void }): React.JSX.Eleme
           </div>
           {canManage && (
             <form onSubmit={handleCreate} className="pt-3 border-t border-slate-900/10 dark:border-white/10 space-y-2">
-              <fieldset disabled={loadFailed} className="space-y-2">
+              <fieldset disabled={loadFailed} className="space-y-2 min-w-0">
                 <div className="flex gap-2">
                   <input type="text" required value={name} onChange={e => setName(e.target.value)} placeholder="New tag name…" className={`flex-1 min-w-0 ${FIELD}`} />
-                  <button type="submit" disabled={saving || loadFailed} className="px-4 py-2 rounded-full text-xs font-semibold bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white disabled:opacity-60">
+                  <button type="submit" disabled={saving || loadFailed} className="px-4 py-2 rounded-full text-xs font-semibold shrink-0 min-h-[44px] md:min-h-0 bg-gradient-to-b from-[#0a84ff] to-[#0066dc] text-white disabled:opacity-60">
                     {saving ? 'Adding…' : 'Add'}
                   </button>
                 </div>

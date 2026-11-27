@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api, type CloseSprintResult, type CreateSprintPayload } from '../api';
 import { STATUS_COLUMNS } from '../constants';
+import { resolveSprintName } from '../utils/sprint';
 import type { BoardImport, SprintConfig, SprintPatch, Task, TaskFormValues, TaskStatus, TeamMember, Toast, ToastType } from '../types';
 
 export interface UseBoardDeps {
@@ -56,7 +57,6 @@ export interface UseBoard {
   handleRemoveMember: (id: string) => Promise<void>;
   handleExportJson: () => void;
   handleImportJson: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  handleResetDemo: () => Promise<void>;
 }
 
 export function useBoard(deps: UseBoardDeps): UseBoard {
@@ -113,7 +113,7 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
     try {
       const updated = await api.promoteTask(taskId);
       setTasks(prev => prev.map(t => (t.id === taskId ? updated : t)));
-      showToast(`Pulled ${taskId} into ${updated.sprint}`, 'success');
+      showToast(`Pulled ${taskId} into ${resolveSprintName(sprints, updated.sprint)}`, 'success');
     } catch {
       showToast('Failed to promote task', 'error');
     }
@@ -177,17 +177,6 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
     e.target.value = '';
   };
 
-  const handleResetDemo = async () => {
-    try {
-      await api.resetBoard();
-      deps.clearFilters();
-      await refreshAll();
-      showToast('Reset SQLite database to sample data', 'info');
-    } catch {
-      showToast('Failed to reset database', 'error');
-    }
-  };
-
   const handleUpdateMember = async (member: TeamMember): Promise<void> => {
     const snapshot = team;
     setTeam(prev => prev.map(m => (m.id === member.id ? { ...m, ...member } : m)));
@@ -229,10 +218,17 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
 
   const handleRemoveMember = async (id: string): Promise<void> => {
     if (team.length <= 1) return;
+    // L4: pass ?reassignTo (first remaining member) so the server actually
+    // reassigns, and report the server's real counts in the toast.
+    const target = team.find(m => m.id !== id);
     try {
-      await api.deleteMember(id);
+      const res = await api.deleteMember(id, target?.id);
       await refreshAll();
-      showToast('Removed member and reassigned tasks', 'info');
+      const n = res.reassignedTasks ?? 0;
+      showToast(
+        target ? `Removed member — ${n} ${n === 1 ? 'task' : 'tasks'} reassigned to ${target.name}` : 'Removed member',
+        'info'
+      );
     } catch (e) {
       showToast('Failed to remove member', 'error');
       throw e instanceof Error ? e : new Error('Failed to remove member');
@@ -334,7 +330,6 @@ export function useBoard(deps: UseBoardDeps): UseBoard {
     handleBulkAddMembers,
     handleRemoveMember,
     handleExportJson,
-    handleImportJson,
-    handleResetDemo
+    handleImportJson
   };
 }
