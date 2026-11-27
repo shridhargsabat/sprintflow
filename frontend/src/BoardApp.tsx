@@ -17,7 +17,7 @@ import DashboardView from './views/DashboardView';
 const KanbanView = lazy(() => import('./views/KanbanView'));
 const BacklogView = lazy(() => import('./views/BacklogView'));
 const ReportsView = lazy(() => import('./views/ReportsView'));
-import type { PriorityFilter, Task, TaskModalState, TaskStatus, ViewId } from './types';
+import type { PriorityFilter, Task, TaskModalState, TaskStatus } from './types';
 
 export default function BoardApp() {
   const [darkMode, setDarkMode] = useState<boolean>(false);
