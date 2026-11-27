@@ -990,6 +990,28 @@ def activate_sprint(
         return row_to_sprint(row)
 
 
+def _move_unfinished_tasks(
+    conn: sqlite3.Connection, sprint_id: str, target: str
+) -> List[str]:
+    """Shared move: re-point unfinished tasks (status != 'done') in
+    `sprint_id` at `target`, preserving status/points/assignees/tags.
+    Returns the moved task ids (ascending). Used by both close-with-rollover
+    and the standalone rollover endpoint."""
+    ids = [
+        r["id"]
+        for r in conn.execute(
+            "SELECT id FROM tasks WHERE sprint = ? AND status != 'done' ORDER BY id ASC",
+            (sprint_id,),
+        ).fetchall()
+    ]
+    if ids:
+        conn.execute(
+            "UPDATE tasks SET sprint = ? WHERE sprint = ? AND status != 'done'",
+            (target, sprint_id),
+        )
+    return ids
+
+
 def close_sprint(
     sprint_id: str,
     rollover_to: Optional[str] = None,
@@ -1022,21 +1044,60 @@ def close_sprint(
                     status_code=400,
                     detail=f"Cannot roll over to closed sprint: {target}",
                 )
-        unfinished = conn.execute(
-            "SELECT id FROM tasks WHERE sprint = ? AND status != 'done'", (sprint_id,)
-        ).fetchall()
         if target is not None:
-            conn.execute(
-                "UPDATE tasks SET sprint = ? WHERE sprint = ? AND status != 'done'",
-                (target, sprint_id),
-            )
+            moved_ids = _move_unfinished_tasks(conn, sprint_id, target)
         else:
+            moved_ids = [
+                r["id"]
+                for r in conn.execute(
+                    "SELECT id FROM tasks WHERE sprint = ? AND status != 'done'",
+                    (sprint_id,),
+                ).fetchall()
+            ]
             conn.execute(
                 "UPDATE tasks SET status = 'backlog' WHERE sprint = ? AND status != 'done'",
                 (sprint_id,),
             )
         conn.execute("UPDATE sprints SET status = 'closed' WHERE id = ?", (sprint_id,))
-        return {"closed": sprint_id, "moved": len(unfinished), "to": target}
+        return {"closed": sprint_id, "moved": len(moved_ids), "to": target}
+
+
+def rollover_sprint(
+    sprint_id: str,
+    target: Optional[str],
+    db_path: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """One-click rollover: move unfinished tasks to another sprint.
+
+    Moves ONLY tasks currently in `sprint_id` with status != 'done' to the
+    target sprint, preserving every task's status/points/assignees/tags.
+    Neither sprint's status changes (unlike close). Returns
+    {moved, task_ids, from, to}.
+
+    Errors: unknown source/target sprint -> 404 (None for source, 404 for
+    target); missing/blank/same-as-source/non-sprint target -> 422.
+    """
+    clean = target.strip() if isinstance(target, str) else ""
+    if not clean:
+        raise HTTPException(status_code=422, detail="target_sprint must not be blank")
+    if clean == sprint_id:
+        raise HTTPException(
+            status_code=422, detail="target_sprint must differ from the source sprint"
+        )
+    # Pseudo-sprints (Backlog) are never valid rollover targets: 422, not 404.
+    if clean.lower() == "backlog":
+        raise HTTPException(
+            status_code=422, detail=f"Unknown rollover sprint: {clean} (not a real sprint)"
+        )
+    with get_conn(db_path) as conn:
+        row = conn.execute("SELECT id FROM sprints WHERE id = ?", (sprint_id,)).fetchone()
+        if row is None:
+            return None
+        dest = conn.execute("SELECT id FROM sprints WHERE id = ?", (clean,)).fetchone()
+        if dest is None:
+            raise HTTPException(status_code=404, detail=f"Sprint not found: {clean}")
+        ids = _move_unfinished_tasks(conn, sprint_id, clean)
+        return {"moved": len(ids), "task_ids": ids, "from": sprint_id, "to": clean}
 
 
 def list_team(db_path: Optional[str] = None) -> List[Dict[str, Any]]:

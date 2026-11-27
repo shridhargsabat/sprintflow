@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 import auth
 import db
-from models import SprintClosePayload, SprintCreate, SprintUpdate
+from models import SprintClosePayload, SprintCreate, SprintRolloverPayload, SprintUpdate
 
 router = APIRouter(prefix="/api")
 
@@ -76,6 +76,18 @@ def close_sprint(
     result = db.close_sprint(
         sprint_id, rollover_to=payload.rolloverTo if payload else None
     )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Sprint not found")
+    return result
+
+
+@router.post("/sprints/{sprint_id}/rollover")
+def rollover_sprint(
+    sprint_id: str,
+    payload: SprintRolloverPayload,
+    _user: Dict[str, Any] = Depends(auth.require_permissions("sprints.manage")),
+) -> Dict[str, Any]:
+    result = db.rollover_sprint(sprint_id, payload.target_sprint)
     if result is None:
         raise HTTPException(status_code=404, detail="Sprint not found")
     return result
