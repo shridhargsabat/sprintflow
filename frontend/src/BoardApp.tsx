@@ -2,6 +2,7 @@ import { Suspense, lazy, useMemo, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { PRIORITY_META } from './constants';
 import { useBoard } from './hooks/useBoard';
+import { useHashRoute } from './hooks/useHashRoute';
 import { TaskModal } from './components/TaskModal';
 import { TaskDetailsModal } from './components/TaskDetailsModal';
 import { TeamModal } from './components/TeamModal';
@@ -15,12 +16,14 @@ import FilterBar from './components/FilterBar';
 import DashboardView from './views/DashboardView';
 const KanbanView = lazy(() => import('./views/KanbanView'));
 const BacklogView = lazy(() => import('./views/BacklogView'));
-import type { PriorityFilter, Task, TaskModalState, TaskStatus, ViewId } from './types';
+import type { PriorityFilter, Task, TaskModalState, TaskStatus } from './types';
 
 export default function BoardApp() {
   const [darkMode, setDarkMode] = useState<boolean>(false);
 
-  const [activeView, setActiveView] = useState<ViewId>('dashboard');
+  // Hash-routed: refresh/deep-link preserves the view; nav clicks push
+  // history entries so back/forward walks views. Unknown hash -> dashboard.
+  const [activeView, setActiveView] = useHashRoute();
   const [sprintFilter, setSprintFilter] = useState<string>('Sprint 14');
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
   const [assigneeFilter, setAssigneeFilter] = useState<string>('all');
