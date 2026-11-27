@@ -95,8 +95,12 @@ class ImportPayload(BaseModel):
 
 
 class SprintUpdate(BaseModel):
+    """Sprint config update. lengthDays counts WORKING days (Mon-Fri)."""
+
     startDate: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
-    lengthDays: Optional[int] = Field(default=None, ge=1, le=60)
+    lengthDays: Optional[int] = Field(
+        default=None, ge=1, le=60, description="Sprint length in working days (Mon-Fri)"
+    )
     name: Optional[str] = Field(default=None, min_length=1, max_length=60)
 
     @field_validator("startDate")

@@ -25,14 +25,14 @@ def test_list_returns_seeded_sprints_with_shape_order_and_enddate(client):
         "name": "Sprint 14",
         "startDate": "2026-11-23",
         "lengthDays": 14,
-        "endDate": "2026-12-06",
+        "endDate": "2026-12-10",
     }
     assert second == {
         "id": "Sprint 15",
         "name": "Sprint 15",
         "startDate": "2026-12-07",
         "lengthDays": 14,
-        "endDate": "2026-12-20",
+        "endDate": "2026-12-24",
     }
 
 
@@ -48,7 +48,7 @@ def test_put_start_and_length_update_recomputes_enddate(client):
         "name": "Sprint 14",
         "startDate": "2026-11-30",
         "lengthDays": 7,
-        "endDate": "2026-12-06",
+        "endDate": "2026-12-08",
     }
     # Persisted: visible on subsequent GET.
     assert _all_sprints(client)[0] == updated
@@ -60,7 +60,7 @@ def test_put_partial_length_only_keeps_startdate(client):
     updated = resp.json()
     assert updated["startDate"] == "2026-11-23"
     assert updated["lengthDays"] == 21
-    assert updated["endDate"] == "2026-12-13"
+    assert updated["endDate"] == "2026-12-21"
 
 
 def test_put_partial_start_only_keeps_length(client):
@@ -69,7 +69,7 @@ def test_put_partial_start_only_keeps_length(client):
     updated = resp.json()
     assert updated["startDate"] == "2026-12-01"
     assert updated["lengthDays"] == 14
-    assert updated["endDate"] == "2026-12-14"
+    assert updated["endDate"] == "2026-12-18"
 
 
 def test_put_unknown_sprint_404(client):
@@ -137,3 +137,46 @@ def test_put_rename_keeps_tasks_linked_by_id(client):
     assert tasks[0]["sprint"] == "Sprint 14"
     names = {s["id"]: s["name"] for s in _all_sprints(client)}
     assert names["Sprint 14"] == "Sprint One"
+
+
+@pytest.mark.parametrize("weekend_start", ["2026-11-28", "2026-11-29"])
+def test_put_weekend_start_rolls_to_monday_and_counts_working_days(client, weekend_start):
+    # Sat/Sun start rolls to Mon 2026-11-30 as day 1; 5 working days -> Fri 2026-12-04.
+    resp = client.put(
+        "/api/sprints/Sprint 14",
+        json={"startDate": weekend_start, "lengthDays": 5},
+    )
+    assert resp.status_code == 200
+    updated = resp.json()
+    assert updated["startDate"] == weekend_start
+    assert updated["lengthDays"] == 5
+    assert updated["endDate"] == "2026-12-04"
+
+
+def test_put_five_day_week_spans_mon_to_fri(client):
+    # Mon 2026-11-23 + 5 working days -> Fri 2026-11-27 (skips the weekend).
+    resp = client.put(
+        "/api/sprints/Sprint 14",
+        json={"startDate": "2026-11-23", "lengthDays": 5},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["endDate"] == "2026-11-27"
+
+
+def test_put_rename_keeps_working_day_enddate(client):
+    # Rename is orthogonal to date math: endDate stays the working-day value.
+    resp = client.put("/api/sprints/Sprint 14", json={"name": "Sprint One"})
+    assert resp.status_code == 200
+    updated = resp.json()
+    assert updated["endDate"] == "2026-12-10"
+    assert updated["startDate"] == "2026-11-23"
+    assert updated["lengthDays"] == 14
+
+
+def test_put_single_day_sprint_ends_on_start_when_weekday(client):
+    resp = client.put(
+        "/api/sprints/Sprint 14",
+        json={"startDate": "2026-11-25", "lengthDays": 1},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["endDate"] == "2026-11-25"

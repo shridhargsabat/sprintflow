@@ -624,7 +624,24 @@ def next_task_id(conn: sqlite3.Connection) -> str:
 
 
 def sprint_end_date(start_date: str, length_days: int) -> str:
-    return (date.fromisoformat(start_date) + timedelta(days=length_days - 1)).isoformat()
+    """End date of a sprint: the Nth WORKING day (Mon-Fri).
+
+    length_days counts working days only. The start date is day 1 when it
+    falls on Mon-Fri; a weekend start rolls forward to the following Monday,
+    which is then counted as day 1. Existing stored length_days values are
+    reinterpreted as working days (no data migration).
+    """
+    current = date.fromisoformat(start_date)
+    if current.weekday() == 5:  # Saturday -> Monday
+        current += timedelta(days=2)
+    elif current.weekday() == 6:  # Sunday -> Monday
+        current += timedelta(days=1)
+    remaining = length_days - 1
+    while remaining > 0:
+        current += timedelta(days=1)
+        if current.weekday() < 5:
+            remaining -= 1
+    return current.isoformat()
 
 
 def row_to_sprint(row: sqlite3.Row) -> Dict[str, Any]:
