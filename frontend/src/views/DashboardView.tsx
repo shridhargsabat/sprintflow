@@ -292,12 +292,12 @@ export default function DashboardView({
 
       <div className={`lg-enter lg-delay-4 lg-card-hover md:col-span-6 lg:col-span-7 rounded-[32px] p-5 flex flex-col ${GLASS_PANEL}`}>
         <div className="flex items-center justify-between gap-2 mb-4">
-          <div>
+          <div className="min-w-0">
             <h3 className="text-sm font-semibold tracking-tight">Who Is Doing What</h3>
             <p className="text-[11px] text-slate-600 dark:text-slate-400">Live team allocation, active focus &amp; next deadline</p>
           </div>
           <GlassTooltip label="Rename team members">
-            <button type="button" onClick={onOpenTeam} className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
+            <button type="button" onClick={onOpenTeam} className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 whitespace-nowrap shrink-0 min-h-[44px] md:min-h-0 py-2 md:py-0">
               <UserCog className="w-3.5 h-3.5" /> Rename Team
             </button>
           </GlassTooltip>
@@ -430,12 +430,12 @@ export default function DashboardView({
 
       <div className={`lg-enter lg-delay-6 lg-card-hover md:col-span-3 lg:col-span-6 rounded-[32px] p-5 flex flex-col ${GLASS_PANEL}`}>
         <div className="flex items-center justify-between gap-2 mb-4">
-          <div>
+          <div className="min-w-0">
             <h3 className="text-sm font-semibold tracking-tight">Priority Backlog</h3>
             <p className="text-[11px] text-slate-600 dark:text-slate-400">Queued work ready to pull into active sprint</p>
           </div>
           <GlassTooltip label="Open full backlog">
-            <button type="button" onClick={onOpenBacklog} className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
+            <button type="button" onClick={onOpenBacklog} className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 whitespace-nowrap shrink-0 min-h-[44px] md:min-h-0 py-2 md:py-0">
               Full Backlog <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </GlassTooltip>
