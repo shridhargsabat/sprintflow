@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import Calendar from './Calendar';
 import Dropdown from './Dropdown';
 import ConfirmDialog from './ConfirmDialog';
 import { GLASS_PANEL, GLASS_PILL } from '../constants';
 import { formatShortDate } from '../utils/format';
+import { suggestNextSprintName } from '../utils/sprint';
 import type { SprintConfig, SprintPatch, SprintStatus, Task } from '../types';
 import type { CreateSprintPayload } from '../api';
 import { useEscapeKey } from '../hooks/useEscapeKey';
@@ -42,7 +43,7 @@ const STATUS_LABEL: Record<SprintStatus, string> = {
 };
 
 const CALENDAR_FIELD = 'inline-flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text';
-const TEXT_FIELD = 'w-full px-3 py-2 rounded-2xl text-xs bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text placeholder-slate-500 dark:placeholder-slate-400';
+const TEXT_FIELD = 'w-full px-3 py-2 rounded-2xl text-base md:text-xs min-h-[44px] md:min-h-0 bg-slate-900/[0.05] dark:bg-black/25 backdrop-blur-xl border border-white/60 dark:border-white/[0.14] shadow-[inset_0_2px_8px_rgba(15,23,42,0.10),inset_0_-1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_2px_8px_rgba(0,0,0,0.4)] outline-none transition focus:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/50 field-text placeholder-slate-500 dark:placeholder-slate-400';
 
 function statusOf(sprint: SprintConfig): SprintStatus {
   return sprint.status ?? 'planned';
@@ -172,11 +173,28 @@ function SprintRow({
   );
 }
 
-function CreateSprintForm({ onCreate }: { onCreate: (payload: CreateSprintPayload) => void }) {
+function CreateSprintForm({ sprints, onCreate }: { sprints: SprintConfig[]; onCreate: (payload: CreateSprintPayload) => void }) {
   const [open, setOpen] = useState<boolean>(false);
   const [name, setName] = useState<string>('');
   const [startDate, setStartDate] = useState<string>('');
   const [lengthDays, setLengthDays] = useState<number>(14);
+  // Suggestion only: prefill from the live sprint list, but any keystroke
+  // marks the field user-edited and stops syncing so edits are never forced.
+  const [edited, setEdited] = useState<boolean>(false);
+
+  const suggestion = useMemo(() => suggestNextSprintName(sprints), [sprints]);
+
+  useEffect(() => {
+    if (open && !edited) setName(suggestion);
+  }, [open, suggestion, edited]);
+
+  const toggleOpen = (): void => {
+    if (!open) {
+      setEdited(false);
+      setName(suggestion);
+    }
+    setOpen(!open);
+  };
 
   const valid = name.trim() !== '' && startDate !== '';
 
@@ -186,6 +204,7 @@ function CreateSprintForm({ onCreate }: { onCreate: (payload: CreateSprintPayloa
     setName('');
     setStartDate('');
     setLengthDays(14);
+    setEdited(false);
     setOpen(false);
   };
 
@@ -193,7 +212,7 @@ function CreateSprintForm({ onCreate }: { onCreate: (payload: CreateSprintPayloa
     <div className="rounded-2xl bg-blue-500/[0.07] dark:bg-blue-500/10 border border-blue-400/25 p-4">
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={toggleOpen}
         className="w-full flex items-center justify-between gap-2 text-sm font-semibold text-blue-700 dark:text-blue-300"
       >
         <span className="flex items-center gap-1.5">
@@ -208,8 +227,8 @@ function CreateSprintForm({ onCreate }: { onCreate: (payload: CreateSprintPayloa
             <input
               type="text"
               value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="Sprint 16"
+              onChange={e => { setName(e.target.value); setEdited(true); }}
+              placeholder="Sprint name"
               className={TEXT_FIELD}
             />
           </div>
@@ -352,7 +371,7 @@ export function SprintSettingsModal({ sprints, tasks, onClose, onSave, onCreate,
               Sprint management requires admin or lead access. You have read-only access.
             </div>
           )}
-          {canManage && <CreateSprintForm onCreate={onCreate} />}
+          {canManage && <CreateSprintForm sprints={sprints} onCreate={onCreate} />}
           {sprints.length === 0 ? (
             <div className="py-10 text-center text-xs text-slate-400">No sprints configured yet.</div>
           ) : (
