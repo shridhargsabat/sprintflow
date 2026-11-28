@@ -684,6 +684,25 @@ def seed_users(conn: sqlite3.Connection) -> None:
         )
 
 
+# Demo login for local GitHub evaluation (demo@sprintflow.local / Demo123!).
+SEED_DEMO_EMAIL = "demo@sprintflow.local"
+SEED_DEMO_NAME = "Demo"
+SEED_DEMO_PASSWORD = "Demo123!"
+
+
+def seed_demo_user(conn: sqlite3.Connection) -> None:
+    """INSERT OR IGNORE the demo login. Never overwrites an existing row."""
+    import bcrypt
+
+    password_hash = bcrypt.hashpw(
+        SEED_DEMO_PASSWORD.encode("utf-8"), bcrypt.gensalt()
+    ).decode("utf-8")
+    conn.execute(
+        "INSERT OR IGNORE INTO users (email, name, password_hash, role) VALUES (?, ?, ?, 'admin')",
+        (SEED_DEMO_EMAIL, SEED_DEMO_NAME, password_hash),
+    )
+
+
 def reset_db(db_path: Optional[str] = None) -> None:
     with get_conn(db_path) as conn:
         conn.execute("DELETE FROM task_activity")

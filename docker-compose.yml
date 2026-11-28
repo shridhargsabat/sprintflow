@@ -7,6 +7,8 @@ services:
     environment:
       SPRINTFLOW_JWT_SECRET: ${SPRINTFLOW_JWT_SECRET:?set in .env}
       SPRINTFLOW_DB_PATH: /data/sprintflow.db
+      # 1 = show Try-the-demo + public reseed (local evaluation only; NEVER 1 in production)
+      SPRINTFLOW_ENABLE_DEMO: ${SPRINTFLOW_ENABLE_DEMO:-0}
       TZ: Asia/Kolkata
     volumes:
       - sprintflow_data:/data
