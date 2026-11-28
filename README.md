@@ -9,15 +9,12 @@
 **Plan the sprint, drag the board, ship the release — a**
 **lightweight sprint manager in FastAPI + SQLite + React.**
 
-🌐 **Live app:**
-[sprintflow.ai-automation-hub.tech](https://sprintflow.ai-automation-hub.tech)
-
 🧪 **Live demo (sample data):**
 [demo-sprintflow.ai-automation-hub.tech](https://demo-sprintflow.ai-automation-hub.tech)
 — open it and click **Try the demo** on the login page. Every click
 reseeds the sample board, so it is safe to explore freely.
 
-[![Kanban drag-and-drop demo](docs/demo/hero-board.gif)](https://sprintflow.ai-automation-hub.tech)
+[![Kanban drag-and-drop demo](docs/demo/hero-board.gif)](https://demo-sprintflow.ai-automation-hub.tech)
 
 ## ✨ Features
 
@@ -87,7 +84,7 @@ to the backend on port `8000`.
 **No setup needed:** open
 [demo-sprintflow.ai-automation-hub.tech](https://demo-sprintflow.ai-automation-hub.tech)
 and click **Try the demo**. Each click resets that demo board to fresh
-samples; the main app at `sprintflow.ai-automation-hub.tech` is separate.
+samples, so it is safe to explore freely.
 
 **Run it locally:** with the backend running and
 `SPRINTFLOW_ENABLE_DEMO=1` (already set in `.env.example` for compose;
