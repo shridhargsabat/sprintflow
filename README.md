@@ -12,6 +12,11 @@
 🌐 **Live app:**
 [sprintflow.ai-automation-hub.tech](https://sprintflow.ai-automation-hub.tech)
 
+🧪 **Live demo (sample data):**
+[demo-sprintflow.ai-automation-hub.tech](https://demo-sprintflow.ai-automation-hub.tech)
+— open it and click **Try the demo** on the login page. Every click
+reseeds the sample board, so it is safe to explore freely.
+
 [![Kanban drag-and-drop demo](docs/demo/hero-board.gif)](https://sprintflow.ai-automation-hub.tech)
 
 ## ✨ Features
@@ -79,8 +84,14 @@ to the backend on port `8000`.
 
 ### Try the demo (sample data, one click)
 
-With the backend running and `SPRINTFLOW_ENABLE_DEMO=1` (already set
-in `.env.example` for compose; for bare uvicorn run
+**No setup needed:** open
+[demo-sprintflow.ai-automation-hub.tech](https://demo-sprintflow.ai-automation-hub.tech)
+and click **Try the demo**. Each click resets that demo board to fresh
+samples; the main app at `sprintflow.ai-automation-hub.tech` is separate.
+
+**Run it locally:** with the backend running and
+`SPRINTFLOW_ENABLE_DEMO=1` (already set in `.env.example` for compose;
+for bare uvicorn run
 `SPRINTFLOW_ENABLE_DEMO=1 .venv/bin/uvicorn app:app --port 8000`):
 
 1. Open the app → click **Try the demo** on the login page.
